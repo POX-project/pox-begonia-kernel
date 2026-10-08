@@ -7,33 +7,30 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
-CLANG_VER="clang-r383902"
-GCC_VER="android-11.0.0_r1"
-CLANG_URL="https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/${GCC_VER}/${CLANG_VER}.tar.gz"
-GCC_URL="https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/tags/${GCC_VER}.tar.gz"
+TRB_CLANG_VER="TheRagingBeast TRB Clang 18.0.0 (17092023)"
+TRB_CLANG_REPO="https://gitlab.com/voltageos/clang.git"
+TRB_CLANG_REF="test"
 AK3_URL="https://github.com/osm0sis/AnyKernel3/archive/refs/heads/master.zip"
 
 log() { printf '\033[1;34m[kerdevdep] %s\033[0m\n' "$*"; }
 
-mkdir -p bin clang gcc anykernel usr/share/bison lib
+mkdir -p bin clang anykernel usr/share/bison lib
 
-# 1. Download Clang if missing
+# 1. Download TRB Clang if missing (self-contained: LLVM/Clang 18 + lld + bundled aarch64/arm binutils)
 if [[ ! -x "clang/bin/clang" ]]; then
-    log "Downloading Android Clang (${CLANG_VER}) ..."
-    curl -L --fail --retry 3 -o clang.tar.gz "$CLANG_URL"
-    tar -xzf clang.tar.gz -C clang
-    rm -f clang.tar.gz
+    log "Downloading ${TRB_CLANG_VER} ..."
+    if command -v git >/dev/null 2>&1; then
+        rm -rf clang
+        git clone --depth 1 --branch "${TRB_CLANG_REF}" "${TRB_CLANG_REPO}" clang
+        (cd clang && git log -1 --format='%h %cs %s' 2>/dev/null || true)
+        rm -rf clang/.git
+    else
+        log "Error: git is required to fetch the TRB Clang toolchain"
+        exit 1
+    fi
 fi
 
-# 2. Download GCC binutils if missing
-if [[ ! -x "gcc/bin/aarch64-linux-android-ld" ]]; then
-    log "Downloading GCC 4.9 binutils (${GCC_VER}) ..."
-    curl -L --fail --retry 3 -o gcc.tar.gz "$GCC_URL"
-    tar -xzf gcc.tar.gz -C gcc
-    rm -f gcc.tar.gz
-fi
-
-# 3. Download AnyKernel3 template if missing
+# 2. Download AnyKernel3 template if missing
 if [[ ! -f "anykernel/anykernel.sh" ]]; then
     log "Downloading AnyKernel3 template ..."
     curl -L --fail --retry 3 -o ak3.zip "$AK3_URL"
@@ -43,7 +40,7 @@ if [[ ! -f "anykernel/anykernel.sh" ]]; then
     rm -rf ak3-tmp ak3.zip anykernel/.github
 fi
 
-# 4. Fetch host utilities if missing
+# 3. Fetch host utilities if missing
 if command -v bison >/dev/null && command -v flex >/dev/null && command -v m4 >/dev/null; then
     log "Host utilities (bison, flex, m4) already installed on system."
 elif [[ ! -x "usr/bin/bison" || ! -x "usr/bin/flex" ]]; then
@@ -53,14 +50,15 @@ elif [[ ! -x "usr/bin/bison" || ! -x "usr/bin/flex" ]]; then
         cd .deb_cache
         apt-get download bison flex m4 pahole libbpf1 libdw1 libelf1 libelf-dev ccache libfl2 libfl-dev libssl-dev libssl3 2>/dev/null || \
         apt-get download bison flex m4 pahole libbpf1 libdw1t64 libelf1t64 libelf-dev ccache libfl2 libfl-dev libssl-dev libssl3t64 2>/dev/null || true
+        shopt -s nullglob
         for deb in *.deb; do
-            [[ -f "$deb" ]] && dpkg-deb -x "$deb" ../
+            dpkg-deb -x "$deb" ../
         done
-    )
+    ) || true
     rm -rf .deb_cache
 fi
 
-# 5. Setup bin/ wrappers
+# 4. Setup bin/ wrappers
 cat << 'WRAPPERS' > bin/bison
 #!/usr/bin/env bash
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -145,14 +143,6 @@ for f in clang/bin/*; do
     name="$(basename "$f")"
     if [[ ! -e "bin/$name" ]]; then
         ln -sf "../clang/bin/$name" "bin/$name"
-    fi
-done
-
-# Symlink gcc binutils
-for f in gcc/bin/*; do
-    name="$(basename "$f")"
-    if [[ ! -e "bin/$name" ]]; then
-        ln -sf "../gcc/bin/$name" "bin/$name"
     fi
 done
 

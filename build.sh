@@ -123,7 +123,7 @@ source "$KERDEVDEP/env.sh"
 ARCH=arm64
 CC=clang
 CLANG_TRIPLE=aarch64-linux-gnu-
-CROSS_COMPILE=aarch64-linux-android-
+CROSS_COMPILE=aarch64-linux-gnu-
 AK3_DIR="$KERDEVDEP/anykernel"
 
 export KBUILD_BUILD_USER="${KBUILD_BUILD_USER:-TXO_R}"
@@ -314,14 +314,14 @@ package_zip() {
     commit_subject="$(git log -1 --format=%s 2>/dev/null || echo "Release build")"
     git_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "gaming")"
     kver="4.14.$(grep -m1 '^SUBLEVEL =' "$ROOT_DIR/Makefile" | awk '{print $3}')"
-    toolchain_ver="Clang 11.0.1 + GCC 9.3"
+    toolchain_ver="TheRagingBeast TRB Clang 18.0.0 (17092023)"
 
     local kernel_name_upper version_name_upper
     kernel_name_upper="$(echo "$KERNEL_NAME" | tr '[:lower:]' '[:upper:]')"
     version_name_upper="$(echo "$VERSION_NAME" | tr '[:lower:]' '[:upper:]')"
     local full_title="${KERNEL_NAME} Kernel ${KERNEL_VERSION} [${VERSION_NAME}]"
     local kver="4.14.$(grep -m1 '^SUBLEVEL =' "$ROOT_DIR/Makefile" | awk '{print $3}')"
-    local toolchain_ver="Clang 11.0.1 + GCC 9.3"
+    local toolchain_ver="TheRagingBeast TRB Clang 18.0.0 (17092023)"
 
     # Generate dynamic changelog ui_print statements for TWRP
     local changelog_ui=""

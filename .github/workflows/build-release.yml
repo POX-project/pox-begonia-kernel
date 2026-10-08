@@ -13,7 +13,7 @@ concurrency:
 jobs:
   build:
     name: Build & Release Pox Kernel
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
 
@@ -29,7 +29,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             bc bison build-essential ccache curl flex g++-multilib \
             gcc-multilib git gnupg gperf libelf-dev libssl-dev lz4 \
-            make zip python3 python-is-python3 libncurses5-dev libncurses5
+            make zip python3 python-is-python3 libncurses6-dev libncurses6 pahole
 
       - name: Setup CCache
         uses: actions/cache@v4
@@ -45,12 +45,10 @@ jobs:
         with:
           path: |
             kerdevdep/clang
-            kerdevdep/gcc
             kerdevdep/anykernel
-          key: kerdevdep-toolchains-v2
+          key: kerdevdep-trb-clang-v1
           restore-keys: |
-            kerdevdep-toolchains-v2
-            kerdevdep-toolchains-
+            kerdevdep-trb-clang-v1
 
       - name: Build Pox Kernel & Flashable Zip
         id: build_kernel
@@ -143,7 +141,7 @@ jobs:
           - **Device**: Xiaomi Redmi Note 8 Pro (\`begonia\` / \`begonia_in\`)
           - **SoC**: MediaTek MT6785 / Helio G90T
           - **Linux Version**: 4.14.357 LTS
-          - **Toolchain**: Google Android Clang 11.0.1 (r383902) + GCC 4.9 AArch64
+          - **Toolchain**: TheRagingBeast TRB Clang 18.0.0 (17092023)
 
           ### Release Assets
           - **Flashable Recovery ZIP**: \`${{ env.ZIP_NAME }}\` (Install via TWRP / OrangeFox)
