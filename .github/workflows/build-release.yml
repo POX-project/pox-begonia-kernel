@@ -29,7 +29,7 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             bc bison build-essential ccache curl flex g++-multilib \
             gcc-multilib git gnupg gperf libelf-dev libssl-dev lz4 \
-            make zip python3 python-is-python3 libncurses6-dev libncurses6 pahole
+            make zip python3 python-is-python3 libncurses-dev pahole
 
       - name: Setup CCache
         uses: actions/cache@v4
