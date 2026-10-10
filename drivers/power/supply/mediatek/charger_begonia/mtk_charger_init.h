@@ -25,8 +25,8 @@
 
 #define USB_CHARGER_CURRENT_SUSPEND		0 /* def CONFIG_USB_IF */
 #define USB_CHARGER_CURRENT_UNCONFIGURED	70000 /* 70mA */
-#define USB_CHARGER_CURRENT_CONFIGURED		1200000 /* 1.2A (6.0W @ 5V on PC) */
-#define USB_CHARGER_CURRENT			1200000 /* 1.2A (6.0W @ 5V on PC) */
+#define USB_CHARGER_CURRENT_CONFIGURED		500000 /* 500mA (standard USB 2.0 SDP to prevent host overcurrent) */
+#define USB_CHARGER_CURRENT			500000 /* 500mA (standard USB 2.0 SDP to prevent host overcurrent) */
 #define AC_CHARGER_CURRENT			2050000
 #define AC_CHARGER_INPUT_CURRENT		3200000
 #define NON_STD_AC_CHARGER_CURRENT		2000000 /* 2.0A fast charge */
