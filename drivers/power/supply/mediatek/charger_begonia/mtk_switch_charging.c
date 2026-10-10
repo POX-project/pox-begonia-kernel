@@ -224,22 +224,40 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
 			pdata->charging_current_limit =
 					pdata->input_current_limit;
 		} else {
-			pdata->input_current_limit =
-					info->data.usb_charger_current;
-			/* it can be larger */
-			pdata->charging_current_limit =
-					info->data.usb_charger_current;
+			extern int pox_fast_charge_get(void);
+			if (pox_fast_charge_get()) {
+				pdata->input_current_limit = 1200000; /* 1.2A @ 5V = 6.0W PC charging */
+				pdata->charging_current_limit = 1500000;
+			} else {
+				pdata->input_current_limit =
+						info->data.usb_charger_current;
+				/* it can be larger */
+				pdata->charging_current_limit =
+						info->data.usb_charger_current;
+			}
 		}
 	} else if (info->chr_type == NONSTANDARD_CHARGER) {
-		pdata->input_current_limit =
-				info->data.non_std_ac_charger_current;
-		pdata->charging_current_limit =
-				info->data.non_std_ac_charger_current;
+		extern int pox_fast_charge_get(void);
+		if (pox_fast_charge_get()) {
+			pdata->input_current_limit = 3000000;
+			pdata->charging_current_limit = 3000000;
+		} else {
+			pdata->input_current_limit =
+					info->data.non_std_ac_charger_current;
+			pdata->charging_current_limit =
+					info->data.non_std_ac_charger_current;
+		}
 	} else if (info->chr_type == STANDARD_CHARGER) {
-		pdata->input_current_limit =
-				info->data.ac_charger_input_current;
-		pdata->charging_current_limit =
-				info->data.ac_charger_current;
+		extern int pox_fast_charge_get(void);
+		if (pox_fast_charge_get()) {
+			pdata->input_current_limit = 3200000;
+			pdata->charging_current_limit = 3000000; /* Force 18W Charging */
+		} else {
+			pdata->input_current_limit =
+					info->data.ac_charger_input_current;
+			pdata->charging_current_limit =
+					info->data.ac_charger_current;
+		}
 		mtk_pe20_set_charging_current(info,
 					&pdata->charging_current_limit,
 					&pdata->input_current_limit);

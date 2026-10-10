@@ -72,6 +72,11 @@ jobs:
 
           BRANCH_NAME="${{ github.ref_name }}"
           case "$BRANCH_NAME" in
+            onyx-sultan-apatch*|*sultan-apatch*|*sultan*)
+              EDITION="Onyx-Sultan-APatch"
+              EDITION_DESC="Zero Frame-Drop & Sultan Debloat APatch Edition"
+              ROOT_INFO="APatch / KernelPatch Supported + Sultan Debloat"
+              ;;
             onyx-resukisu*|*resukisu*)
               EDITION="Onyx-ReSukiSu"
               EDITION_DESC="Zero Frame-Drop Gaming & ReSukiSu Ultra Edition"
@@ -86,6 +91,11 @@ jobs:
               EDITION="Onyx-KSU-Next"
               EDITION_DESC="Zero Frame-Drop Gaming & KernelSU-Next Edition"
               ROOT_INFO="KernelSU-Next v3.3.0 + NoMount VFS"
+              ;;
+            onyx-kaeru*|*kaeru*)
+              EDITION="Onyx-Kaeru"
+              EDITION_DESC="Zero Frame-Drop Gaming & Kaeru Bootloader Edition"
+              ROOT_INFO="Kaeru Bootloader & Merged DTB Ready (Unrooted / APatch)"
               ;;
             main|granite)
               EDITION="Granite"
@@ -105,8 +115,8 @@ jobs:
           esac
 
           COMMIT_SHORT="$(git rev-parse --short HEAD 2>/dev/null || echo "${{ github.sha }}" | cut -c1-8)"
-          TAG_NAME="Pox-0.9-${EDITION}-${BRANCH_NAME}-${COMMIT_SHORT}"
-          RELEASE_TITLE="Pox Kernel 0.9 [${EDITION}] - ${BRANCH_NAME} (${COMMIT_SHORT})"
+          TAG_NAME="Pox-1.0.0-Beta-${EDITION}-${BRANCH_NAME}-${COMMIT_SHORT}"
+          RELEASE_TITLE="Pox Kernel 1.0.0-Beta [${EDITION}] - ${BRANCH_NAME} (${COMMIT_SHORT})"
 
           echo "ZIP_PATH=$ZIP_PATH" >> $GITHUB_ENV
           echo "ZIP_NAME=$(basename "$ZIP_PATH")" >> $GITHUB_ENV
@@ -120,14 +130,14 @@ jobs:
       - name: Generate Release Notes
         run: |
           cat <<EOF > release_notes.md
-          # Pox Kernel 0.9 [${{ env.EDITION }} Edition]
+          # Pox Kernel 1.0.0-Beta [${{ env.EDITION }} Edition]
 
           > *"We aim for stability, not for anything else."*
 
           ### Release Information
           - **Edition**: ${{ env.EDITION }} (${{ env.EDITION_DESC }})
           - **Root Support**: ${{ env.ROOT_INFO }}
-          - **Version**: 0.9
+          - **Version**: 1.0.0-Beta
           - **Branch**: \`${{ github.ref_name }}\`
           - **Commit**: \`${{ env.COMMIT_SHORT }}\`
           - **Device**: Xiaomi Redmi Note 8 Pro (\`begonia\` / \`begonia_in\`)
