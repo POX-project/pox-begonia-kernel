@@ -15,7 +15,7 @@ KERDEVDEP="${KERDEVDEP:-$ROOT_DIR/kerdevdep}"
 
 # Kernel Branding & Versioning (Fully customizable via environment or build script)
 KERNEL_NAME="${KERNEL_NAME:-Pox}"
-KERNEL_VERSION="${KERNEL_VERSION:-0.9}"
+KERNEL_VERSION="${KERNEL_VERSION:-1.0.0-Beta}"
 DEVICE_NAME="${DEVICE_NAME:-Redmi Note 8 Pro}"
 DEVICE_CODENAME="${DEVICE_CODENAME:-begonia}"
 MAINTAINER="${MAINTAINER:-TXO R (Pox Project)}"
@@ -240,15 +240,15 @@ build_kernel() {
         log "CONFIG_KALLSYMS_ALL=y verified (APatch supported)."
     fi
 
-    # Host PC safety: ensure load average and memory are suitable before launching build (skip in CI/GitHub Actions)
-    if [[ -z "${CI:-}" && -z "${GITHUB_ACTIONS:-}" ]]; then
+    # Host PC safety: ensure load average and memory are suitable before launching build (skip in CI/GitHub Actions or SKIP_LOAD_CHECK)
+    if [[ -z "${SKIP_LOAD_CHECK:-}" && -z "${CI:-}" && -z "${GITHUB_ACTIONS:-}" ]]; then
         local load
         while true; do
             load=$(awk '{print int($1)}' /proc/loadavg 2>/dev/null || echo 0)
             local mem_avail_kb mem_avail_mb
             mem_avail_kb=$(awk '/MemAvailable/ {print $2}' /proc/meminfo 2>/dev/null || echo 2000000)
             mem_avail_mb=$(( mem_avail_kb / 1024 ))
-            if (( load > 6 || mem_avail_mb < 700 )); then
+            if (( load > 8 || mem_avail_mb < 700 )); then
                 warn "PC load is high (${load}) or available RAM low (${mem_avail_mb}MB). Waiting 5s for host to settle..."
                 sleep 5
             else
