@@ -144,3 +144,4 @@ reboot_logs/
 reboot-logs/
 *reboot*.log
 *reboot_log*
+*.perfetto-trace

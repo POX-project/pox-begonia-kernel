@@ -133,6 +133,7 @@ static void udf_bitmap_free_blocks(struct super_block *sb,
 				   uint32_t count)
 {
 	struct udf_sb_info *sbi = UDF_SB(sb);
+	struct udf_part_map *partmap;
 	struct buffer_head *bh = NULL;
 	unsigned long block;
 	unsigned long block_group;
@@ -372,6 +373,7 @@ static void udf_table_free_blocks(struct super_block *sb,
 				  uint32_t count)
 {
 	struct udf_sb_info *sbi = UDF_SB(sb);
+	struct udf_part_map *partmap;
 	uint32_t start, end;
 	uint32_t elen;
 	struct kernel_lb_addr eloc;
