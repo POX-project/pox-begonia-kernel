@@ -95,6 +95,10 @@ if [[ -n "${LOCALVERSION:-}" ]]; then
     CUSTOM_LOCALVERSION="$LOCALVERSION"
 else
     CUSTOM_LOCALVERSION="-${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${GIT_BRANCH}-${COMMIT_HASH}"
+    # Linux kernel UTS_RELEASE ("4.14.357" + CUSTOM_LOCALVERSION) cannot exceed 64 chars
+    if (( ${#CUSTOM_LOCALVERSION} + 9 > 64 )); then
+        CUSTOM_LOCALVERSION="-${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${COMMIT_HASH}"
+    fi
 fi
 
 # Package zip base name: contains name, version, version name, branch, commit id, device
