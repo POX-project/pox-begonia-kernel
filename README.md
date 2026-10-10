@@ -1,23 +1,34 @@
 # Pox Kernel for Redmi Note 8 Pro (begonia) 🇵🇸 #FreePalestine
 
-[![GitHub Repo](https://img.shields.io/badge/GitHub-txorav%2Fpox--kernel--begonia-181717.svg?logo=github)](https://github.com/txorav/pox-kernel-begonia)
-[![Kernel Version](https://img.shields.io/badge/Kernel-Linux%204.14.357-green.svg?logo=linux)](https://github.com/txorav/pox-kernel-begonia)
-[![Pox Release](https://img.shields.io/badge/Pox%20Release-v1.0.0--Beta-blue.svg)](https://github.com/txorav/pox-kernel-begonia)
-[![Device](https://img.shields.io/badge/Device-Redmi%20Note%208%20Pro%20(begonia)-orange.svg?logo=xiaomi)](https://github.com/txorav/pox-kernel-begonia)
-[![SoC](https://img.shields.io/badge/SoC-MediaTek%20Helio%20G90T%20(MT6785)-red.svg)](https://github.com/txorav/pox-kernel-begonia)
+[![GitHub Repo](https://img.shields.io/badge/GitHub-POX--project%2Fpox--begonia--kernel-181717.svg?logo=github)](https://github.com/POX-project/pox-begonia-kernel)
+[![Kernel Version](https://img.shields.io/badge/Kernel-Linux%204.14.357-green.svg?logo=linux)](https://github.com/POX-project/pox-begonia-kernel)
+[![Pox Release](https://img.shields.io/badge/Pox%20Release-v1.0.0--Beta-blue.svg)](https://github.com/POX-project/pox-begonia-kernel)
+[![Device](https://img.shields.io/badge/Device-Redmi%20Note%208%20Pro%20(begonia)-orange.svg?logo=xiaomi)](https://github.com/POX-project/pox-begonia-kernel)
+[![SoC](https://img.shields.io/badge/SoC-MediaTek%20Helio%20G90T%20(MT6785)-red.svg)](https://github.com/POX-project/pox-begonia-kernel)
 [![Solidarity](https://img.shields.io/badge/Stand%20With-Free%20Palestine%20🇵🇸-red?style=flat&colorA=000000&colorB=007A3D)](https://en.wikipedia.org/wiki/State_of_Palestine)
 [![Maintainer](https://img.shields.io/badge/Maintainer-TXO%20R-purple.svg)](https://github.com/txorav)
 [![License](https://img.shields.io/badge/License-GPLv2-yellow.svg)](COPYING)
 
-**Pox Kernel** is a high-performance, rock-solid custom downstream Linux kernel engineered specifically for the **Xiaomi Redmi Note 8 Pro** (`begonia` / `begonia_in`, MediaTek MT6785 / Helio G90T).
+**Pox Kernel** is an advanced, rock-solid custom Linux kernel engineered for the **Xiaomi Redmi Note 8 Pro** (`begonia` / `begonia_in`, MediaTek MT6785 / Helio G90T).
 
 > *"We aim for stability, not for anything else."* — **Stand for Justice. Free Palestine 🇵🇸**
+
+---
+
+> [!CAUTION]
+> ### ⚠️ Critical Disclaimer & Legacy Version Advisory
+> * **Older Versions (< 1.0.0-Beta / v0.9 & Prior) are OLD & TESTING ONLY**: All releases prior to **1.0.0-Beta** (including v0.9 and earlier tags) are strictly classified as **OLD, DEPRECATED, AND FOR HISTORICAL / TESTING PURPOSES ONLY**. They lack essential hardware overcurrent protection, stability hotfixes, and vendor HAL data abort immunizations.
+> * **NO LIABILITY / WARRANTY DISCLAIMER**: We are **NOT responsible** for anything that happens to you, your device, bricked motherboards, hardware brownouts, bootloops, data loss, or failed alarms. You flash completely at your own risk.
+> * **FOLLOW MAINLINE**: For daily driving and stability, always **follow mainline** and only install active supported releases from the current branch matrix (`onyx`, `onyx-sultan-apatch`, etc.). Never flash obsolete, unmaintained legacy builds.
 
 ---
 
 ## Table of Contents
 
 - [Overview & Hardware Specifications](#overview--hardware-specifications)
+- [Release Evolution: 0.9 Legacy to 1.0.0-Beta Mainline](#release-evolution-09-legacy-to-100-beta-mainline)
+  - [Version 0.9 (Legacy / Testing Only - Deprecated)](#1-version-09-legacy--testing-only---deprecated)
+  - [Version 1.0.0-Beta (Mainline / Active Supported)](#2-version-100-beta-mainline--active-supported)
 - [Rock Editions & The 6-Branch Matrix](#rock-editions--the-6-branch-matrix)
 - [Comprehensive Kernel Addons & Features](#comprehensive-kernel-addons--features)
   - [1. Universal Filesystem & Storage Engine](#1-universal-filesystem--storage-engine)
@@ -52,6 +63,33 @@
 | **Toolchain** | Google Android Clang 11.0.1 (r383902) + GCC 4.9/9.3 AArch64 Binutils |
 | **Packaging** | AnyKernel3 Dynamic Ramdisk Injection (osm0sis template) |
 | **Supported OS** | Android 10 (Q), Android 11 (R), Android 12/12L (S), Android 13 (T), Android 14 (U), HyperOS & AOSP |
+
+---
+
+## Release Evolution: 0.9 Legacy to 1.0.0-Beta Mainline
+
+### 1. Version 0.9 (Legacy / Testing Only - Deprecated)
+> **STATUS: OBSOLETE & TESTING ONLY.** Do not use for daily driving. Follow mainline.
+
+The 0.9 series introduced the initial prototype Rock Editions:
+* **Granite (0.9 LTS)**: Foundational hardware crash mitigation (UVLO call brownouts, SCP SensorHub deep-sleep watchdog).
+* **Obsidian (0.9 iOS-Memory)**: Proactive `watermark_scale_factor = 150`, `page-cluster = 0` ZRAM tuning, and asynchronous memory compaction.
+* **Onyx (0.9 Gaming)**: First unified gaming mode controller (`/proc/perfmgr/gaming_mode`), 500μs Schedutil frequency ramps, and FPSGO V3 frame rescue.
+
+*Known 0.9 Limitations*: Lacks universal filesystem backports, lacks safe PC USB SDP power limits, and lacks the EL1 Data Abort fix on `sysctl_sched_migration_cost`.
+
+---
+
+### 2. Version 1.0.0-Beta (Mainline / Active Supported)
+> **STATUS: CURRENT RECOMMENDED MAINLINE RELEASE.**
+
+The 1.0.0-Beta release upgrades Pox Kernel into a modern downstream distribution across the confirmed 6-branch matrix:
+* **Universal Filesystem Engine**: Integrated EROFS, modernized F2FS with rapid garbage collection, Btrfs with ZSTD compression and subvolumes, native NTFS (read/write), exFAT, and FAT32.
+* **18W Fast Charging + Safe 500mA PC USB**: Full Pump Express 2.0 (PE+ 2.0) 3.0A/18W fast charging on AC wall adapters with strict 500mA PC USB SDP enforcement to protect host motherboards and maintain rock-solid ADB connectivity.
+* **HAL Panic Immunization**: Fully resolved Xiaomi Power HAL EL1 Data Abort crash by ensuring `sysctl_sched_migration_cost` remains writable in userspace.
+* **Sultan Debloat Architecture**: Optional zero-telemetry, zero-logging-jitter editions on dedicated `onyx-sultan*` branches.
+* **Enforced Linux 64-Char UTS_RELEASE**: Dynamically clamped localversion strings in `build.sh` preventing string overflow build failures.
+* **Anti-Spaghetti Repository Governance**: Strict [`AGENTS.md`](AGENTS.md) rules enforcing zero-mutation during builds, atomic Conventional Commits, and clean PR quality gates.
 
 ---
 
@@ -201,9 +239,9 @@ cat /sys/devices/platform/charger/fast_charge 2>/dev/null || cat /proc/perfmgr/g
 Pox Kernel includes a completely self-contained build environment:
 
 ```bash
-# Clone the repository
-git clone https://github.com/txorav/pox-kernel-begonia.git
-cd pox-kernel-begonia
+# Clone the repository from official POX-project
+git clone https://github.com/POX-project/pox-begonia-kernel.git
+cd pox-begonia-kernel
 
 # Checkout the desired branch
 git checkout onyx-sultan-apatch
@@ -238,11 +276,12 @@ To maintain absolute code quality and prevent regressions, all AI agents and con
 - [x] **18W Fast Charging Engine**: AC charger current boost with safe PC USB 500mA compliance.
 - [x] **HAL Panic Fix**: Elimination of EL1 data abort on `sysctl_sched_migration_cost`.
 - [x] **Agent Governance**: Strict anti-spaghetti rules and automated quality gates in `AGENTS.md`.
+- [x] **POX-project Remote Migration**: Upstream repository forked and synced to `POX-project/pox-begonia-kernel`.
 - [ ] **Complete 6-Branch Matrix Builds**: Build and package official 1.0.0-Beta releases across all 6 targets:
   - [x] `onyx-sultan-apatch`
-  - [ ] `onyx`
   - [ ] `onyx-apatch`
   - [ ] `onyx-ksu-next`
+  - [ ] `onyx`
   - [ ] `onyx-sultan`
   - [ ] `onyx-sultan-ksu-next`
 - [ ] **Comparative Benchmark Report**: Full on-device 5-minute Perfetto traces and benchmark comparison between v0.9 baseline and 1.0.0-Beta.
