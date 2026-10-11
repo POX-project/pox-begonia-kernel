@@ -359,8 +359,18 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
  * We do this by temporarily clearing all FS-related capabilities and
  * switching the fsuid/fsgid around to the real ones.
  */
+#ifdef CONFIG_KSU
+extern int ksu_handle_faccessat(int *dfd, const char __user **filename_user,
+				int *mode, int *__unused_flags);
+#endif
+
 SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
 {
+#ifdef CONFIG_KSU
+	if (ksu_handle_faccessat(&dfd, &filename, &mode, 0))
+		return 0;
+#endif
+
 	const struct cred *old_cred;
 	struct cred *override_cred;
 	struct path path;
@@ -736,8 +746,6 @@ static int do_dentry_open(struct file *f,
 	path_get(&f->f_path);
 	f->f_inode = inode;
 	f->f_mapping = inode->i_mapping;
-
-	/* Ensure that we skip any errors that predate opening of the file */
 	f->f_wb_err = filemap_sample_wb_err(f->f_mapping);
 
 	if (unlikely(f->f_flags & O_PATH)) {
@@ -1072,11 +1080,20 @@ struct file *filp_clone_open(struct file *oldfile)
 }
 EXPORT_SYMBOL(filp_clone_open);
 
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#include <linux/susfs_def.h>
+extern int susfs_open_redirect_spoof_do_sys_openat(struct inode *inode, char *out_redirected_name, size_t out_len);
+#endif
+
 long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 {
 	struct open_flags op;
 	int fd = build_open_flags(flags, mode, &op);
 	struct filename *tmp;
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+	char susfs_redirected_name[SUSFS_MAX_LEN_PATHNAME];
+	bool susfs_redirected_once = false;
+#endif
 
 	if (fd)
 		return fd;
@@ -1086,8 +1103,33 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 		return PTR_ERR(tmp);
 
 	fd = get_unused_fd_flags(flags);
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+susfs_open_redirect_retry:
+#endif
 	if (fd >= 0) {
 		struct file *f = do_filp_open(dfd, tmp, &op);
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+		if (!susfs_redirected_once && f && !IS_ERR(f)) {
+			struct inode *inode = file_inode(f);
+			if (inode && inode->i_mapping &&
+			    test_bit(AS_FLAGS_OPEN_REDIRECT, &inode->i_mapping->flags)) {
+				if (!susfs_open_redirect_spoof_do_sys_openat(inode, susfs_redirected_name, SUSFS_MAX_LEN_PATHNAME)) {
+					susfs_redirected_once = true;
+					filp_close(f, NULL);
+					putname(tmp);
+					/* susfs_redirected_name is a kernel buffer: getname()
+					 * (user copy) would always fail with -EFAULT on arm64
+					 * and the retry would deref the ERR_PTR. */
+					tmp = getname_kernel(susfs_redirected_name);
+					if (IS_ERR(tmp)) {
+						put_unused_fd(fd);
+						return PTR_ERR(tmp);
+					}
+					goto susfs_open_redirect_retry;
+				}
+			}
+		}
+#endif
 		if (IS_ERR(f)) {
 			put_unused_fd(fd);
 			fd = PTR_ERR(f);
@@ -1096,6 +1138,8 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 			fd_install(fd, f);
 		}
 	}
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 	putname(tmp);
 	return fd;
 }
@@ -1112,6 +1156,8 @@ SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename, int, flags,
 		umode_t, mode)
 {
 	if (force_o_largefile())
+#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
+#endif // #ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
 		flags |= O_LARGEFILE;
 
 	return do_sys_open(dfd, filename, flags, mode);
