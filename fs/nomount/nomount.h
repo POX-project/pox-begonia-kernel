@@ -33,7 +33,11 @@
 
 /* logs */
 #define nm_debug(fmt, ...) printk(KERN_DEBUG "NoMount: [DEBUG] " fmt, ##__VA_ARGS__)
+#ifdef CONFIG_SULTAN_NO_LOGS
+#define nm_info(fmt, ...) no_printk(KERN_INFO "NoMount: " fmt, ##__VA_ARGS__)
+#else
 #define nm_info(fmt, ...) printk(KERN_INFO "NoMount: " fmt, ##__VA_ARGS__)
+#endif
 #define nm_warn(fmt, ...) printk(KERN_WARNING "NoMount: [WARN] " fmt, ##__VA_ARGS__)
 #define nm_err(fmt, ...)  printk(KERN_ERR "NoMount: [ERROR] " fmt, ##__VA_ARGS__)
 
