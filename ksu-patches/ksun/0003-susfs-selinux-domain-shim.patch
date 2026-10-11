@@ -1,0 +1,28 @@
+diff --git a/kernel/selinux/selinux.c b/kernel/selinux/selinux.c
+index 36f1677f2..cdab316f6 100644
+--- a/kernel/selinux/selinux.c
++++ b/kernel/selinux/selinux.c
+@@ -255,6 +255,23 @@ bool is_init(const struct cred *cred)
+     return is_sid_match(cred, cached_init_sid, INIT_CONTEXT);
+ }
+ 
++#ifdef CONFIG_KSU_SUSFS
++/*
++ * susfs4ksu v2.3.0 calls these from fs/namespace.c and fs/susfs.c, but they are
++ * ReSukiSU helpers that susfs4ksu itself does not ship. KernelSU-Next already
++ * has both primitives, so expose them under the names SUSFS expects.
++ */
++bool susfs_is_current_ksu_domain(void)
++{
++    return is_ksu_domain();
++}
++
++bool susfs_is_current_zygote_domain(void)
++{
++    return is_zygote(current_cred());
++}
++#endif
++
+ void escape_to_root_for_adb_root(void)
+ {
+     struct cred *cred = prepare_creds();

@@ -10,6 +10,10 @@
 # Normal rules (sorted alphabetically)
 #
 .*
+# Submodule manifests must stay tracked. Without this the blanket ".*" rule
+# above silently drops .gitmodules, which is how onyx ended up with a dangling
+# drivers/kernelsu -> ../KernelSU/kernel symlink and no KernelSU tree at all.
+!.gitmodules
 *.a
 *.bin
 *.bz2
@@ -31,6 +35,7 @@
 *.o.*
 *.order
 *.patch
+!ksu-patches/**/*.patch
 *.s
 *.so
 *.so.dbg

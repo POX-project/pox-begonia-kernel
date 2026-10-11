@@ -1,0 +1,244 @@
+diff --git a/kernel/Kbuild b/kernel/Kbuild
+index baa32a37c..27c6cbe82 100644
+--- a/kernel/Kbuild
++++ b/kernel/Kbuild
+@@ -329,4 +329,14 @@ ccflags-y += -DEXPECTED_MANAGER_HASH=\"$(KSU_NEXT_MANAGER_HASH)\"
+ ccflags-y += -Wno-strict-prototypes -Wno-int-conversion -Wno-gcc-compat -Wno-missing-prototypes
+ ccflags-y += -Wno-declaration-after-statement -Wno-unused-function -Wno-unused-variable
+ 
++## For susfs stuff ##
++ifeq ($(shell test -e $(srctree)/fs/susfs.c; echo $$?),0)
++$(eval SUSFS_VERSION=$(shell cat $(srctree)/include/linux/susfs.h | grep -E '^#define SUSFS_VERSION' | cut -d' ' -f3 | sed 's/"//g'))
++$(info )
++$(info -- SUSFS_VERSION: $(SUSFS_VERSION))
++else
++$(info -- You have not integrated susfs in your kernel yet.)
++$(info -- Read: https://gitlab.com/simonpunk/susfs4ksu)
++endif
++
+ # Keep a new line here!! Because someone may append config
+diff --git a/kernel/Kconfig b/kernel/Kconfig
+index 946966dc3..e4b96f0de 100644
+--- a/kernel/Kconfig
++++ b/kernel/Kconfig
+@@ -73,3 +73,88 @@ config KSU_SYSCALL_TABLE_HOOK
+ endchoice
+ 
+ endmenu
++
++menu "KernelSU - SUSFS"
++config KSU_SUSFS
++    bool "KernelSU addon - SUSFS"
++    depends on KSU
++    depends on THREAD_INFO_IN_TASK
++    default y
++    help
++        Patch and Enable SUSFS to kernel with KernelSU.
++        Requires the kernel-side SUSFS implementation (fs/susfs.c plus
++        include/linux/susfs.h and include/linux/susfs_def.h).
++
++config KSU_SUSFS_SUS_PATH
++    bool "Enable to hide suspicious path (NOT recommended)"
++    depends on KSU_SUSFS
++    default y
++    help
++        - Allow hiding the user-defined path and all its sub-paths from various system calls.
++        - Effective only on zygote spawned user app process.
++        - Use with cautious as it may cause performance loss.
++
++config KSU_SUSFS_SUS_MOUNT
++    bool "Enable to hide suspicious mounts"
++    depends on KSU_SUSFS
++    default y
++    help
++        - Allow hiding the user-defined mount paths from /proc/self/[mounts|mountinfo|mountstat].
++
++config KSU_SUSFS_SUS_KSTAT
++    bool "Enable to spoof suspicious kstat"
++    depends on KSU_SUSFS
++    default y
++    help
++        - Allow spoofing the kstat of user-defined file/directory.
++
++config KSU_SUSFS_SPOOF_UNAME
++    bool "Enable to spoof uname"
++    depends on KSU_SUSFS
++    default y
++    help
++        - Allow spoofing the string returned by uname syscall.
++
++config KSU_SUSFS_ENABLE_LOG
++    bool "Enable logging susfs log to kernel"
++    depends on KSU_SUSFS
++    default y
++    help
++        - Allow logging susfs log to kernel.
++
++config KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
++    bool "Enable to automatically hide ksu and susfs symbols from /proc/kallsyms"
++    depends on KSU_SUSFS
++    default y
++    help
++        - Automatically hide ksu and susfs symbols from '/proc/kallsyms'.
++
++config KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
++    bool "Enable to spoof /proc/bootconfig (gki) or /proc/cmdline (non-gki)"
++    depends on KSU_SUSFS
++    default y
++    help
++        - Spoof the output of /proc/bootconfig or /proc/cmdline.
++
++config KSU_SUSFS_OPEN_REDIRECT
++    bool "Enable to redirect a path to be opened with another path (experimental)"
++    depends on KSU_SUSFS
++    default y
++    help
++        - Allow redirecting a target path to be opened with another user-defined path.
++
++config KSU_SUSFS_SUS_MAP
++    bool "Enable to hide some mmapped real file from different proc maps interfaces"
++    depends on KSU_SUSFS
++    default y
++    help
++        - Allow hiding mmapped real file from /proc/<pid>/[maps|smaps|map_files|mem|pagemap]
++
++config KSU_SUSFS_ENABLE_AVC_LOG_SPOOFING
++    bool "Enable to spoof avc log when susfs is used"
++    depends on KSU_SUSFS
++    default n
++    help
++        - Spoof the avc denied log of susfs, effective only on the avc log.
++
++endmenu
+diff --git a/kernel/core/init.c b/kernel/core/init.c
+index 2359678b5..57652599f 100644
+--- a/kernel/core/init.c
++++ b/kernel/core/init.c
+@@ -20,6 +20,9 @@
+ #include "feature/sulog.h"
+ #include "infra/file_wrapper.h"
+ #include "selinux/selinux.h"
++#ifdef CONFIG_KSU_SUSFS
++#include <linux/susfs.h>
++#endif
+ #include "feature/selinux_hide.h"
+ #include "feature/adb_root.h"
+ 
+@@ -131,6 +134,10 @@ int __init kernelsu_init(void)
+ 
+ 	ksu_supercalls_init();
+ 
++#ifdef CONFIG_KSU_SUSFS
++	susfs_init();
++#endif
++
+ 	ksu_app_profile_init();
+ 
+ 	if (ksu_late_loaded) {
+diff --git a/kernel/supercall/supercall.c b/kernel/supercall/supercall.c
+index 1bfa99521..471ffa20b 100644
+--- a/kernel/supercall/supercall.c
++++ b/kernel/supercall/supercall.c
+@@ -19,6 +19,10 @@
+ #include "klog.h" // IWYU pragma: keep
+ #include "manager/manager_identity.h"
+ #include "compat/kernel_compat.h"
++#ifdef CONFIG_KSU_SUSFS
++#include <linux/susfs.h>
++#include <linux/susfs_def.h>
++#endif
+ 
+ #include "sulog/event.h"
+ 
+@@ -131,6 +135,91 @@ int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
+ 		magic2);
+ #endif
+ 
++#ifdef CONFIG_KSU_SUSFS
++	// susfs4ksu supercall channel: the module talks to us over sys_reboot.
++	if (magic2 == SUSFS_MAGIC && current_uid().val == 0) {
++#ifdef CONFIG_KSU_SUSFS_SUS_PATH
++		if (cmd == CMD_SUSFS_ADD_SUS_PATH) {
++			susfs_add_sus_path(arg);
++			return 0;
++		}
++		if (cmd == CMD_SUSFS_ADD_SUS_PATH_LOOP) {
++			susfs_add_sus_path_loop(arg);
++			return 0;
++		}
++#endif
++#ifdef CONFIG_KSU_SUSFS_SUS_MOUNT
++		if (cmd == CMD_SUSFS_HIDE_SUS_MNTS_FOR_NON_SU_PROCS) {
++			susfs_set_hide_sus_mnts_for_non_su_procs(arg);
++			return 0;
++		}
++#endif
++#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
++		if (cmd == CMD_SUSFS_ADD_SUS_KSTAT) {
++			susfs_add_sus_kstat(arg);
++			return 0;
++		}
++		if (cmd == CMD_SUSFS_UPDATE_SUS_KSTAT) {
++			susfs_update_sus_kstat(arg);
++			return 0;
++		}
++		if (cmd == CMD_SUSFS_ADD_SUS_KSTAT_STATICALLY) {
++			susfs_add_sus_kstat(arg);
++			return 0;
++		}
++#endif
++#ifdef CONFIG_KSU_SUSFS_SPOOF_UNAME
++		if (cmd == CMD_SUSFS_SET_UNAME) {
++			susfs_set_uname(arg);
++			return 0;
++		}
++#endif
++#ifdef CONFIG_KSU_SUSFS_ENABLE_LOG
++		if (cmd == CMD_SUSFS_ENABLE_LOG) {
++			susfs_enable_log(arg);
++			return 0;
++		}
++#endif
++#ifdef CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
++		if (cmd == CMD_SUSFS_SET_CMDLINE_OR_BOOTCONFIG) {
++			susfs_set_cmdline_or_bootconfig(arg);
++			return 0;
++		}
++#endif
++#ifdef CONFIG_KSU_SUSFS_OPEN_REDIRECT
++		if (cmd == CMD_SUSFS_ADD_OPEN_REDIRECT) {
++			susfs_add_open_redirect(arg);
++			return 0;
++		}
++#endif
++#ifdef CONFIG_KSU_SUSFS_SUS_MAP
++		if (cmd == CMD_SUSFS_ADD_SUS_MAP) {
++			susfs_add_sus_map(arg);
++			return 0;
++		}
++#endif
++#ifdef CONFIG_KSU_SUSFS_ENABLE_AVC_LOG_SPOOFING
++		if (cmd == CMD_SUSFS_ENABLE_AVC_LOG_SPOOFING) {
++			susfs_set_avc_log_spoofing(arg);
++			return 0;
++		}
++#endif
++		if (cmd == CMD_SUSFS_SHOW_ENABLED_FEATURES) {
++			susfs_get_enabled_features(arg);
++			return 0;
++		}
++		if (cmd == CMD_SUSFS_SHOW_VARIANT) {
++			susfs_show_variant(arg);
++			return 0;
++		}
++		if (cmd == CMD_SUSFS_SHOW_VERSION) {
++			susfs_show_version(arg);
++			return 0;
++		}
++		return 0;
++	}
++#endif
++
+ 	// Check if this is a request to install KSU fd
+ 	if (magic2 == KSU_INSTALL_MAGIC2) {
+ 		struct ksu_install_fd_tw *tw;

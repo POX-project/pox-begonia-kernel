@@ -1,0 +1,36 @@
+diff --git a/kernel/sulog/event.c b/kernel/sulog/event.c
+index a8ce47113..66e546ae7 100644
+--- a/kernel/sulog/event.c
++++ b/kernel/sulog/event.c
+@@ -53,13 +53,21 @@ struct compat_sulog_entry {
+ #define COMPAT_SULOG_MAX 250
+ static struct compat_sulog_entry compat_sulog_buf[COMPAT_SULOG_MAX];
+ static uint8_t compat_sulog_idx = 0;
++
++#if KERNEL_VERSION(4, 19, 0) <= LINUX_VERSION_CODE
++#define KSU_BOOTTIME_TS_TYPE	struct timespec64
++#else
++/* pre-4.19 has no 64-bit timespec API: ktime_get_boottime_ts64() does not
++ * exist and get_monotonic_boottime() takes a struct timespec *. */
++#define KSU_BOOTTIME_TS_TYPE	struct timespec
++#endif
+ static DEFINE_SPINLOCK(compat_sulog_lock);
+ 
+ void ksu_compat_sulog(uint8_t sym)
+ {
+     struct compat_sulog_entry entry = {0};
+     unsigned int uid = current_uid().val;
+-    struct timespec64 ts;
++    KSU_BOOTTIME_TS_TYPE ts;
+ 
+ #if KERNEL_VERSION(4, 19, 0) <= LINUX_VERSION_CODE
+ 	ktime_get_boottime_ts64(&ts);
+@@ -87,7 +95,7 @@ int ksu_sulog_handle_compat_dump(void __user *uptr)
+     struct sulog_entry_rcv_ptr sbuf = {0};
+     uint32_t uptime;
+     uint8_t local_idx;
+-    struct timespec64 ts;
++    KSU_BOOTTIME_TS_TYPE ts;
+     struct compat_sulog_entry *local_buf;
+ 
+     if (copy_from_user(&sbuf, uptr, sizeof(sbuf)))
