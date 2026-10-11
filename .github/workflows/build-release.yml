@@ -75,7 +75,7 @@ jobs:
             onyx-sultan-apatch*|*sultan-apatch*|*sultan*)
               EDITION="Onyx-Sultan-APatch"
               EDITION_DESC="Zero Frame-Drop & Sultan Debloat APatch Edition"
-              ROOT_INFO="APatch / KernelPatch Supported + Sultan Debloat"
+              ROOT_INFO="APatch / KernelPatch Supported + NoMount 2.1.0 + Sultan Debloat"
               ;;
             onyx-resukisu*|*resukisu*)
               EDITION="Onyx-ReSukiSu"
