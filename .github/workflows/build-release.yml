@@ -59,7 +59,7 @@ jobs:
           export GITHUB_REF_NAME="${{ github.ref_name }}"
           ./build.sh all
 
-          COMMIT_SHORT=$(git rev-parse --short HEAD)
+          COMMIT_SHORT=$(git rev-parse --short=7 HEAD)
           ZIP_PATH=$(ls build/Pox-*-${COMMIT_SHORT}-*.zip 2>/dev/null | head -n 1 || ls build/Pox-*.zip | grep -v 'latest.zip' | head -n 1)
 
           if [[ ! -f "$ZIP_PATH" ]]; then
@@ -83,8 +83,8 @@ jobs:
               ;;
           esac
 
-          TAG_NAME="Pox-0.9-${EDITION}-${BRANCH_NAME}-${COMMIT_SHORT}"
-          RELEASE_TITLE="Pox Kernel 0.9 [${EDITION}] - ${BRANCH_NAME} (${COMMIT_SHORT})"
+          TAG_NAME="Pox-0.9-${EDITION}-${COMMIT_SHORT}"
+          RELEASE_TITLE="Pox Kernel 0.9 [${EDITION}] (${COMMIT_SHORT})"
 
           echo "ZIP_PATH=$ZIP_PATH" >> $GITHUB_ENV
           echo "ZIP_NAME=$(basename "$ZIP_PATH")" >> $GITHUB_ENV
