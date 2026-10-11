@@ -40,7 +40,7 @@ DATE="$(date +%Y%m%d-%H%M)"
 
 # Git Metadata: Branch & Commit ID
 GIT_BRANCH="${GIT_BRANCH:-${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "onyx")}}"
-COMMIT_HASH="${COMMIT_HASH:-$(git rev-parse --short HEAD 2>/dev/null || echo "custom")}"
+COMMIT_HASH="${COMMIT_HASH:-$(git rev-parse --short=7 HEAD 2>/dev/null || echo "custom")}"
 COMMIT_DATE="$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || date +'%Y-%m-%d %H:%M')"
 COMMIT_SUBJECT="$(git log -1 --format=%s 2>/dev/null || echo "Release build")"
 
@@ -90,20 +90,20 @@ fi
 DEFCONFIG="${DEFCONFIG:-$DEFAULT_DEFCONFIG}"
 BRANCH_CODENAME="$VERSION_NAME"
 
-# Derive dynamic localversion string: contains name, version, version name, branch, commit id
+# Derive dynamic localversion string: name, version, edition, commit id
 if [[ -n "${LOCALVERSION:-}" ]]; then
     CUSTOM_LOCALVERSION="$LOCALVERSION"
 else
-    CUSTOM_LOCALVERSION="-${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${GIT_BRANCH}-${COMMIT_HASH}"
+    CUSTOM_LOCALVERSION="-${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${COMMIT_HASH}"
 fi
 
-# Package zip base name: contains name, version, version name, branch, commit id, device
+# Package zip base name: name, version, edition, commit id, device
 if [[ -n "${PACKAGE_NAME:-}" ]]; then
     ZIP_BASE="$PACKAGE_NAME"
 elif [[ "$KERNEL_NAME" == *"$DEVICE_CODENAME"* ]]; then
-    ZIP_BASE="${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${GIT_BRANCH}-${COMMIT_HASH}"
+    ZIP_BASE="${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${COMMIT_HASH}"
 else
-    ZIP_BASE="${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${GIT_BRANCH}-${COMMIT_HASH}-${DEVICE_CODENAME}"
+    ZIP_BASE="${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${COMMIT_HASH}-${DEVICE_CODENAME}"
 fi
 
 log()  { printf '\033[1;32m[*] %s\033[0m\n' "$*"; }
@@ -376,7 +376,7 @@ package_zip() {
 
 ## AnyKernel setup
 properties() { '
-kernel.string=${KERNEL_NAME} ${KERNEL_VERSION} [${VERSION_NAME}] (${GIT_BRANCH}-${COMMIT_HASH}) by ${MAINTAINER} for ${DEVICE_NAME} (${DEVICE_CODENAME})
+kernel.string=${KERNEL_NAME} ${KERNEL_VERSION} [${VERSION_NAME}] (${COMMIT_HASH}) by ${MAINTAINER} for ${DEVICE_NAME} (${DEVICE_CODENAME})
 do.devicecheck=1
 do.modules=0
 do.systemless=0
@@ -779,8 +779,8 @@ AK_EOF
     rm -rf "$stage"
 
     # Also maintain latest.zip, versioned zip, and date-stamped copies in build/
-    cp -f "$zip_file" "$BUILD_DIR/${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${GIT_BRANCH}-${DATE}.zip"
-    cp -f "$zip_file" "$BUILD_DIR/${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${GIT_BRANCH}-${DEVICE_CODENAME}.zip"
+    cp -f "$zip_file" "$BUILD_DIR/${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${DATE}.zip"
+    cp -f "$zip_file" "$BUILD_DIR/${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${DEVICE_CODENAME}.zip"
     ln -sf "$(basename "$zip_file")" "$BUILD_DIR/latest.zip"
     ln -sf "$(basename "$zip_file")" "$BUILD_DIR/${COMMIT_HASH}.zip"
 
@@ -789,7 +789,7 @@ AK_EOF
     log "Package ZIP:   $zip_file"
     log "Commit Link:   $BUILD_DIR/${COMMIT_HASH}.zip"
     log "Latest Link:   $BUILD_DIR/latest.zip"
-    log "Branch Link:   $BUILD_DIR/${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${GIT_BRANCH}-${DEVICE_CODENAME}.zip"
+    log "Device Link:   $BUILD_DIR/${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${DEVICE_CODENAME}.zip"
     log "Kernel Image:  $BUILD_DIR/Image.gz-dtb"
     log "================================================="
 }
