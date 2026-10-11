@@ -114,9 +114,9 @@ jobs:
               ;;
           esac
 
-          COMMIT_SHORT="$(git rev-parse --short HEAD 2>/dev/null || echo "${{ github.sha }}" | cut -c1-8)"
-          TAG_NAME="Pox-1.0.0-Beta-${EDITION}-${BRANCH_NAME}-${COMMIT_SHORT}"
-          RELEASE_TITLE="Pox Kernel 1.0.0-Beta [${EDITION}] - ${BRANCH_NAME} (${COMMIT_SHORT})"
+          COMMIT_SHORT="$(git rev-parse --short=7 HEAD 2>/dev/null || echo "${{ github.sha }}" | cut -c1-7)"
+          TAG_NAME="Pox-1.0.0-Beta-${EDITION}-${COMMIT_SHORT}"
+          RELEASE_TITLE="Pox Kernel 1.0.0-Beta [${EDITION}] (${COMMIT_SHORT})"
 
           echo "ZIP_PATH=$ZIP_PATH" >> $GITHUB_ENV
           echo "ZIP_NAME=$(basename "$ZIP_PATH")" >> $GITHUB_ENV
