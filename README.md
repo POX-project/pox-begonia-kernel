@@ -164,7 +164,7 @@ Pox Kernel is structured into modular **Rock Editions**, enabling users to pick 
 * **Linux 64-Character UTS_RELEASE Guard**: Dynamically clamped localversion strings in `build.sh` to strictly obey the Linux kernel 64-character limit.
 
 ### 6. Multi-Flavored Root Ecosystem
-* **APatch / KernelPatch**: Full `CONFIG_KALLSYMS_ALL=y` symbol exposure with SELinux hook points.
+* **APatch / KernelPatch + NoMount**: Full `CONFIG_KALLSYMS_ALL=y` symbol exposure with integrated NoMount 2.0.0 VFS path redirection (`CONFIG_NOMOUNT=y`) for stealth mountless module injection.
 * **KernelSU-Next**: Integrated KernelSU-Next v3.3.0 driver with NoMount VFS support for stealth systemless root.
 * **Clean Unrooted**: 100% stock security model with zero hooking modifications for strict banking/Play Integrity compliance.
 
@@ -181,7 +181,7 @@ Pox Kernel is structured into modular **Rock Editions**, enabling users to pick 
 | Branch | Edition | Sultan Debloat | Root Subsystem | Description |
 |:---|:---|:---:|:---:|:---|
 | **`onyx`** | Onyx | ❌ | Clean (Unrooted) | Clean gaming kernel, zero root hooks, pure Play Integrity ready |
-| **`onyx-apatch`** | Onyx-APatch | ❌ | APatch / KernelPatch | Onyx Gaming + Full KALLSYMS symbol table for APatch |
+| **`onyx-apatch`** | Onyx-APatch | ❌ | APatch + NoMount | Onyx Gaming + Full KALLSYMS for APatch + NoMount 2.0.0 VFS |
 | **`onyx-ksu-next`** | Onyx-KSU-Next | ❌ | KernelSU-Next v3.3.0 | Onyx Gaming + Native KernelSU-Next driver & NoMount VFS |
 | **`onyx-sultan`** | Onyx-Sultan | ✅ | Clean (Unrooted) | Sultan debloat + Onyx Gaming, pure unrooted edition |
 | **`onyx-sultan-apatch`** | Onyx-Sultan-APatch | ✅ | APatch / KernelPatch | Sultan debloat + Onyx Gaming + APatch root support |
