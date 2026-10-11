@@ -248,6 +248,9 @@ build_kernel() {
     if grep -q '^CONFIG_KALLSYMS_ALL=y$' "$OUT_DIR/.config"; then
         log "CONFIG_KALLSYMS_ALL=y verified (APatch supported)."
     fi
+    if grep -q '^CONFIG_NOMOUNT=y$' "$OUT_DIR/.config"; then
+        log "CONFIG_NOMOUNT=y verified (NoMount VFS path redirection supported)."
+    fi
 
     # Host PC safety: ensure load average and memory are suitable before launching build (skip in CI/GitHub Actions or SKIP_LOAD_CHECK)
     if [[ -z "${SKIP_LOAD_CHECK:-}" && -z "${CI:-}" && -z "${GITHUB_ACTIONS:-}" ]]; then
@@ -759,6 +762,7 @@ ui_print "     - LiquidCool Gaming Thermal: 1200mW CPU & 1000mW GPU floor lock";
 ui_print "     - Storage I/O: BFQ hierarchical scheduler & 512KB readahead active";
 ui_print "     - Cinema Camera Engine: 4K 60FPS unlocked & Sony S-Log3 active";
 ui_print "     - APatch / KernelPatch KALLSYMS: enabled";
+ui_print "     - NoMount VFS Path Redirection: active";
 ui_print "     - iOS-Style Compressed Memory: ZSTD ZRAM, 24MB cushion, vfs=50";
 ui_print "     - True Tone Display Engine: Calibrated D65 Liquid Retina reference active";
 ui_print "     - Video Anti-Lag Engine: VDEC/VENC clock floor & LP4-2100 DDR active";
