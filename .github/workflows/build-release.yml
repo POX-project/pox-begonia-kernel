@@ -80,7 +80,7 @@ jobs:
             onyx-bakasu*|*bakasu*)
               EDITION="Onyx-BakaSU"
               EDITION_DESC="Zero Frame-Drop Gaming & BakaSU Root Edition"
-              ROOT_INFO="BakaSU v4.2.0-rc3 (35226) + SUSFS v2.3.0 (inline hook mode) + NoMount v2.0.0 (Multi-Manager, App Profile, SELinux Hide)"
+              ROOT_INFO="BakaSU v4.2.0-rc3 (35171) + SUSFS v2.3.0 (inline hook mode) + NoMount v2.0.0 (Multi-Manager, App Profile, SELinux Hide)"
               ;;
             onyx-apatch*|*apatch*)
               EDITION="Onyx-APatch"
@@ -166,16 +166,17 @@ jobs:
               cat <<'EOF' >> release_notes.md
           ---
           ### BakaSU Manager
-          This kernel is built against **BakaSU v4.2.0-rc3** (kernel version code `35226`),
+          This kernel is built against **BakaSU v4.2.0-rc3** (version code `35171`),
           hooking through **SUSFS v2.3.0 inline mode**. Install the manager before
           flashing, otherwise it will report an unsupported kernel and refuse to hand out
           root:
 
           `ReSukiSU_v4.2.0-rc3_35171-arm64-v8a-release.apk`
 
-          (BakaSU was released under the ReSukiSU name, so that is the current asset
-          filename. BakaSU only trusts the KernelSU Official, KOWSU and BakaSU manager
-          signatures - a SukiSU-Ultra or ReSukiSU manager will be rejected.)
+          (BakaSU was renamed from ReSukiSU after this tag was cut, so the release
+          asset is still published under the old name. This build accepts the
+          KernelSU Official, KOWSU, SukiSU-Ultra and BakaSU/ReSukiSU manager
+          signatures.)
           EOF
               ;;
           esac
