@@ -150,9 +150,10 @@ jobs:
           - **Kernel Binary**: \`Image.gz-dtb\`
 
           ### Bundled Root (Auto-Flash)
-          This kernel ZIP embeds the latest FolkPatch (KernelPatch / APatch) release
-          package. When flashed, it installs the kernel and then automatically
-          flashes the bundled FolkPatch root package afterwards.
+          This kernel ZIP embeds the latest FolkPatch (KernelPatch) release package
+          (LyraVoid/FolkPatch). When flashed it installs the kernel, patches it with
+          KernelPatch, and stages the FolkPatch manager APK to be installed
+          automatically as a user app on first boot.
 
           ### Flashing Guide
           1. Reboot to Custom Recovery (TWRP, OrangeFox, PBRP).
