@@ -557,12 +557,30 @@ on boot
     # MIUI / HyperOS 3 memory swap & xswapd cgroup nodes (restricted to root & system)
     chown root system /dev/memcg/memory.xswapd.quota
     chown root system /dev/memcg/memory.xswapd.enable
+    chown root system /dev/memcg/memory.xswapd.score
+    chown root system /dev/memcg/memory.xswapd.refaults
     chown root system /dev/memcg/memory.xswapd.reclaim
     chown root system /dev/memcg/apps/memory.xswapd.quota
+    chown root system /dev/memcg/apps/memory.xswapd.score
+    chown root system /dev/memcg/apps/memory.xswapd.refaults
     chmod 0664 /dev/memcg/memory.xswapd.quota
     chmod 0664 /dev/memcg/memory.xswapd.enable
+    chmod 0664 /dev/memcg/memory.xswapd.score
+    chmod 0444 /dev/memcg/memory.xswapd.refaults
     chmod 0664 /dev/memcg/memory.xswapd.reclaim
     chmod 0664 /dev/memcg/apps/memory.xswapd.quota
+    chmod 0664 /dev/memcg/apps/memory.xswapd.score
+    chmod 0444 /dev/memcg/apps/memory.xswapd.refaults
+    chown root system /sys/kernel/xswapd/* 2>/dev/null || true
+    chmod 0664 /sys/kernel/xswapd/enabled 2>/dev/null || true
+    chmod 0664 /sys/kernel/xswapd/trigger 2>/dev/null || true
+    chmod 0664 /sys/kernel/xswapd/watermark_kb 2>/dev/null || true
+    chmod 0664 /sys/kernel/xswapd/min_score 2>/dev/null || true
+    chmod 0664 /sys/kernel/xswapd/max_scan_pages 2>/dev/null || true
+    chmod 0664 /sys/kernel/xswapd/refault_threshold 2>/dev/null || true
+    chmod 0664 /sys/kernel/xswapd/interval_ms 2>/dev/null || true
+    chmod 0444 /sys/kernel/xswapd/reclaimed_pages 2>/dev/null || true
+    chmod 0444 /sys/kernel/xswapd/status 2>/dev/null || true
 
     # Default flash storage readahead to 128KB for smooth capture and I/O
     write /sys/block/sda/queue/read_ahead_kb 128
