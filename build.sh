@@ -28,6 +28,8 @@ DEFCONFIG="${DEFCONFIG:-}"
 BUNDLE_FOLKPATCH="${BUNDLE_FOLKPATCH:-1}"
 FOLKPATCH_REPO="${FOLKPATCH_REPO:-LyraVoid/FolkPatch}"
 FOLKPATCH_ZIP_NAME="${FOLKPATCH_ZIP_NAME:-folkpatch.zip}"
+FOLKPATCH_PACKAGE="${FOLKPATCH_PACKAGE:-me.yuki.folk}"
+FOLKPATCH_INSTALL_APP="${FOLKPATCH_INSTALL_APP:-1}"
 FOLKPATCH_ASSET=""
 FOLKPATCH_ZIP="${FOLKPATCH_ZIP:-}"
 
@@ -786,10 +788,31 @@ on boot
 RC_EOF
     chmod 644 \$RAMDISK/init.battery_guard.rc
 
+    # 4. One-shot first-boot installer for the bundled FolkPatch manager app
+    if [ -f "\$AKHOME/pox_folkpatch_install.sh" ]; then
+        cp -f "\$AKHOME/pox_folkpatch_install.sh" "\$RAMDISK/pox_folkpatch_install.sh";
+        chmod 755 "\$RAMDISK/pox_folkpatch_install.sh";
+        cat << 'RC_EOF' > \$RAMDISK/init.pox_folkpatch.rc
+# Pox Kernel - one-shot FolkPatch manager app installer
+service pox_folkpatch_install /system/bin/sh /pox_folkpatch_install.sh
+    class late_start
+    user root
+    group root
+    seclabel u:r:init:s0
+    oneshot
+    disabled
+
+on property:sys.boot_completed=1
+    start pox_folkpatch_install
+RC_EOF
+        chmod 644 \$RAMDISK/init.pox_folkpatch.rc;
+    fi
+
     if [ -f "\$RAMDISK/init.rc" ]; then
         insert_line init.rc "init.memory_enhanced.rc" after "import /init.environ.rc" "import /init.memory_enhanced.rc";
         insert_line init.rc "init.gaming.rc" after "import /init.memory_enhanced.rc" "import /init.gaming.rc";
         insert_line init.rc "init.battery_guard.rc" after "import /init.gaming.rc" "import /init.battery_guard.rc";
+        [ -f "\$RAMDISK/init.pox_folkpatch.rc" ] && insert_line init.rc "init.pox_folkpatch.rc" after "import /init.battery_guard.rc" "import /init.pox_folkpatch.rc";
     fi
 fi
 
@@ -847,6 +870,16 @@ if [ -n "\$FP_SRC" ]; then
     else
         ui_print " [!] FolkPatch installer not found; skipping root step.";
     fi;
+    if [ "${FOLKPATCH_INSTALL_APP}" = "1" ]; then
+        ## Stage the manager APK (the bundle *is* the APK) for first-boot install.
+        for dest in /data/system /data/local/tmp /sdcard; do
+            [ -d "\$dest" ] || continue;
+            if cp -f "\$FP_SRC" "\$dest/FolkPatch.apk" 2>/dev/null; then
+                chmod 0644 "\$dest/FolkPatch.apk" 2>/dev/null;
+            fi;
+        done;
+        ui_print " [*] Staged FolkPatch manager APK for first-boot install.";
+    fi;
 else
     ui_print " [i] No bundled FolkPatch package; skipping root step.";
 fi;
@@ -863,6 +896,51 @@ ui_print " ============================================";
 ui_print " ";
 ## end install
 AK_EOF
+
+    # Standalone first-boot installer for the bundled FolkPatch manager app.
+    # anykernel.sh copies this into the boot ramdisk; init.pox_folkpatch.rc
+    # runs it once after sys.boot_completed to install the manager as a user app.
+    if [[ "$BUNDLE_FOLKPATCH" == "1" && "$FOLKPATCH_INSTALL_APP" == "1" ]]; then
+        cat << 'FP_SH_EOF' > "$stage/pox_folkpatch_install.sh"
+#!/system/bin/sh
+# Pox Kernel - install the bundled FolkPatch manager app (first boot, once).
+PKG=@FOLKPATCH_PACKAGE@
+LOG=/data/local/tmp/pox_folkpatch_install.log
+
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG" 2>/dev/null; }
+
+APK=""
+for c in /data/system/FolkPatch.apk /data/local/tmp/FolkPatch.apk /sdcard/FolkPatch.apk; do
+    [ -f "$c" ] && { APK="$c"; break; }
+done
+[ -n "$APK" ] || exit 0
+
+i=0
+while [ "$i" -lt 90 ]; do
+    cmd package list packages >/dev/null 2>&1 && break
+    sleep 2
+    i=$((i + 1))
+done
+sleep 15
+
+if cmd package list packages 2>/dev/null | grep -q "$PKG"; then
+    log "already installed: $PKG"
+    exit 0
+fi
+
+ok=0
+pm install -r -g "$APK" >> "$LOG" 2>&1 && ok=1
+if [ "$ok" = 0 ]; then cmd package install -r -g "$APK" >> "$LOG" 2>&1 && ok=1; fi
+if [ "$ok" = 0 ] && [ -x /system/bin/su ]; then
+    su -c "pm install -r -g $APK" >> "$LOG" 2>&1 && ok=1
+fi
+
+log "install result ok=$ok pkg=$PKG apk=$APK"
+exit 0
+FP_SH_EOF
+        sed -i "s/@FOLKPATCH_PACKAGE@/${FOLKPATCH_PACKAGE}/g" "$stage/pox_folkpatch_install.sh"
+        chmod 755 "$stage/pox_folkpatch_install.sh"
+    fi
 
     local zip_file="$BUILD_DIR/${ZIP_BASE}.zip"
     log "Packaging AnyKernel3 flashable zip: $zip_file"
