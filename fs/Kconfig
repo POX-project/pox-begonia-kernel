@@ -60,6 +60,8 @@ config FS_DAX_PMD
 
 endif # BLOCK
 
+source "fs/nomount/Kconfig"
+
 # Posix ACL utility routines
 #
 # Note: Posix ACLs can be implemented without these helpers.  Never use

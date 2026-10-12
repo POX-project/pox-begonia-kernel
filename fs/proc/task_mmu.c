@@ -19,11 +19,18 @@
 #include <linux/shmem_fs.h>
 #include <linux/uaccess.h>
 #include <linux/mm_inline.h>
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+#include <linux/susfs_def.h>
+#endif
 
 #include <asm/elf.h>
 #include <asm/tlb.h>
 #include <asm/tlbflush.h>
 #include "internal.h"
+
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+extern void susfs_show_map_vma_spoofer(struct inode *inode, dev_t *out_dev, unsigned long *out_ino);
+#endif
 
 void task_mem(struct seq_file *m, struct mm_struct *mm)
 {
@@ -374,9 +381,15 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 
 	if (file) {
 		struct inode *inode = file_inode(vma->vm_file);
+		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+		if (unlikely(test_bit(AS_FLAGS_SUS_KSTAT, &inode->i_mapping->flags))) {
+			susfs_show_map_vma_spoofer(inode, &dev, &ino);
+			goto susfs_orig_flow;
+		}
+#endif
 		dev = inode->i_sb->s_dev;
 		ino = inode->i_ino;
-		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
         struct dentry *dentry = file->f_path.dentry;
         if (dentry) {
         	const char *path = (const char *)dentry->d_name.name; 
@@ -396,6 +409,9 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
             	}
 	}
 
+#ifdef CONFIG_KSU_SUSFS_SUS_KSTAT
+susfs_orig_flow:
+#endif
 	start = vma->vm_start;
 	end = vma->vm_end;
 	show_vma_header_prefix(m, start, end, flags, pgoff, dev, ino);
