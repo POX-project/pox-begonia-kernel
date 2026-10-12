@@ -284,6 +284,9 @@ struct mem_cgroup {
 	/* MIUI / HyperOS xswapd interface */
 	u64 xswapd_quota;
 	u64 xswapd_enable;
+	u64 xswapd_score;
+	u64 xswapd_last_refaults;
+	atomic64_t xswapd_refaults;
 	atomic64_t xswapd_reclaimed;
 	struct work_struct xswapd_work;
 	unsigned long xswapd_target_pages;

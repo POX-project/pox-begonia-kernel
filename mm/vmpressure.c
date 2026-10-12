@@ -23,6 +23,7 @@
 #include <linux/swap.h>
 #include <linux/printk.h>
 #include <linux/vmpressure.h>
+#include <linux/xswapd.h>
 
 /*
  * The window size (vmpressure_win) is the number of scanned pages before
@@ -211,6 +212,9 @@ static void vmpressure_work_fn(struct work_struct *work)
 	spin_unlock(&vmpr->sr_lock);
 
 	level = vmpressure_calc_level(scanned, reclaimed);
+
+	if (level >= VMPRESSURE_MEDIUM)
+		xswapd_wakeup();
 
 	do {
 		if (vmpressure_event(vmpr, level, ancestor, signalled))

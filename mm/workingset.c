@@ -15,6 +15,7 @@
 #include <linux/dax.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
+#include <linux/xswapd.h>
 
 /*
  *		Double CLOCK lists
@@ -305,6 +306,8 @@ void workingset_refault(struct page *page, void *shadow)
 	refault_distance = (refault - eviction) & EVICTION_MASK;
 
 	inc_lruvec_state(lruvec, WORKINGSET_REFAULT);
+	if (memcg)
+		xswapd_record_refault(memcg);
 
 	/*
 	 * Compare the distance to the existing workingset size. We
