@@ -65,6 +65,7 @@
 #include <linux/lockdep.h>
 #include <linux/file.h>
 #include <linux/tracehook.h>
+#include <linux/xswapd.h>
 #include "internal.h"
 #include <net/sock.h>
 #include <net/ip.h>
@@ -4153,6 +4154,7 @@ static ssize_t mem_cgroup_xswapd_quota_write_file(struct kernfs_open_file *of,
 			spin_unlock_irqrestore(&memcg->xswapd_lock, flags);
 
 			queue_work(system_unbound_wq, &memcg->xswapd_work);
+			xswapd_wakeup();
 		}
 	}
 
@@ -4180,6 +4182,34 @@ static int mem_cgroup_xswapd_enable_write(struct cgroup_subsys_state *css,
 		cancel_work_sync(&memcg->xswapd_work);
 
 	return 0;
+}
+
+static u64 mem_cgroup_xswapd_score_read(struct cgroup_subsys_state *css,
+					struct cftype *cft)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	return memcg ? memcg->xswapd_score : 0;
+}
+
+static int mem_cgroup_xswapd_score_write(struct cgroup_subsys_state *css,
+					 struct cftype *cft, u64 val)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	if (!memcg)
+		return -EINVAL;
+
+	memcg->xswapd_score = min_t(u64, val, 100);
+	return 0;
+}
+
+static u64 mem_cgroup_xswapd_refaults_read(struct cgroup_subsys_state *css,
+					   struct cftype *cft)
+{
+	struct mem_cgroup *memcg = mem_cgroup_from_css(css);
+
+	return memcg ? atomic64_read(&memcg->xswapd_refaults) : 0;
 }
 
 static u64 mem_cgroup_xswapd_reclaim_read(struct cgroup_subsys_state *css,
@@ -4229,6 +4259,7 @@ static ssize_t mem_cgroup_xswapd_reclaim_write_file(struct kernfs_open_file *of,
 			spin_unlock_irqrestore(&memcg->xswapd_lock, flags);
 
 			queue_work(system_unbound_wq, &memcg->xswapd_work);
+			xswapd_wakeup();
 		}
 	}
 
@@ -4372,6 +4403,15 @@ static struct cftype mem_cgroup_legacy_files[] = {
 		.name = "xswapd.enable",
 		.read_u64 = mem_cgroup_xswapd_enable_read,
 		.write_u64 = mem_cgroup_xswapd_enable_write,
+	},
+	{
+		.name = "xswapd.score",
+		.read_u64 = mem_cgroup_xswapd_score_read,
+		.write_u64 = mem_cgroup_xswapd_score_write,
+	},
+	{
+		.name = "xswapd.refaults",
+		.read_u64 = mem_cgroup_xswapd_refaults_read,
 	},
 	{
 		.name = "xswapd.reclaim",
@@ -4555,6 +4595,9 @@ static struct mem_cgroup *mem_cgroup_alloc(void)
 	memcg->socket_pressure = jiffies;
 	memcg->xswapd_enable = 1;
 	memcg->xswapd_quota = 0;
+	memcg->xswapd_score = 50;
+	memcg->xswapd_last_refaults = 0;
+	atomic64_set(&memcg->xswapd_refaults, 0);
 	memcg->xswapd_target_pages = 0;
 	atomic64_set(&memcg->xswapd_reclaimed, 0);
 	spin_lock_init(&memcg->xswapd_lock);
@@ -5757,6 +5800,15 @@ static struct cftype memory_files[] = {
 		.name = "xswapd.enable",
 		.read_u64 = mem_cgroup_xswapd_enable_read,
 		.write_u64 = mem_cgroup_xswapd_enable_write,
+	},
+	{
+		.name = "xswapd.score",
+		.read_u64 = mem_cgroup_xswapd_score_read,
+		.write_u64 = mem_cgroup_xswapd_score_write,
+	},
+	{
+		.name = "xswapd.refaults",
+		.read_u64 = mem_cgroup_xswapd_refaults_read,
 	},
 	{
 		.name = "xswapd.reclaim",

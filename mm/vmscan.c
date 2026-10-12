@@ -57,6 +57,7 @@
 #include <linux/swapops.h>
 #include <linux/balloon_compaction.h>
 #include <linux/rtmm.h>
+#include <linux/xswapd.h>
 
 #include "internal.h"
 
@@ -2760,6 +2761,9 @@ static bool shrink_node(pg_data_t *pgdat, struct scan_control *sc)
 	struct reclaim_state *reclaim_state = current->reclaim_state;
 	unsigned long nr_reclaimed, nr_scanned;
 	bool reclaimable = false;
+
+	if (!current_is_kswapd() && sc->priority < DEF_PRIORITY - 2)
+		xswapd_wakeup();
 
 	do {
 		struct mem_cgroup *root = sc->target_mem_cgroup;
