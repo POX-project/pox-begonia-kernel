@@ -149,10 +149,15 @@ jobs:
           - **Flashable Recovery ZIP**: \`${{ env.ZIP_NAME }}\` (Install via TWRP / OrangeFox)
           - **Kernel Binary**: \`Image.gz-dtb\`
 
+          ### Bundled Root (Auto-Flash)
+          This kernel ZIP embeds the latest FolkPatch (KernelPatch / APatch) release
+          package. When flashed, it installs the kernel and then automatically
+          flashes the bundled FolkPatch root package afterwards.
+
           ### Flashing Guide
           1. Reboot to Custom Recovery (TWRP, OrangeFox, PBRP).
           2. (Recommended) Perform a NANDroid backup of the \`Boot\` partition.
-          3. Flash \`${{ env.ZIP_NAME }}\`.
+          3. Flash \`${{ env.ZIP_NAME }}\` (kernel + bundled FolkPatch auto-flash).
           4. Reboot system.
 
           ---

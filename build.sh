@@ -21,6 +21,16 @@ DEVICE_CODENAME="${DEVICE_CODENAME:-begonia}"
 MAINTAINER="${MAINTAINER:-TXO R (Pox Project)}"
 DEFCONFIG="${DEFCONFIG:-}"
 
+# Bundled root solution: latest FolkPatch (KernelPatch / APatch) package.
+# The FolkPatch GitHub release artifact is an APK that is also a flashable
+# recovery zip (APK renamed to .zip). It is fetched at packaging time and
+# auto-flashed by the AnyKernel3 installer right after the kernel is written.
+BUNDLE_FOLKPATCH="${BUNDLE_FOLKPATCH:-1}"
+FOLKPATCH_REPO="${FOLKPATCH_REPO:-LyraVoid/FolkPatch}"
+FOLKPATCH_ZIP_NAME="${FOLKPATCH_ZIP_NAME:-folkpatch.zip}"
+FOLKPATCH_ASSET=""
+FOLKPATCH_ZIP="${FOLKPATCH_ZIP:-}"
+
 # Determine safe parallel jobs based on available RAM and load to protect host PC from freezing
 auto_jobs() {
     local mem_avail_kb
@@ -283,6 +293,37 @@ build_kernel() {
     log "Kernel image saved to: $BUILD_DIR/Image.gz-dtb"
 }
 
+# Fetch the latest FolkPatch release artifact (an APK that doubles as a
+# flashable recovery zip) and stage it under the given path as a .zip.
+fetch_folkpatch() {
+    local dest="$1"
+    local api="https://api.github.com/repos/${FOLKPATCH_REPO}/releases/latest"
+    local url=""
+
+    if ! command -v curl >/dev/null 2>&1; then
+        warn "curl not available; cannot fetch FolkPatch release."
+        return 1
+    fi
+
+    url="$(curl -fsSL "$api" 2>/dev/null \
+        | grep -oE '"browser_download_url":[[:space:]]*"[^"]+\.apk"' \
+        | head -n1 \
+        | sed -E 's/.*"(https[^"]+)".*/\1/')"
+
+    if [[ -z "$url" ]]; then
+        warn "Could not resolve a FolkPatch APK from ${FOLKPATCH_REPO}."
+        return 1
+    fi
+
+    FOLKPATCH_ASSET="$(basename "$url")"
+    log "Fetching latest FolkPatch release: $FOLKPATCH_ASSET"
+    if ! curl -fL --retry 3 --connect-timeout 20 -o "$dest" "$url"; then
+        warn "Failed to download FolkPatch APK."
+        return 1
+    fi
+    return 0
+}
+
 package_zip() {
     if [[ "${SKIP_PACKAGE:-0}" == "1" ]]; then
         log "Skipping zip packaging."
@@ -304,6 +345,24 @@ package_zip() {
     mkdir -p "$stage"
     cp -r "$AK3_DIR/." "$stage/"
     cp "$image" "$stage/Image.gz-dtb"
+
+    # Bundle the latest FolkPatch (KernelPatch) package for auto-flash.
+    # The release APK is a flashable zip; it is staged with a .zip suffix.
+    local fp_zip="$stage/${FOLKPATCH_ZIP_NAME}"
+    if [[ "${BUNDLE_FOLKPATCH}" == "1" ]]; then
+        if [[ -n "$FOLKPATCH_ZIP" && -f "$FOLKPATCH_ZIP" ]]; then
+            cp -f "$FOLKPATCH_ZIP" "$fp_zip"
+            FOLKPATCH_ASSET="$(basename "$FOLKPATCH_ZIP")"
+            log "Bundled local FolkPatch package: $FOLKPATCH_ASSET"
+        elif fetch_folkpatch "$fp_zip"; then
+            log "Bundled FolkPatch package as ${FOLKPATCH_ZIP_NAME} ($(du -h "$fp_zip" | cut -f1))"
+        else
+            rm -f "$fp_zip"
+            warn "Proceeding without FolkPatch auto-flash step."
+        fi
+    else
+        log "FolkPatch bundling disabled (BUNDLE_FOLKPATCH=0)."
+    fi
 
     local commit_hash commit_date commit_subject kver toolchain_ver git_branch
     commit_hash="$(git rev-parse --short HEAD 2>/dev/null || echo "custom")"
@@ -342,6 +401,7 @@ package_zip() {
         echo " Linux: v$kver | Date: $COMMIT_DATE"
         echo " Toolchain: $toolchain_ver"
         echo " Defconfig: $DEFCONFIG (APatch ready)"
+        echo " Root Auto-Flash: FolkPatch (KernelPatch) ${FOLKPATCH_ASSET:-disabled}"
         echo " Memory: iOS-Style On-Demand Multi-Stream Compressed ZRAM"
         echo " Gaming: Zero Frame-Drop Gaming Mode Controller"
         echo "========================================================"
@@ -786,6 +846,36 @@ ui_print "     - Zero Frame-Drop Gaming Mode: active on ROM Performance toggle";
 ui_print "     - FPSGO Ultra-Rescue + Mali-G76 MC4 Touch Boost: enabled";
 ui_print "     - Universal USB OTG: DACs, controllers, serial & ethernet active";
 write_boot;
+
+## Auto-flash bundled FolkPatch (KernelPatch / APatch) package after kernel
+## The FolkPatch release APK is itself a flashable recovery zip. Mirror its
+## update-binary flow: stage assets/lib and run its installer against the
+## freshly written boot image so the kernel gets KernelPatch embedded.
+FP_SRC="";
+for fp in "\$AKHOME/${FOLKPATCH_ZIP_NAME}" "${FOLKPATCH_ZIP_NAME}"; do
+    [ -f "\$fp" ] && { FP_SRC="\$fp"; break; };
+done;
+if [ -n "\$FP_SRC" ]; then
+    ui_print " ";
+    ui_print " ============================================";
+    ui_print "   Flashing bundled FolkPatch (KernelPatch)   ";
+    ui_print " ============================================";
+    sync;
+    FP_INSTALL=/dev/tmp/install;
+    rm -rf "\$FP_INSTALL";
+    mkdir -p "\$FP_INSTALL";
+    unzip -o "\$FP_SRC" "assets/*" "lib/*" -d "\$FP_INSTALL" >/dev/null 2>&1;
+    if [ -f "\$FP_INSTALL/assets/InstallAP.sh" ]; then
+        chmod -R 755 "\$FP_INSTALL/assets" "\$FP_INSTALL/lib" 2>/dev/null;
+        ( cd "\$FP_INSTALL" && sh assets/InstallAP.sh 3 "\$OUTFD" "\$FP_SRC" );
+        ui_print " [*] FolkPatch (KernelPatch) install step complete.";
+    else
+        ui_print " [!] FolkPatch installer not found; skipping root step.";
+    fi;
+else
+    ui_print " [i] No bundled FolkPatch package; skipping root step.";
+fi;
+ui_print " ";
 
 ui_print " [*] [4/4] Cleaning up temporary installer files...";
 ui_print " ";
