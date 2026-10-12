@@ -375,9 +375,9 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
 	unsigned int lookup_flags = LOOKUP_FOLLOW;
 #ifdef CONFIG_KSU
 	/*
-	 * CONFIG_KSU_SUSFS makes ReSukiSU export the struct filename **
+	 * CONFIG_KSU_SUSFS makes BakaSU export the struct filename **
 	 * variant of this hook, not const char __user **. Passing the
-	 * raw user pointer here made ReSukiSU dereference the pathname
+	 * raw user pointer here made BakaSU dereference the pathname
 	 * bytes as a struct filename and oops.
 	 *
 	 * getname() also lets kernel-internal callers through unchanged:

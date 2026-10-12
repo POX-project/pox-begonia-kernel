@@ -3904,7 +3904,7 @@ const struct proc_ns_operations mntns_operations = {
 	.owner		= mntns_owner,
 };
 
-#if 0 /* SUSFS 2.1: try_umount handled by ReSukiSU kernel_umount.c */
+#if 0 /* SUSFS 2.1: try_umount handled by BakaSU kernel_umount.c */
 extern void susfs_try_umount_all(uid_t uid);
 void susfs_run_try_umount_for_current_mnt_ns(void) {
 	struct mount *mnt;
