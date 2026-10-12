@@ -48,9 +48,9 @@ COMMIT_SUBJECT="$(git log -1 --format=%s 2>/dev/null || echo "Release build")"
 if [[ -z "${VERSION_NAME:-}" ]]; then
     case "$GIT_BRANCH" in
         onyx-resukisu*|*resukisu*)
-            VERSION_NAME="Onyx-ReSukiSu"
-            BRANCH_DESC="Zero Frame-Drop Gaming & ReSukiSu Ultra Edition"
-            DEFAULT_DEFCONFIG="begonia_user_ksu_defconfig"
+            VERSION_NAME="Onyx-ReSukiSU"
+            BRANCH_DESC="Zero Frame-Drop Gaming & ReSukiSU Root Edition"
+            DEFAULT_DEFCONFIG="resukisu_defconfig"
             ;;
         onyx-apatch*|*apatch*)
             VERSION_NAME="Onyx-APatch"

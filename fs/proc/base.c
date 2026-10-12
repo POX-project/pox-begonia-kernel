@@ -98,6 +98,9 @@
 #include <asm/hardwall.h>
 #endif
 #include <trace/events/oom.h>
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+#include <linux/susfs_def.h>
+#endif
 #include "internal.h"
 #include "fd.h"
 
@@ -2297,6 +2300,17 @@ proc_map_files_readdir(struct file *file, struct dir_context *ctx)
 				vma = vma->vm_next) {
 			if (!vma->vm_file)
 				continue;
+#ifdef CONFIG_KSU_SUSFS_SUS_MAP
+			{
+				struct inode *inode = file_inode(vma->vm_file);
+				if (inode->i_mapping &&
+					unlikely(test_bit(AS_FLAGS_SUS_MAP, &inode->i_mapping->flags) &&
+					susfs_is_current_proc_umounted_app()))
+				{
+					continue;
+				}
+			}
+#endif
 			if (++pos <= ctx->pos)
 				continue;
 
