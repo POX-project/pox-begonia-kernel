@@ -152,3 +152,5 @@ reboot-logs/
 *.perfetto-trace
 !.github/
 !.agents/
+pox-manager/
+*.apk
