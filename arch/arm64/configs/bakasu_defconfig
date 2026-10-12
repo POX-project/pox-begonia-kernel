@@ -5257,7 +5257,7 @@ CONFIG_SBITMAP=y
 # CONFIG_STRING_SELFTEST is not set
 CONFIG_HWCONF_MANAGER=y
 
-# BakaSU v4.2.0-rc3 (4.14 SUSFS inline hook mode)
+# BakaSU main f6cb7e70 (4.14 SUSFS inline hook mode)
 CONFIG_KSU=y
 # CONFIG_KSU_DEBUG is not set
 CONFIG_KSU_TOOLKIT_SUPPORT=y

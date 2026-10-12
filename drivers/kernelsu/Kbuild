@@ -51,7 +51,7 @@ ccflags-y += -I$(src) -I$(src)/include
 
 obj-$(CONFIG_KSU) += kernelsu.o
 
-REPO_NAME := ReSukiSU
+REPO_NAME := BakaSU
 
 KDIR := $(KDIR)
 
@@ -62,7 +62,7 @@ KSU_SRC := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 # POX: the driver is vendored in-tree (drivers/kernelsu), not a git submodule,
 # so there is no nested .git to query for the version identity. Accept the
 # kernel tree's own repo instead of hard-erroring, and pin the version to the
-# upstream release this tree was vendored from.
+# upstream revision this tree was vendored from.
 LOCAL_GIT_EXISTS := $(shell test -e $(KSU_SRC)/../.git -o -e $(srctree)/.git && echo 1 || echo 0)
 
 ifeq ($(LOCAL_GIT_EXISTS),0)
@@ -74,20 +74,15 @@ ifdef KBUILD_EXTMOD
 include $(KSU_SRC)/tools/ddk_compatible.mk
 endif
 
-# Version identity of the vendored driver: Baka-SU/BakaSU tag v4.2.0-rc3,
-# commit 239e1e88, 4471 commits. Pinned because `git rev-list` here would
-# count the *kernel* repo's history, not the driver's, and produce a version
-# code the manager rejects.
-#
-# Pinned to the release tag rather than BakaSU main: main carries commit
-# 48fa4bb7 "kernel: suspend susfs build", which ends susfs_compat.mk with an
-# unconditional $(error) because SUSFS has not yet caught up with upstream's
-# selinux_hide rework. The tag predates that and is the newest release.
-KSU_LOCAL_VERSION := 4471
-KSU_VERSION := 35171
+# Version identity of the vendored driver: BakaSU main, commit f6cb7e70,
+# 4526 commits. Pinned because `git rev-list` here would count the *kernel*
+# repo's history, not the driver's, and produce a version code the manager
+# rejects.
+KSU_LOCAL_VERSION := 4526
+KSU_VERSION := 35226
 
 KSU_TAG_NAME    := v4.2.0-rc3
-KSU_COMMIT_SHA  := 239e1e88
+KSU_COMMIT_SHA  := f6cb7e70
 KSU_BRANCH_NAME := onyx-bakasu
 
 # call subst to process placeholders
@@ -105,7 +100,7 @@ ccflags-y += -DKSU_VERSION=$(KSU_VERSION)
 ccflags-y += -DKSU_VERSION_FULL=\"$(KSU_VERSION_FULL)\"
 
 ifdef CONFIG_KSU_MULTI_MANAGER_SUPPORT
-$(info -- Supported Unofficial Manager: MKSU, RKSU, KOWSU, SukiSU-Ultra, ReSukiSU )
+$(info -- Supported Managers: KernelSU Official, KOWSU, BakaSU )
 endif
 
 KERNEL_VERSION := $(VERSION).$(PATCHLEVEL)
@@ -132,6 +127,8 @@ else ifeq ($(CONFIG_X86_64),y)
   kernelsu-objs += hook/x86_64/patch_memory.o
 else ifeq ($(CONFIG_ARM),y)
   kernelsu-objs += hook/arm32/patch_memory.o
+else ifeq ($(CONFIG_RISCV),y)
+  kernelsu-objs += hook/riscv64/patch_memory.o
 else
   ifeq ($(CONFIG_KSU),y)
     $(info -- Unsupported arch)
@@ -165,6 +162,8 @@ ifdef CONFIG_KSU_TRACEPOINT_HOOK
     kernelsu-objs += hook/arm64/syscall_hook.o
   else ifeq ($(CONFIG_X86_64),y)
     kernelsu-objs += hook/x86_64/syscall_hook.o
+  else ifeq ($(CONFIG_RISCV),y
+    kernelsu-objs += hook/riscv64/syscall_hook.o
   else
     ifeq ($(CONFIG_KSU), y)
       $(info -- Unsupported arch)
@@ -178,7 +177,7 @@ ifdef CONFIG_KSU_TRACEPOINT_HOOK
       $(info -- Current Kernel Type: $(KERNEL_TYPE))
       $(info -- If you really want to continue, go to Kbuild and comment out this warning.)
       $(info -- Usually, this error occurs because you forgot to enable some kernel configurations.)
-      $(info -- Read: https://resukisu.org/guide/manual-integrate.html)
+      $(info -- Read: https://bakasu.org/guide/manual-integrate.html)
       $(error TP hooks are incompatible with Non-GKI/GKI 1.0 kernels.)
     endif
   endif
@@ -207,7 +206,7 @@ endif
 
 ifndef CONFIG_KSU_TRACEPOINT_HOOK
   # For old kernel, pkg observer maybe let system freeze
-  # https://github.com/ReSukiSU/ReSukiSU/issues/82#issuecomment-4015396974
+  # https://github.com/Baka-SU/BakaSU/issues/82#issuecomment-4015396974
   #
   # 6.7- we use lsm_hooks to call ksu_handle_rename
   # 6.8+ we use pkg_observer to track_throne
