@@ -72,6 +72,11 @@ jobs:
 
           BRANCH_NAME="${{ github.ref_name }}"
           case "$BRANCH_NAME" in
+            onyx-sultan-apatch*|*sultan-apatch*|*sultan*)
+              EDITION="Onyx-Sultan-APatch"
+              EDITION_DESC="Zero Frame-Drop & Sultan Debloat APatch Edition"
+              ROOT_INFO="APatch / KernelPatch Supported + NoMount 2.1.0 + Sultan Debloat"
+              ;;
             onyx-resukisu*|*resukisu*)
               EDITION="Onyx-ReSukiSu"
               EDITION_DESC="Zero Frame-Drop Gaming & ReSukiSu Ultra Edition"
@@ -86,6 +91,11 @@ jobs:
               EDITION="Onyx-KSU-Next"
               EDITION_DESC="Zero Frame-Drop Gaming & KernelSU-Next Edition"
               ROOT_INFO="KernelSU-Next v3.3.0 + NoMount VFS"
+              ;;
+            onyx-kaeru*|*kaeru*)
+              EDITION="Onyx-Kaeru"
+              EDITION_DESC="Zero Frame-Drop Gaming & Kaeru Bootloader Edition"
+              ROOT_INFO="Kaeru Bootloader & Merged DTB Ready (Unrooted / APatch)"
               ;;
             main|granite)
               EDITION="Granite"
@@ -105,8 +115,8 @@ jobs:
           esac
 
           COMMIT_SHORT="$(git rev-parse --short=7 HEAD 2>/dev/null || echo "${{ github.sha }}" | cut -c1-7)"
-          TAG_NAME="Pox-0.9-${EDITION}-${COMMIT_SHORT}"
-          RELEASE_TITLE="Pox Kernel 0.9 [${EDITION}] (${COMMIT_SHORT})"
+          TAG_NAME="Pox-1.0.0-Beta-${EDITION}-${COMMIT_SHORT}"
+          RELEASE_TITLE="Pox Kernel 1.0.0-Beta [${EDITION}] (${COMMIT_SHORT})"
 
           echo "ZIP_PATH=$ZIP_PATH" >> $GITHUB_ENV
           echo "ZIP_NAME=$(basename "$ZIP_PATH")" >> $GITHUB_ENV
@@ -120,14 +130,14 @@ jobs:
       - name: Generate Release Notes
         run: |
           cat <<EOF > release_notes.md
-          # Pox Kernel 0.9 [${{ env.EDITION }} Edition]
+          # Pox Kernel 1.0.0-Beta [${{ env.EDITION }} Edition]
 
           > *"We aim for stability, not for anything else."*
 
           ### Release Information
           - **Edition**: ${{ env.EDITION }} (${{ env.EDITION_DESC }})
           - **Root Support**: ${{ env.ROOT_INFO }}
-          - **Version**: 0.9
+          - **Version**: 1.0.0-Beta
           - **Branch**: \`${{ github.ref_name }}\`
           - **Commit**: \`${{ env.COMMIT_SHORT }}\`
           - **Device**: Xiaomi Redmi Note 8 Pro (\`begonia\` / \`begonia_in\`)
@@ -139,10 +149,16 @@ jobs:
           - **Flashable Recovery ZIP**: \`${{ env.ZIP_NAME }}\` (Install via TWRP / OrangeFox)
           - **Kernel Binary**: \`Image.gz-dtb\`
 
+          ### Bundled Root (Auto-Flash)
+          This kernel ZIP embeds the latest FolkPatch (KernelPatch) release package
+          (LyraVoid/FolkPatch). When flashed it installs the kernel, patches it with
+          KernelPatch, and stages the FolkPatch manager APK to be installed
+          automatically as a user app on first boot.
+
           ### Flashing Guide
           1. Reboot to Custom Recovery (TWRP, OrangeFox, PBRP).
           2. (Recommended) Perform a NANDroid backup of the \`Boot\` partition.
-          3. Flash \`${{ env.ZIP_NAME }}\`.
+          3. Flash \`${{ env.ZIP_NAME }}\` (kernel + bundled FolkPatch auto-flash).
           4. Reboot system.
 
           ---
@@ -151,16 +167,36 @@ jobs:
           git log -n 8 --pretty=format:"* %h - %s (%an)" >> release_notes.md
           echo "" >> release_notes.md
 
-      - name: Publish GitHub Release
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: |
+            ${{ env.ZIP_PATH }}
+            build/Image.gz-dtb
+          retention-days: 14
+
+      - name: Upload to Mainline Release (v1.0.0-Beta)
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "${{ env.TAG_NAME }}" \
+          gh release upload "v1.0.0-Beta" \
+            "${{ env.ZIP_PATH }}" \
+            --clobber -R "${{ github.repository }}" || true
+
+      - name: Publish Tagged Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" \
             --target "${{ github.sha }}" \
-            --title "${{ env.RELEASE_TITLE }}" \
+            --title "Pox Kernel ${{ github.ref_name }} [${{ env.EDITION }}]" \
             --notes-file release_notes.md \
             "${{ env.ZIP_PATH }}" \
             "build/Image.gz-dtb" || \
-          gh release upload "${{ env.TAG_NAME }}" \
+          gh release upload "${{ github.ref_name }}" \
             "${{ env.ZIP_PATH }}" \
             "build/Image.gz-dtb" --clobber
+
+
