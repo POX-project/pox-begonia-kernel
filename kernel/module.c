@@ -1700,8 +1700,11 @@ static void del_usage_links(struct module *mod)
 	struct module_use *use;
 
 	mutex_lock(&module_mutex);
-	list_for_each_entry(use, &mod->target_list, target_list)
+	list_for_each_entry(use, &mod->target_list, target_list) {
+		if (!use || !use->target || !use->target->holders_dir)
+			break;
 		sysfs_remove_link(use->target->holders_dir, mod->name);
+	}
 	mutex_unlock(&module_mutex);
 #endif
 }
@@ -1714,6 +1717,8 @@ static int add_usage_links(struct module *mod)
 
 	mutex_lock(&module_mutex);
 	list_for_each_entry(use, &mod->target_list, target_list) {
+		if (!use || !use->target || !use->target->holders_dir)
+			break;
 		ret = sysfs_create_link(use->target->holders_dir,
 					&mod->mkobj.kobj, mod->name);
 		if (ret)
