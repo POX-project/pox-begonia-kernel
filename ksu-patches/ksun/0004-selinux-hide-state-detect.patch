@@ -1,0 +1,26 @@
+diff --git a/kernel/feature/selinux_hide.c b/kernel/feature/selinux_hide.c
+index 5c157841..21a149c5 100644
+--- a/kernel/feature/selinux_hide.c
++++ b/kernel/feature/selinux_hide.c
+@@ -24,7 +24,20 @@
+ #define __nocfi
+ #endif
+ 
+-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 17, 0) && \
++/*
++ * Upstream gates on 4.17, where the global selinux_state symbol and the
++ * selinux_kernel_status_page(struct selinux_state *) signature landed
++ * together. This tree is a vendor 4.14 kernel that carries that refactor
++ * as a backport: security/selinux/include/security.h declares
++ * "extern struct selinux_state selinux_state;" and status.c defines
++ * selinux_kernel_status_page(struct selinux_state *state).
++ *
++ * LINUX_VERSION_CODE cannot express a backport, so the lower bound is
++ * lowered to 4.14 to match this tree. Without it the driver takes the
++ * no-state path and calls selinux_kernel_status_page() with no argument,
++ * which does not match this tree's prototype and fails to compile.
++ */
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0) && \
+     LINUX_VERSION_CODE <  KERNEL_VERSION(6, 6, 0)
+ extern struct selinux_state selinux_state;
+ #define KSU_HAS_SELINUX_STATE 1
