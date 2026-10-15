@@ -173,10 +173,7 @@ void mtk_prepare_venc_dvfs(void)
 void mtk_unprepare_venc_dvfs(void)
 {
 #ifdef ENC_DVFS
-	int freq_idx = 0;
-
-	freq_idx = (venc_freq_step_size == 0) ? 0 : (venc_freq_step_size - 1);
-	pm_qos_update_request(&venc_qos_req_f, venc_freq_steps[freq_idx]);
+	pm_qos_update_request(&venc_qos_req_f, PM_QOS_DEFAULT_VALUE);
 	pm_qos_remove_request(&venc_qos_req_f);
 	free_hist(&venc_hists, 0);
 	/* TODO: jobs error handle */
@@ -339,9 +336,13 @@ void mtk_venc_dvfs_end(struct mtk_vcodec_ctx *ctx)
 	} else if (venc_hists != NULL && venc_freq_step_size > 1) {
 		freq_idx = (venc_freq_step_size > 2) ? 1 : 0; /* Active session floor */
 	} else {
-		freq_idx = (venc_freq_step_size == 0) ? 0 : (venc_freq_step_size - 1);
+		freq_idx = -1; /* Session idle: release the MMQoS request */
 	}
-	pm_qos_update_request(&venc_qos_req_f, venc_freq_steps[freq_idx]);
+
+	if (freq_idx < 0)
+		pm_qos_update_request(&venc_qos_req_f, PM_QOS_DEFAULT_VALUE);
+	else
+		pm_qos_update_request(&venc_qos_req_f, venc_freq_steps[freq_idx]);
 	mutex_unlock(&ctx->dev->enc_dvfs_mutex);
 #endif
 }
