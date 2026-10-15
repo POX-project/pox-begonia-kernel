@@ -10,6 +10,11 @@ cd "$SCRIPT_DIR"
 TRB_CLANG_VER="TheRagingBeast TRB Clang 18.0.0 (17092023)"
 TRB_CLANG_REPO="https://gitlab.com/voltageos/clang.git"
 TRB_CLANG_REF="test"
+# Pinned commit: tip of ${TRB_CLANG_REF} as of 2026-10-15. The compiler that
+# produces a released kernel is third-party code, so it is pinned to an exact
+# revision rather than tracking a mutable branch. To update, resolve a new SHA:
+#   git ls-remote "${TRB_CLANG_REPO}" "${TRB_CLANG_REF}"
+TRB_CLANG_PIN="b0fa406b3f65eae210c60dda2e91dae979e4b3a8"
 AK3_URL="https://github.com/osm0sis/AnyKernel3/archive/refs/heads/master.zip"
 
 log() { printf '\033[1;34m[kerdevdep] %s\033[0m\n' "$*"; }
@@ -17,12 +22,24 @@ log() { printf '\033[1;34m[kerdevdep] %s\033[0m\n' "$*"; }
 mkdir -p bin clang anykernel usr/share/bison lib
 
 # 1. Download TRB Clang if missing (self-contained: LLVM/Clang 18 + lld + bundled aarch64/arm binutils)
+#    Checked out at TRB_CLANG_PIN (detached) so the toolchain cannot change under us.
 if [[ ! -x "clang/bin/clang" ]]; then
-    log "Downloading ${TRB_CLANG_VER} ..."
+    log "Downloading ${TRB_CLANG_VER} (pinned ${TRB_CLANG_PIN:0:12}) ..."
     if command -v git >/dev/null 2>&1; then
         rm -rf clang
-        git clone --depth 1 --branch "${TRB_CLANG_REF}" "${TRB_CLANG_REPO}" clang
-        (cd clang && git log -1 --format='%h %cs %s' 2>/dev/null || true)
+        git clone --filter=blob:none --no-checkout "${TRB_CLANG_REPO}" clang
+        if ! git -C clang checkout --detach "${TRB_CLANG_PIN}"; then
+            log "Error: pinned toolchain ${TRB_CLANG_PIN} is not reachable from ${TRB_CLANG_REPO}"
+            log "       The upstream branch was likely rewritten. Re-resolve the pin with:"
+            log "       git ls-remote ${TRB_CLANG_REPO} ${TRB_CLANG_REF}"
+            exit 1
+        fi
+        actual="$(git -C clang rev-parse HEAD)"
+        if [[ "$actual" != "$TRB_CLANG_PIN" ]]; then
+            log "Error: toolchain pin mismatch (expected ${TRB_CLANG_PIN}, got ${actual})"
+            exit 1
+        fi
+        log "Toolchain verified at ${actual}"
         rm -rf clang/.git
     else
         log "Error: git is required to fetch the TRB Clang toolchain"
