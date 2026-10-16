@@ -50,32 +50,39 @@ int sensor_input_event(unsigned char handle, const struct sensor_event *event)
 {
 	struct sensor_event_client *client = &event_obj->client[handle];
 	unsigned int dummy = 0;
+	bool full;
 
 	/* spin_lock safe, this function don't support interrupt context */
 	spin_lock(&client->buffer_lock);
 	/*
-	 * Reserve below log if need debug LockProve
-	 * SE_ERR("[Lomen]sensor_input_event: printf key handle ID=%d, key
-	 * addr=%p\n",
-	 * handle, (struct
-	 * lock_class_key*)client->buffer_lock.rlock.dep_map.key);
+	 * Overflow policy: overwrite the oldest event, never fail the
+	 * producer. Failing with -1 propagates backpressure into the SCP
+	 * hub drain path, where the SCHED_FIFO kthread retried the same
+	 * FIFO entry forever (usleep loop) while the SCP kept filling the
+	 * wp_queue and the DRAM FIFO, starving the CPU and freezing the
+	 * device under load. Streaming sensor semantics only need the
+	 * freshest samples, so stale queued entries are the right thing
+	 * to drop.
 	 */
-	if (unlikely(client->buffull == true)) {
-		pr_err_ratelimited(
-			"input buffull, handle:%d, head:%d, tail:%d\n", handle,
-			client->head, client->tail);
-		spin_unlock(&client->buffer_lock);
-		wake_up_interruptible(&client->wait);
-		return -1;
-	}
+	full = client->buffull;
 	client->buffer[client->head++] = *event;
 	client->head &= client->bufsize - 1;
+	if (unlikely(full)) {
+		/* buffer full: drop the oldest event, keep the newest */
+		client->tail++;
+		client->tail &= client->bufsize - 1;
+	}
 	/* remain 1 count */
 	dummy = client->head + 1;
 	dummy &= client->bufsize - 1;
-	if (unlikely(dummy == client->tail))
+	if (!full && unlikely(dummy == client->tail))
 		client->buffull = true;
 	spin_unlock(&client->buffer_lock);
+
+	if (unlikely(full))
+		pr_err_ratelimited(
+			"input buffull(overwrite oldest), handle:%d, head:%d, tail:%d\n",
+			handle, client->head, client->tail);
 
 	wake_up_interruptible(&client->wait);
 	return 0;
