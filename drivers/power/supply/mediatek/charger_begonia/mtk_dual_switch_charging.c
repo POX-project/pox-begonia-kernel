@@ -1210,6 +1210,17 @@ static int mtk_dual_switch_charging_run(struct charger_manager *info)
 		}
 	}
 
+	/*
+	 * Pox bypass fix: administratively disabled charging (bypass charging,
+	 * charge cap, thermal guard, JEITA) must survive asynchronous state
+	 * transitions. do_charging(false) only sets CHR_ERROR once; the EOC
+	 * notifier, recharge detection and charger plug-in can move the state
+	 * machine back to CHR_CC/BATFULL, and dual_swchg_turn_on_charging()
+	 * would silently re-enable the charger, so bypass mode fails to hold.
+	 */
+	if (!info->can_charging)
+		swchgalg->state = CHR_ERROR;
+
 	switch (swchgalg->state) {
 	case CHR_CC:
 	case CHR_TUNING:
