@@ -62,6 +62,11 @@ if [[ -z "${VERSION_NAME:-}" ]]; then
             BRANCH_DESC="Zero Frame-Drop Gaming & KernelSU-Next Edition"
             DEFAULT_DEFCONFIG="begonia_ksu_next_defconfig"
             ;;
+        onyx-c2-ksun*|*c2-ksun*)
+            VERSION_NAME="Onyx-c2-KSU-Next"
+            BRANCH_DESC="Zero Frame-Drop Gaming & KernelSU-Next c2 Refresh Edition"
+            DEFAULT_DEFCONFIG="begonia_ksu_next_defconfig"
+            ;;
         main|granite)
             VERSION_NAME="Granite"
             BRANCH_DESC="Rock-Solid Stability Edition"
