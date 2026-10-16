@@ -366,20 +366,19 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 			pdata->charging_current_limit =
 						pdata->input_current_limit;
 		} else {
-			extern int pox_fast_charge_get(void);
-			if (pox_fast_charge_get()) {
-				/* PC Connection: 6.0W charge speed (1.2A @ 5V in, 1.5A @ 4V batt) */
-				pdata->input_current_limit = 1200000;
-				pdata->charging_current_limit = 1500000;
-				pdata2->input_current_limit = 0;
-				pdata2->charging_current_limit = 0;
-			} else {
-				pdata->input_current_limit =
+			/*
+			 * USB 2.0 SDP (a standard PC USB port) sources at most
+			 * 500mA. Never let the AC fast-charge experiment raise
+			 * this to 1.2A/1.5A: the port cannot sustain it, VBUS
+			 * collapses and the host trips its overcurrent
+			 * protection (repeated disconnect/reconnect).
+			 */
+			pdata->input_current_limit =
 							info->data.usb_charger_current;
-				/* it can be larger */
-				pdata->charging_current_limit =
+			pdata->charging_current_limit =
 							info->data.usb_charger_current;
-			}
+			pdata2->input_current_limit = 0;
+			pdata2->charging_current_limit = 0;
 		}
 	} else if (info->chr_type == NONSTANDARD_CHARGER) {
 		extern int pox_fast_charge_get(void);
@@ -474,19 +473,15 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 		}
 
 	} else if (info->chr_type == CHARGING_HOST) {
-		extern int pox_fast_charge_get(void);
-		if (pox_fast_charge_get()) {
-			/* PC Connection (CDP): 6.0W charge speed (1.2A @ 5V in, 1.5A @ 4V batt) */
-			pdata->input_current_limit = 1200000;
-			pdata->charging_current_limit = 1500000;
-			pdata2->input_current_limit = 0;
-			pdata2->charging_current_limit = 0;
-		} else {
-			pdata->input_current_limit =
-					info->data.charging_host_charger_current;
-			pdata->charging_current_limit =
-					info->data.charging_host_charger_current;
-		}
+		/*
+		 * BC 1.2 CDP: honour the dedicated-port current negotiated
+		 * for this charger. The AC fast-charge experiment must not
+		 * inflate a PC downstream port beyond what it advertised.
+		 */
+		pdata->input_current_limit =
+				info->data.charging_host_charger_current;
+		pdata->charging_current_limit =
+				info->data.charging_host_charger_current;
 	} else if (info->chr_type == APPLE_1_0A_CHARGER) {
 		pdata->input_current_limit =
 				info->data.apple_1_0a_charger_current;
@@ -519,12 +514,17 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 	if (pdata->thermal_charging_current_limit != -1) {
 		int eff_therm_chg = pdata->thermal_charging_current_limit;
 		extern int pox_fast_charge_get(void);
-		if (pox_fast_charge_get() && info->battery_temp < 480) {
-			/* Safe floor, not override: while <48C keep min
-			 * 2.0A AC / 1.5A USB so weak thermal configs can't
-			 * stall charging; at >=48C JEITA + daemon win
-			 * unconditionally. Never masks critical. */
-			int floor_limit = (info->chr_type == STANDARD_HOST || info->chr_type == CHARGING_HOST) ? 1500000 : 2000000;
+		/*
+		 * Safe floor for dedicated AC chargers only: while <48C keep
+		 * a 2.0A minimum so weak thermal configs cannot stall AC
+		 * charging. Never apply it to a USB host port (SDP/CDP): the
+		 * port sources at most 500mA, and the floor would defeat the
+		 * thermal guard exactly when the system is under load.
+		 */
+		if (pox_fast_charge_get() && info->battery_temp < 480 &&
+		    info->chr_type != STANDARD_HOST &&
+		    info->chr_type != CHARGING_HOST) {
+			int floor_limit = 2000000;
 			if (eff_therm_chg < floor_limit) {
 				pr_info_ratelimited("[POX_CHG] thermal floor %d->%d uA (batt %d deciC, type %d)\n",
 					eff_therm_chg, floor_limit, info->battery_temp, info->chr_type);
@@ -561,8 +561,16 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 	if (pdata->thermal_input_current_limit != -1) {
 		int eff_therm_in = pdata->thermal_input_current_limit;
 		extern int pox_fast_charge_get(void);
-		if (pox_fast_charge_get() && info->battery_temp < 480) {
-			int in_floor = (info->chr_type == STANDARD_HOST || info->chr_type == CHARGING_HOST) ? 1200000 : 2000000;
+		/*
+		 * Same reasoning as the charging-current floor above: never
+		 * raise the input limit above the thermal daemon's request on
+		 * a USB host port, otherwise a heavily loaded SDP/CDP
+		 * connection still collapses VBUS at >1A.
+		 */
+		if (pox_fast_charge_get() && info->battery_temp < 480 &&
+		    info->chr_type != STANDARD_HOST &&
+		    info->chr_type != CHARGING_HOST) {
+			int in_floor = 2000000;
 			if (eff_therm_in < in_floor)
 				eff_therm_in = in_floor;
 		}
