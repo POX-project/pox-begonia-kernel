@@ -93,6 +93,11 @@ jobs:
               EDITION_DESC="Zero Frame-Drop Gaming & KernelSU-Next Edition"
               ROOT_INFO="KernelSU-Next v3.4.0-legacy + SUSFS v2.3.0 + NoMount v2.0.0"
               ;;
+            onyx-c2-ksun*|*c2-ksun*)
+              EDITION="Onyx-c2-KSU-Next"
+              EDITION_DESC="Zero Frame-Drop Gaming & KernelSU-Next c2 Refresh Edition"
+              ROOT_INFO="KernelSU-Next v3.4.0-legacy + SUSFS v2.3.0 + NoMount v2.1.1"
+              ;;
             onyx-kaeru*|*kaeru*)
               EDITION="Onyx-Kaeru"
               EDITION_DESC="Zero Frame-Drop Gaming & Kaeru Bootloader Edition"
