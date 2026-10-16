@@ -481,13 +481,15 @@ static void SCP_sensorHub_write_wp_queue(union SCP_SENSOR_HUB_DATA *rsp)
 {
 	struct SCP_sensorHub_data *obj = obj_data;
 	struct curr_wp_queue *wp_queue = &obj->wp_queue;
+	unsigned long flags;
 
-	spin_lock(&wp_queue->buffer_lock);
+	/* called from the SCP IPI handler: hardirq context */
+	spin_lock_irqsave(&wp_queue->buffer_lock, flags);
 	wp_queue->ringbuffer[wp_queue->head++] = rsp->notify_rsp.currWp;
 	wp_queue->head &= wp_queue->bufsize - 1;
 	if (unlikely(wp_queue->head == wp_queue->tail))
 		pr_err_ratelimited("dropped currWp due to ringbuffer is full\n");
-	spin_unlock(&wp_queue->buffer_lock);
+	spin_unlock_irqrestore(&wp_queue->buffer_lock, flags);
 }
 static int SCP_sensorHub_fetch_next_wp(uint32_t *currWp)
 {
@@ -1129,13 +1131,34 @@ static int SCP_sensorHub_report_alt_data(struct data_unit_t *data_t)
 	return err;
 }
 
+/*
+ * Report one FIFO event to the sensor_event client rings (raw + alt).
+ *
+ * Must never wait on a consumer: report once, drop the event on a
+ * residual hard error. Retrying a full-client event with usleep looped
+ * this SCHED_FIFO kthread forever, overflowed the wp_queue and the SCP
+ * FIFO, and livelocked the CPU under stress; sensor_input_event() drops
+ * stale events on overflow now, so backpressure cannot reach here.
+ */
+static void SCP_sensorHub_report_event(struct data_unit_t *event)
+{
+	int err;
+
+	err = SCP_sensorHub_report_raw_data(event);
+	if (unlikely(err < 0))
+		pr_err_ratelimited("drop raw data event err:%d\n", err);
+
+	err = SCP_sensorHub_report_alt_data(event);
+	if (unlikely(err < 0))
+		pr_err_ratelimited("drop alt data event err:%d\n", err);
+}
+
 static int SCP_sensorHub_server_dispatch_data(uint32_t *currWp)
 {
 	struct SCP_sensorHub_data *obj = obj_data;
 	char *pStart, *pEnd, *rp, *wp;
 	struct data_unit_t event;
 	uint32_t wp_copy;
-	int err = 0;
 
 	int64_t scp_time = 0;
 
@@ -1169,17 +1192,7 @@ static int SCP_sensorHub_server_dispatch_data(uint32_t *currWp)
 			event.time_stamp +=
 				get_filter_output(&moving_average_algo);
 
-			do {
-				err = SCP_sensorHub_report_raw_data(&event);
-				if (err < 0)
-					usleep_range(2000, 4000);
-			} while (err < 0);
-
-			do {
-				err = SCP_sensorHub_report_alt_data(&event);
-				if (err < 0)
-					usleep_range(2000, 4000);
-			} while (err < 0);
+			SCP_sensorHub_report_event(&event);
 
 			rp += SENSOR_DATA_SIZE;
 		}
@@ -1190,17 +1203,7 @@ static int SCP_sensorHub_server_dispatch_data(uint32_t *currWp)
 			event.time_stamp +=
 				get_filter_output(&moving_average_algo);
 
-			do {
-				err = SCP_sensorHub_report_raw_data(&event);
-				if (err < 0)
-					usleep_range(2000, 4000);
-			} while (err < 0);
-
-			do {
-				err = SCP_sensorHub_report_alt_data(&event);
-				if (err < 0)
-					usleep_range(2000, 4000);
-			} while (err < 0);
+			SCP_sensorHub_report_event(&event);
 
 			rp += SENSOR_DATA_SIZE;
 		}
@@ -1211,17 +1214,7 @@ static int SCP_sensorHub_server_dispatch_data(uint32_t *currWp)
 			event.time_stamp +=
 				get_filter_output(&moving_average_algo);
 
-			do {
-				err = SCP_sensorHub_report_raw_data(&event);
-				if (err < 0)
-					usleep_range(2000, 4000);
-			} while (err < 0);
-
-			do {
-				err = SCP_sensorHub_report_alt_data(&event);
-				if (err < 0)
-					usleep_range(2000, 4000);
-			} while (err < 0);
+			SCP_sensorHub_report_event(&event);
 
 			rp += SENSOR_DATA_SIZE;
 		}
