@@ -61,11 +61,15 @@ if [[ -z "${VERSION_NAME:-}" ]]; then
             VERSION_NAME="Onyx-KSU-Next"
             BRANCH_DESC="Zero Frame-Drop Gaming & KernelSU-Next Edition"
             DEFAULT_DEFCONFIG="begonia_ksu_next_defconfig"
+            # Manager display tag: legacy line carries the 3.4.2 backports (no upstream v3.4.2-legacy tag yet)
+            export KSU_VERSION_TAG_OVERRIDE="v3.4.2-legacy"
             ;;
         onyx-c2-ksun*|*c2-ksun*)
             VERSION_NAME="Onyx-c2-KSU-Next"
             BRANCH_DESC="Zero Frame-Drop Gaming & KernelSU-Next c2 Refresh Edition"
             DEFAULT_DEFCONFIG="begonia_ksu_next_defconfig"
+            # Manager display tag: legacy line carries the 3.4.2 backports (no upstream v3.4.2-legacy tag yet)
+            export KSU_VERSION_TAG_OVERRIDE="v3.4.2-legacy"
             ;;
         main|granite)
             VERSION_NAME="Granite"
