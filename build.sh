@@ -434,7 +434,7 @@ supported.patchlevels=
 '; } # end properties
 
 ## shell variables
-BLOCK=/dev/block/by-name/boot;
+BLOCK=boot;
 # ${DEVICE_NAME} (${DEVICE_CODENAME}) is an A-only device: a single boot partition,
 # no A/B slot suffix. Keep IS_SLOT_DEVICE=0 (AnyKernel3 default for A-only).
 IS_SLOT_DEVICE=0;
