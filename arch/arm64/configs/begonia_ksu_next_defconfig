@@ -5260,7 +5260,7 @@ CONFIG_SBITMAP=y
 # CONFIG_STRING_SELFTEST is not set
 CONFIG_HWCONF_MANAGER=y
 
-# KernelSU-Next v3.4.0-legacy (manual hook mode; no KPROBES)
+# KernelSU-Next v3.4.2-legacy (manual hook mode; no KPROBES)
 CONFIG_KSU=y
 CONFIG_KSU_MANUAL_HOOK=y
 # CONFIG_KSU_DEBUG is not set
