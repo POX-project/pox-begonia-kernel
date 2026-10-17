@@ -82,6 +82,11 @@ jobs:
               EDITION_DESC="Zero Frame-Drop Gaming & ReSukiSu Ultra Edition"
               ROOT_INFO="ReSukiSu v4.2.0 (40901) + SuSFS v2.3.0 + NoMount 2.0.0 (Multi-Manager, App Profile, SELinux Hide)"
               ;;
+            onyx-bakasu*|*bakasu*)
+              EDITION="Onyx-BakaSU"
+              EDITION_DESC="Zero Frame-Drop Gaming & BakaSU Root Edition"
+              ROOT_INFO="BakaSU main f6cb7e70 + SuSFS v2.3.0 + NoMount 2.1.1 (Multi-Manager, App Profile, SELinux Hide)"
+              ;;
             onyx-apatch*|*apatch*)
               EDITION="Onyx-APatch"
               EDITION_DESC="Zero Frame-Drop Gaming & APatch Edition"
