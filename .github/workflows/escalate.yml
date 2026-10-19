@@ -169,59 +169,53 @@ jobs:
           set +e
           SIDE="${{ inputs.resolve_conflicts }}"
           UP="$UPSTREAM_SHA"
-          BASE_SHA=$(git rev-parse HEAD)   # branch tip == "ours"
-          echo "base(ours) sha: $BASE_SHA"
 
-          # Restart the merge cleanly so git resolves content conflicts itself.
-          # This avoids leaving conflict markers in the tree (the previous
-          # per-file `git checkout --ours` approach corrupted add/add paths).
+          # Wholesale per-file selection. Hunk-level -X merging produces MIXED
+          # files (a kept vendor hunk referencing a symbol whose definition came
+          # from the upstream hunk that was discarded) which cannot compile.
+          # Instead: pick one whole version of each conflicted file.
           git merge --abort 2>/dev/null || true
+          git merge --no-commit --no-ff "$UP" > merge_out2.txt 2>&1 || true
+          git diff --name-only --diff-filter=U > unmerged.txt
+          echo "unmerged paths: $(grep -c . unmerged.txt)"
 
-          case "$SIDE" in
-            ours)        X="-X ours"   ;;
-            theirs)      X="-X theirs" ;;
-            auto-vendor) X="-X theirs" ;;
-            *)           X=""          ;;
-          esac
+          VENDOR_RE='mediatek|/mtk|mtk_|/mt6[0-9]|mt67|mt68|mtk-|dts/mediatek'
+          : > pick_ours.txt ; : > pick_theirs.txt
 
-          git merge --no-commit --no-ff $X "$UP" > merge_out2.txt 2>&1 || true
+          while IFS= read -r f; do
+            [[ -n "$f" ]] || continue
+            case "$SIDE" in
+              ours)   first=--ours   ;;
+              theirs) first=--theirs ;;
+              auto-vendor)
+                if echo "$f" | grep -Eq "$VENDOR_RE"; then first=--ours; else first=--theirs; fi
+                ;;
+              *)      first=--theirs ;;
+            esac
+            other=$([[ "$first" == "--ours" ]] && echo --theirs || echo --ours)
 
-          if [[ "$SIDE" == "auto-vendor" ]]; then
-            VENDOR_RE='mediatek|/mtk|mtk_|/mt6[0-9]|mt67|mt68|mtk-|dts/mediatek'
-            grep -E  "$VENDOR_RE" conflicts.txt > ours_paths.txt   || true
-            grep -Ev "$VENDOR_RE" conflicts.txt > theirs_paths.txt || true
-            echo "auto-vendor: restore-ours=$(grep -c . ours_paths.txt) stay-theirs=$(grep -c . theirs_paths.txt)"
-            if [[ -s ours_paths.txt ]]; then
-              xargs -r git checkout "$BASE_SHA" -- < ours_paths.txt || true
+            if git checkout "$first" -- "$f" 2>/dev/null; then
+              [[ "$first" == "--ours" ]] && echo "$f" >> pick_ours.txt || echo "$f" >> pick_theirs.txt
+            elif git checkout "$other" -- "$f" 2>/dev/null; then
+              [[ "$other" == "--ours" ]] && echo "$f" >> pick_ours.txt || echo "$f" >> pick_theirs.txt
+            else
+              git rm -f -- "$f" 2>/dev/null || true
             fi
-            SIDE="auto-vendor (ours=$(grep -c . ours_paths.txt), theirs=$(grep -c . theirs_paths.txt))"
-          fi
+          done < unmerged.txt
 
-          # Any paths still unmerged (e.g. add/add): resolve defensively.
-          git diff --name-only --diff-filter=U > leftover.txt
-          if [[ -s leftover.txt ]]; then
-            echo "leftover unmerged: $(grep -c . leftover.txt) -> resolving defensively"
-            while IFS= read -r f; do
-              [[ -n "$f" ]] || continue
-              if   git checkout --theirs -- "$f" 2>/dev/null; then :
-              elif git checkout --ours   -- "$f" 2>/dev/null; then :
-              elif git checkout "$BASE_SHA" -- "$f" 2>/dev/null; then :
-              else git rm -f -- "$f" 2>/dev/null || true; fi
-            done < leftover.txt
-          fi
-
+          SIDE="$SIDE (wholesale: ours=$(grep -c . pick_ours.txt), theirs=$(grep -c . pick_theirs.txt))"
           git add -A
           git -c user.name="Pox Escalation Bot" -c user.email="escalation@pox.local" \
-              commit -m "merge(${{ inputs.upstream_ref }}): merge upstream into ${{ inputs.base_branch }} (conflicts resolved: $SIDE)" || true
+              commit -m "merge(${{ inputs.upstream_ref }}): merge upstream into ${{ inputs.base_branch }} (resolved: $SIDE)" || true
 
-          echo "resolved with: $SIDE" >> report.md
-          echo "resolved with: $SIDE"
-          # A marker-free tree is mandatory; verify it.
-          if grep -rl '^<<<<<<< ' --include='*' . > markers.txt 2>/dev/null && [[ -s markers.txt ]]; then
-            echo "WARNING: conflict markers still present in $(grep -c . markers.txt) files" | tee -a report.md
+          # Verify marker-free.
+          git grep -l '^<<<<<<< ' > markers.txt 2>/dev/null || true
+          if [[ -s markers.txt ]]; then
+            echo "WARNING: conflict markers present in $(grep -c . markers.txt) files"
           else
             echo "verified: no conflict markers in tree"
           fi
+          echo "resolved with: $SIDE" >> report.md
 
       - name: Install host build dependencies
         if: inputs.attempt_build
