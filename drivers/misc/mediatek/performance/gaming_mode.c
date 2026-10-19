@@ -1546,11 +1546,111 @@ static struct kobj_attribute slog3_kobj_attr =
 
 /* =========================================================================
  * Kprofiles Compatibility Subsystem
- * Exposes /sys/kernel/kprofiles/kp_mode and /sys/kernel/kprofiles/auto_kp
+ * Exposes /sys/kernel/kprofiles/kp_mode, auto_kp, and custom_params
  * Modes: 0=Disabled/None, 1=Battery, 2=Balanced, 3=Performance, 4=Custom
  * ========================================================================= */
 
 static int kprofiles_custom_active;
+
+static struct pox_kprofile_custom_tunables pox_custom_kp = {
+	.schedutil_up_little_us = 500,
+	.schedutil_down_little_us = 20000,
+	.schedutil_up_big_us = 200,
+	.schedutil_down_big_us = 20000,
+	.top_app_boost = 20,
+	.fg_boost = 5,
+	.gpu_boost = 1,
+	.dram_boost = 0,
+	.touch_boost = 1,
+	.rescue_opp = 0,
+};
+
+static void pox_kprofile_apply_custom_hardware(void)
+{
+	/* 1. Rescue OPP */
+	fbt_cpu_set_ultra_rescue(1);
+	fbt_cpu_set_rescue_percent(20);
+	fbt_cpu_set_variance(15);
+	fbt_cpu_set_bhr(15);
+	fbt_cpu_set_rescue_opp_c(pox_custom_kp.rescue_opp);
+
+	/* 2. Schedutil up/down rate limits */
+	schedutil_set_up_rate_limit_us(0, pox_custom_kp.schedutil_up_little_us);
+	schedutil_set_down_rate_limit_us(0, pox_custom_kp.schedutil_down_little_us);
+	schedutil_set_up_rate_limit_us(6, pox_custom_kp.schedutil_up_big_us);
+	schedutil_set_down_rate_limit_us(6, pox_custom_kp.schedutil_down_big_us);
+
+	/* 3. GPU DVFS & gaming boost */
+	ged_kpi_set_gaming_boost(pox_custom_kp.gpu_boost ? 1 : 0);
+	ged_dvfs_set_gaming_boost(pox_custom_kp.gpu_boost ? 1 : 0);
+	eara_pass_perf_first_hint(pox_custom_kp.gpu_boost ? 1 : 0);
+
+	/* 4. SchedTune boost */
+	boost_write_for_perf_idx(3, pox_custom_kp.top_app_boost);
+	prefer_idle_for_perf_idx(3, 1);
+	boost_write_for_perf_idx(1, pox_custom_kp.fg_boost);
+	prefer_idle_for_perf_idx(1, 1);
+
+	/* 5. DRAM boost */
+	if (pox_custom_kp.dram_boost)
+		fbt_boost_dram(1);
+	else
+		fbt_boost_dram(0);
+
+	/* 6. Hardware touch boost */
+	{
+		extern int pox_touch_game_mode_set(int enable);
+		extern int pox_touch_sensitivity_set(int val);
+		pox_touch_game_mode_set(pox_custom_kp.touch_boost ? 1 : 0);
+		pox_touch_sensitivity_set(pox_custom_kp.touch_boost ? 2 : 0);
+	}
+}
+
+int pox_kprofile_custom_set(const struct pox_kprofile_custom_tunables *tunables)
+{
+	if (!tunables)
+		return -EINVAL;
+
+	pox_custom_kp = *tunables;
+
+	/* Clamp within safe hardware bounds */
+	if (pox_custom_kp.schedutil_up_little_us < 50) pox_custom_kp.schedutil_up_little_us = 50;
+	else if (pox_custom_kp.schedutil_up_little_us > 5000) pox_custom_kp.schedutil_up_little_us = 5000;
+
+	if (pox_custom_kp.schedutil_down_little_us < 500) pox_custom_kp.schedutil_down_little_us = 500;
+	else if (pox_custom_kp.schedutil_down_little_us > 100000) pox_custom_kp.schedutil_down_little_us = 100000;
+
+	if (pox_custom_kp.schedutil_up_big_us < 50) pox_custom_kp.schedutil_up_big_us = 50;
+	else if (pox_custom_kp.schedutil_up_big_us > 5000) pox_custom_kp.schedutil_up_big_us = 5000;
+
+	if (pox_custom_kp.schedutil_down_big_us < 500) pox_custom_kp.schedutil_down_big_us = 500;
+	else if (pox_custom_kp.schedutil_down_big_us > 100000) pox_custom_kp.schedutil_down_big_us = 100000;
+
+	if (pox_custom_kp.top_app_boost < 0) pox_custom_kp.top_app_boost = 0;
+	else if (pox_custom_kp.top_app_boost > 100) pox_custom_kp.top_app_boost = 100;
+
+	if (pox_custom_kp.fg_boost < 0) pox_custom_kp.fg_boost = 0;
+	else if (pox_custom_kp.fg_boost > 100) pox_custom_kp.fg_boost = 100;
+
+	pox_custom_kp.gpu_boost = pox_custom_kp.gpu_boost ? 1 : 0;
+	pox_custom_kp.dram_boost = pox_custom_kp.dram_boost ? 1 : 0;
+	pox_custom_kp.touch_boost = pox_custom_kp.touch_boost ? 1 : 0;
+	if (pox_custom_kp.rescue_opp < 0) pox_custom_kp.rescue_opp = 0;
+	else if (pox_custom_kp.rescue_opp > 4) pox_custom_kp.rescue_opp = 4;
+
+	if (kprofiles_custom_active)
+		pox_kprofile_apply_custom_hardware();
+
+	return 0;
+}
+EXPORT_SYMBOL(pox_kprofile_custom_set);
+
+void pox_kprofile_custom_get(struct pox_kprofile_custom_tunables *tunables)
+{
+	if (tunables)
+		*tunables = pox_custom_kp;
+}
+EXPORT_SYMBOL(pox_kprofile_custom_get);
 
 int kprofiles_mode_get(void)
 {
@@ -1577,6 +1677,7 @@ int kprofiles_mode_set(int mode)
 {
 	if (mode == 4) {
 		kprofiles_custom_active = 1;
+		pox_kprofile_apply_custom_hardware();
 		return 0;
 	}
 
@@ -1648,9 +1749,123 @@ static ssize_t kp_auto_sysfs_store(struct kobject *kobj,
 static struct kobj_attribute kp_auto_kobj_attr =
 	__ATTR(auto_kp, 0644, kp_auto_sysfs_show, kp_auto_sysfs_store);
 
+static ssize_t kp_custom_sysfs_show(struct kobject *kobj,
+				    struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d %d %d %d %d %d %d %d %d %d\n",
+		       pox_custom_kp.schedutil_up_little_us,
+		       pox_custom_kp.schedutil_down_little_us,
+		       pox_custom_kp.schedutil_up_big_us,
+		       pox_custom_kp.schedutil_down_big_us,
+		       pox_custom_kp.top_app_boost,
+		       pox_custom_kp.fg_boost,
+		       pox_custom_kp.gpu_boost,
+		       pox_custom_kp.dram_boost,
+		       pox_custom_kp.touch_boost,
+		       pox_custom_kp.rescue_opp);
+}
+
+static ssize_t kp_custom_sysfs_store(struct kobject *kobj,
+				     struct kobj_attribute *attr,
+				     const char *buf, size_t count)
+{
+	struct pox_kprofile_custom_tunables t;
+	int matched;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	t = pox_custom_kp;
+	matched = sscanf(buf, "%d %d %d %d %d %d %d %d %d %d",
+			 &t.schedutil_up_little_us,
+			 &t.schedutil_down_little_us,
+			 &t.schedutil_up_big_us,
+			 &t.schedutil_down_big_us,
+			 &t.top_app_boost,
+			 &t.fg_boost,
+			 &t.gpu_boost,
+			 &t.dram_boost,
+			 &t.touch_boost,
+			 &t.rescue_opp);
+	if (matched < 2)
+		return -EINVAL;
+
+	pox_kprofile_custom_set(&t);
+	return count;
+}
+
+static struct kobj_attribute kp_custom_kobj_attr =
+	__ATTR(custom_params, 0644, kp_custom_sysfs_show, kp_custom_sysfs_store);
+
+static int kprofiles_custom_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d %d %d %d %d %d %d %d %d %d\n",
+		   pox_custom_kp.schedutil_up_little_us,
+		   pox_custom_kp.schedutil_down_little_us,
+		   pox_custom_kp.schedutil_up_big_us,
+		   pox_custom_kp.schedutil_down_big_us,
+		   pox_custom_kp.top_app_boost,
+		   pox_custom_kp.fg_boost,
+		   pox_custom_kp.gpu_boost,
+		   pox_custom_kp.dram_boost,
+		   pox_custom_kp.touch_boost,
+		   pox_custom_kp.rescue_opp);
+	return 0;
+}
+
+static ssize_t kprofiles_custom_proc_write(struct file *file, const char __user *ubuf,
+					   size_t count, loff_t *ppos)
+{
+	char buf[128];
+	size_t len;
+	struct pox_kprofile_custom_tunables t;
+	int matched;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	len = min(count, sizeof(buf) - 1);
+	if (copy_from_user(buf, ubuf, len))
+		return -EFAULT;
+	buf[len] = '\0';
+
+	t = pox_custom_kp;
+	matched = sscanf(buf, "%d %d %d %d %d %d %d %d %d %d",
+			 &t.schedutil_up_little_us,
+			 &t.schedutil_down_little_us,
+			 &t.schedutil_up_big_us,
+			 &t.schedutil_down_big_us,
+			 &t.top_app_boost,
+			 &t.fg_boost,
+			 &t.gpu_boost,
+			 &t.dram_boost,
+			 &t.touch_boost,
+			 &t.rescue_opp);
+	if (matched < 2)
+		return -EINVAL;
+
+	pox_kprofile_custom_set(&t);
+	return count;
+}
+
+static int kprofiles_custom_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, kprofiles_custom_proc_show, NULL);
+}
+
+static const struct file_operations kprofiles_custom_proc_fops = {
+	.owner   = THIS_MODULE,
+	.open    = kprofiles_custom_proc_open,
+	.read    = seq_read,
+	.write   = kprofiles_custom_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
 static struct attribute *kp_attrs[] = {
 	&kp_mode_kobj_attr.attr,
 	&kp_auto_kobj_attr.attr,
+	&kp_custom_kobj_attr.attr,
 	NULL,
 };
 
@@ -2851,6 +3066,10 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	entry = proc_create("usb_cdrom", 0644, parent, &usb_cdrom_proc_fops);
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/usb_cdrom\n");
+
+	entry = proc_create("kprofiles_custom", 0644, parent, &kprofiles_custom_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/kprofiles_custom\n");
 
 	ret = sysfs_create_file(kernel_kobj, &gaming_mode_kobj_attr.attr);
 	if (ret)

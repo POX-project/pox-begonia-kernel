@@ -13,6 +13,21 @@
 #define GAMING_MODE_DISABLED   0
 #define GAMING_MODE_ENABLED    1
 #define GAMING_MODE_EXTREME    2
+#define GAMING_MODE_CUSTOM     3
+#define KPROFILES_MODE_CUSTOM  4
+
+struct pox_kprofile_custom_tunables {
+	int schedutil_up_little_us;
+	int schedutil_down_little_us;
+	int schedutil_up_big_us;
+	int schedutil_down_big_us;
+	int top_app_boost;
+	int fg_boost;
+	int gpu_boost;
+	int dram_boost;
+	int touch_boost;
+	int rescue_opp;
+};
 
 #define COLOR_MODE_STANDARD  0
 #define COLOR_MODE_REFERENCE 1
@@ -46,6 +61,8 @@ int torch_brightness_set(int val);
 int torch_brightness_get(void);
 int kprofiles_mode_set(int mode);
 int kprofiles_mode_get(void);
+int pox_kprofile_custom_set(const struct pox_kprofile_custom_tunables *tunables);
+void pox_kprofile_custom_get(struct pox_kprofile_custom_tunables *tunables);
 int pox_health_calibration_set(int mode);
 int pox_health_calibration_get(void);
 int pox_opp_voltage_guard_set(int enable);

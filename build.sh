@@ -601,6 +601,8 @@ on boot
     chmod 0644 /sys/class/android_usb/android0/f_mass_storage/lun/cdrom
     chmod 0644 /sys/kernel/kprofiles/kp_mode
     chmod 0644 /sys/kernel/kprofiles/auto_kp
+    chmod 0644 /sys/kernel/kprofiles/custom_params
+    chmod 0644 /proc/perfmgr/kprofiles_custom
     chmod 0644 /proc/perfmgr/slog3
     chmod 0644 /sys/kernel/slog3
     chmod 0644 /proc/perfmgr/camera_4k60
