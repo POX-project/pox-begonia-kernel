@@ -255,11 +255,37 @@ static void pox_memory_preset(int mode)
 	}
 }
 
+static void pox_health_calibration_sync(void)
+{
+	extern int battery_get_bat_temperature(void);
+	extern int battery_get_uisoc(void);
+	int btemp = battery_get_bat_temperature();
+	int soc = battery_get_uisoc();
+
+	if (!pox_opp_voltage_guard_enabled || pox_health_calibration_mode == 0)
+		return;
+
+	/* Dynamic compensation:
+	 * If battery is degraded, low (<=20%), mode is Longevity (3), or high temp (>=45C):
+	 * clamp Cortex-A76 big core peak rescue OPP to safe level 2 (1.8GHz)
+	 * to prevent high-current VBUS/battery internal resistance collapse & PMIC UVLO trips,
+	 * while accelerating Little A55 schedutil up-ramp to 250us to guarantee 0 UI thread freezes!
+	 */
+	if (soc <= 20 || pox_health_calibration_mode == 3 || btemp >= 450) {
+		fbt_cpu_set_rescue_opp_c(2);
+		schedutil_set_up_rate_limit_us(0, 250);
+	} else if (gaming_mode_state > 0) {
+		fbt_cpu_set_rescue_opp_c(0);
+		schedutil_set_up_rate_limit_us(0, 500);
+	}
+}
+
 int gaming_mode_set(int mode)
 {
 	mutex_lock(&gaming_mode_lock);
 
 	if (mode == gaming_mode_state) {
+		pox_health_calibration_sync();
 		mutex_unlock(&gaming_mode_lock);
 		return 0;
 	}
@@ -613,6 +639,7 @@ static void pox_dynamic_evaluate(struct work_struct *work)
 		gaming_mode_set(eff);
 		return;
 	}
+	pox_health_calibration_sync();
 	mutex_unlock(&gaming_mode_lock);
 
 	/* Autonomous: keep guessing forever in auto. 8s cadence is
@@ -1542,6 +1569,7 @@ int pox_health_calibration_set(int mode)
 		return -EINVAL;
 
 	pox_health_calibration_mode = mode;
+	pox_health_calibration_sync();
 	pr_info("Phone Health Silicon Calibration Mode set to: %d\n", mode);
 	return 0;
 }
@@ -1556,6 +1584,7 @@ EXPORT_SYMBOL(pox_opp_voltage_guard_get);
 int pox_opp_voltage_guard_set(int enable)
 {
 	pox_opp_voltage_guard_enabled = enable ? 1 : 0;
+	pox_health_calibration_sync();
 	pr_info("OPP Voltage Brownout Guard set to: %s\n", enable ? "ENABLED" : "DISABLED");
 	return 0;
 }
@@ -1634,6 +1663,7 @@ static int health_status_proc_show(struct seq_file *m, void *v)
 	int mode = pox_health_calibration_get();
 	int guard = pox_opp_voltage_guard_get();
 
+	pox_health_calibration_sync();
 	seq_printf(m, "health_mode=%d\n", mode);
 	seq_printf(m, "opp_voltage_guard=%d\n", guard);
 	seq_printf(m, "battery_temp_decic=%d\n", btemp);
@@ -1687,6 +1717,94 @@ static ssize_t sched_bore_sysfs_store(struct kobject *kobj,
 static struct kobj_attribute sched_bore_kobj_attr =
 	__ATTR(sched_bore, 0644, sched_bore_sysfs_show, sched_bore_sysfs_store);
 
+static ssize_t sched_burst_scale_sysfs_show(struct kobject *kobj,
+					    struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", sysctl_sched_burst_penalty_scale);
+}
+
+static ssize_t sched_burst_scale_sysfs_store(struct kobject *kobj,
+					     struct kobj_attribute *attr,
+					     const char *buf, size_t count)
+{
+	unsigned int val;
+
+	if (kstrtouint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	sysctl_sched_burst_penalty_scale = min(val, 4095U);
+	return count;
+}
+
+static struct kobj_attribute sched_burst_scale_kattr =
+	__ATTR(sched_burst_penalty_scale, 0644, sched_burst_scale_sysfs_show, sched_burst_scale_sysfs_store);
+
+static ssize_t sched_burst_offset_sysfs_show(struct kobject *kobj,
+					     struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", sysctl_sched_burst_penalty_offset);
+}
+
+static ssize_t sched_burst_offset_sysfs_store(struct kobject *kobj,
+					      struct kobj_attribute *attr,
+					      const char *buf, size_t count)
+{
+	unsigned int val;
+
+	if (kstrtouint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	sysctl_sched_burst_penalty_offset = min(val, 63U);
+	return count;
+}
+
+static struct kobj_attribute sched_burst_offset_kattr =
+	__ATTR(sched_burst_penalty_offset, 0644, sched_burst_offset_sysfs_show, sched_burst_offset_sysfs_store);
+
+static ssize_t sched_burst_inherit_sysfs_show(struct kobject *kobj,
+					      struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", sysctl_sched_burst_inherit_type);
+}
+
+static ssize_t sched_burst_inherit_sysfs_store(struct kobject *kobj,
+					       struct kobj_attribute *attr,
+					       const char *buf, size_t count)
+{
+	unsigned int val;
+
+	if (kstrtouint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	sysctl_sched_burst_inherit_type = min(val, 2U);
+	return count;
+}
+
+static struct kobj_attribute sched_burst_inherit_kattr =
+	__ATTR(sched_burst_inherit_type, 0644, sched_burst_inherit_sysfs_show, sched_burst_inherit_sysfs_store);
+
+static ssize_t sched_burst_lifetime_sysfs_show(struct kobject *kobj,
+					       struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", sysctl_sched_burst_cache_lifetime);
+}
+
+static ssize_t sched_burst_lifetime_sysfs_store(struct kobject *kobj,
+						struct kobj_attribute *attr,
+						const char *buf, size_t count)
+{
+	unsigned int val;
+
+	if (kstrtouint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	sysctl_sched_burst_cache_lifetime = val;
+	return count;
+}
+
+static struct kobj_attribute sched_burst_lifetime_kattr =
+	__ATTR(sched_burst_cache_lifetime, 0644, sched_burst_lifetime_sysfs_show, sched_burst_lifetime_sysfs_store);
+
 static int sched_bore_proc_show(struct seq_file *m, void *v)
 {
 	seq_printf(m, "sched_bore=%d\n", sysctl_sched_bore);
@@ -1705,6 +1823,104 @@ static int sched_bore_proc_open(struct inode *inode, struct file *file)
 static ssize_t sched_bore_proc_write(struct file *file, const char __user *buffer,
 				     size_t count, loff_t *pos)
 {
+	char kbuf[64];
+	char *str;
+	unsigned int uval;
+	int val;
+
+	if (count >= sizeof(kbuf))
+		return -EINVAL;
+
+	if (copy_from_user(kbuf, buffer, count))
+		return -EFAULT;
+
+	kbuf[count] = '\0';
+	str = strim(kbuf);
+
+	if (sscanf(str, "scale=%u", &uval) == 1 || sscanf(str, "scale %u", &uval) == 1) {
+		sysctl_sched_burst_penalty_scale = min(uval, 4095U);
+	} else if (sscanf(str, "offset=%u", &uval) == 1 || sscanf(str, "offset %u", &uval) == 1) {
+		sysctl_sched_burst_penalty_offset = min(uval, 63U);
+	} else if (sscanf(str, "inherit=%u", &uval) == 1 || sscanf(str, "inherit %u", &uval) == 1) {
+		sysctl_sched_burst_inherit_type = min(uval, 2U);
+	} else if (sscanf(str, "lifetime=%u", &uval) == 1 || sscanf(str, "lifetime %u", &uval) == 1) {
+		sysctl_sched_burst_cache_lifetime = uval;
+	} else if (kstrtoint(str, 10, &val) == 0) {
+		sysctl_sched_bore = val ? 1 : 0;
+	} else {
+		return -EINVAL;
+	}
+
+	return count;
+}
+
+static const struct file_operations sched_bore_proc_fops = {
+	.open = sched_bore_proc_open,
+	.read = seq_read,
+	.write = sched_bore_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+/* =========================================================================
+ * DriveDroid & Hardware USB CD-ROM Emulation Interface
+ * ========================================================================= */
+
+static int pox_usb_cdrom_mode = 0;
+
+int pox_usb_cdrom_get(void)
+{
+	return pox_usb_cdrom_mode;
+}
+EXPORT_SYMBOL(pox_usb_cdrom_get);
+
+int pox_usb_cdrom_set(int mode)
+{
+	pox_usb_cdrom_mode = mode ? 1 : 0;
+	pr_info("POX USB CD-ROM DriveDroid Emulation set to: %d\n", pox_usb_cdrom_mode);
+	return 0;
+}
+EXPORT_SYMBOL(pox_usb_cdrom_set);
+
+static ssize_t usb_cdrom_sysfs_show(struct kobject *kobj,
+				    struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", pox_usb_cdrom_get());
+}
+
+static ssize_t usb_cdrom_sysfs_store(struct kobject *kobj,
+				     struct kobj_attribute *attr,
+				     const char *buf, size_t count)
+{
+	int val = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	pox_usb_cdrom_set(val);
+	return count;
+}
+
+static struct kobj_attribute usb_cdrom_kobj_attr =
+	__ATTR(usb_cdrom, 0644, usb_cdrom_sysfs_show, usb_cdrom_sysfs_store);
+
+static int usb_cdrom_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_usb_cdrom_get());
+	return 0;
+}
+
+static int usb_cdrom_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, usb_cdrom_proc_show, NULL);
+}
+
+static ssize_t usb_cdrom_proc_write(struct file *file, const char __user *buffer,
+				    size_t count, loff_t *pos)
+{
 	char kbuf[32];
 	int val;
 
@@ -1718,17 +1934,18 @@ static ssize_t sched_bore_proc_write(struct file *file, const char __user *buffe
 	if (kstrtoint(strim(kbuf), 10, &val) < 0)
 		return -EINVAL;
 
-	sysctl_sched_bore = val ? 1 : 0;
+	pox_usb_cdrom_set(val);
 	return count;
 }
 
-static const struct file_operations sched_bore_proc_fops = {
-	.open = sched_bore_proc_open,
+static const struct file_operations usb_cdrom_proc_fops = {
+	.open = usb_cdrom_proc_open,
 	.read = seq_read,
-	.write = sched_bore_proc_write,
+	.write = usb_cdrom_proc_write,
 	.llseek = seq_lseek,
 	.release = single_release,
 };
+
 
 /* Battery Protection Rootless ProcFS Interfaces */
 extern int pox_battery_bypass_get(void);
@@ -2520,6 +2737,10 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/sched_bore\n");
 
+	entry = proc_create("usb_cdrom", 0644, parent, &usb_cdrom_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/usb_cdrom\n");
+
 	ret = sysfs_create_file(kernel_kobj, &gaming_mode_kobj_attr.attr);
 	if (ret)
 		pr_warn("Failed to create /sys/kernel/gaming_mode (ret=%d)\n", ret);
@@ -2585,6 +2806,28 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 		pr_warn("Failed to create /sys/kernel/sched_bore (ret=%d)\n", ret);
 	else
 		pr_info("/sys/kernel/sched_bore created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &sched_burst_scale_kattr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/sched_burst_penalty_scale (ret=%d)\n", ret);
+
+	ret = sysfs_create_file(kernel_kobj, &sched_burst_offset_kattr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/sched_burst_penalty_offset (ret=%d)\n", ret);
+
+	ret = sysfs_create_file(kernel_kobj, &sched_burst_inherit_kattr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/sched_burst_inherit_type (ret=%d)\n", ret);
+
+	ret = sysfs_create_file(kernel_kobj, &sched_burst_lifetime_kattr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/sched_burst_cache_lifetime (ret=%d)\n", ret);
+
+	ret = sysfs_create_file(kernel_kobj, &usb_cdrom_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/usb_cdrom (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/usb_cdrom created successfully\n");
 
 	/* Canonical Kprofiles kobject: /sys/kernel/kprofiles/{kp_mode, auto_kp} */
 	kp_kobj = kobject_create_and_add("kprofiles", kernel_kobj);

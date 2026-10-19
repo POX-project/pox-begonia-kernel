@@ -47,6 +47,8 @@ int pox_health_calibration_set(int mode);
 int pox_health_calibration_get(void);
 int pox_opp_voltage_guard_set(int enable);
 int pox_opp_voltage_guard_get(void);
+int pox_usb_cdrom_set(int mode);
+int pox_usb_cdrom_get(void);
 int init_gaming_mode(struct proc_dir_entry *parent);
 
 #endif /* _GAMING_MODE_H_ */

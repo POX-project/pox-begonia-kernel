@@ -586,8 +586,17 @@ on boot
     chmod 0644 /proc/perfmgr/health_calibration
     chmod 0444 /proc/perfmgr/health_status
     chmod 0644 /proc/perfmgr/sched_bore
+    chmod 0644 /proc/perfmgr/usb_cdrom
     chmod 0644 /sys/kernel/health_calibration
     chmod 0644 /sys/kernel/sched_bore
+    chmod 0644 /sys/kernel/sched_burst_penalty_scale
+    chmod 0644 /sys/kernel/sched_burst_penalty_offset
+    chmod 0644 /sys/kernel/sched_burst_inherit_type
+    chmod 0644 /sys/kernel/sched_burst_cache_lifetime
+    chmod 0644 /sys/kernel/usb_cdrom
+    chmod 0644 /sys/devices/platform/mt_usb/gadget/lun0/cdrom
+    chmod 0644 /config/usb_gadget/g1/functions/mass_storage.0/lun.0/cdrom
+    chmod 0644 /sys/class/android_usb/android0/f_mass_storage/lun/cdrom
     chmod 0644 /sys/kernel/kprofiles/kp_mode
     chmod 0644 /sys/kernel/kprofiles/auto_kp
     chmod 0644 /proc/perfmgr/slog3
