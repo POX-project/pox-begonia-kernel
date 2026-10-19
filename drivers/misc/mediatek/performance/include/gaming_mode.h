@@ -41,6 +41,12 @@ void pox_camera_launch_boost(int enable);
 int pox_gaming_mode_get(void);
 int torch_brightness_set(int val);
 int torch_brightness_get(void);
+int kprofiles_mode_set(int mode);
+int kprofiles_mode_get(void);
+int pox_health_calibration_set(int mode);
+int pox_health_calibration_get(void);
+int pox_opp_voltage_guard_set(int enable);
+int pox_opp_voltage_guard_get(void);
 int init_gaming_mode(struct proc_dir_entry *parent);
 
 #endif /* _GAMING_MODE_H_ */

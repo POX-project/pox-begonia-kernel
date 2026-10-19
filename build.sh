@@ -583,6 +583,13 @@ on boot
     chmod 0666 /sys/devices/platform/flashlights_mt6360/torchbrightness
     chmod 0644 /proc/perfmgr/camera_profile
     chmod 0644 /sys/kernel/camera_profile
+    chmod 0644 /proc/perfmgr/health_calibration
+    chmod 0444 /proc/perfmgr/health_status
+    chmod 0644 /proc/perfmgr/sched_bore
+    chmod 0644 /sys/kernel/health_calibration
+    chmod 0644 /sys/kernel/sched_bore
+    chmod 0644 /sys/kernel/kprofiles/kp_mode
+    chmod 0644 /sys/kernel/kprofiles/auto_kp
     chmod 0644 /proc/perfmgr/slog3
     chmod 0644 /sys/kernel/slog3
     chmod 0644 /proc/perfmgr/camera_4k60

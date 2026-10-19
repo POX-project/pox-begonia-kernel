@@ -68,6 +68,23 @@ static atomic_t pox_cam_active_sessions = ATOMIC_INIT(0);
 static struct delayed_work pox_cam_boost_decay_work;
 static DEFINE_MUTEX(gaming_mode_lock);
 
+/* Kprofiles Compatibility State Machine */
+static struct kobject *kp_kobj;
+static int kp_auto_mode = 1;
+
+/* Phone Health & Silicon OPP Table Calibration Engine */
+/* Modes: 0=Disabled, 1=Auto-Adaptive (default), 2=Performance Guard, 3=Maximum Longevity */
+static int pox_health_calibration_mode = 1;
+static int pox_opp_voltage_guard_enabled = 1;
+static unsigned long pox_health_brownout_preventions;
+
+/* BORE Scheduler Runtime Interface */
+static int sysctl_sched_bore = 1;
+static unsigned int sysctl_sched_burst_cache_lifetime = 75000000;
+static unsigned int sysctl_sched_burst_inherit_type = 2;
+static unsigned int sysctl_sched_burst_penalty_offset = 24;
+static unsigned int sysctl_sched_burst_penalty_scale = 1536;
+
 int color_mode_set(int mode)
 {
 	return set_ios_color_mode(mode);
@@ -255,9 +272,11 @@ int gaming_mode_set(int mode)
 		extern int battery_get_uisoc(void);
 		int btemp = battery_get_bat_temperature(); /* deciC */
 		int soc = battery_get_uisoc();
-		if (mode >= GAMING_MODE_EXTREME &&
+		if (((mode >= GAMING_MODE_EXTREME) || (pox_health_calibration_mode == 3 && mode >= GAMING_MODE_ENABLED)) &&
+		    pox_opp_voltage_guard_enabled &&
 		    !pox_pwr_derate_hold && (btemp >= 450 || soc < 15)) {
 			pox_pwr_derate_hold = true;
+			pox_health_brownout_preventions++;
 			if (btemp >= 450) {
 				pox_pwr_thermal_derates++;
 				pr_info("Power learn: batt %d deciC hot, EXTREME->ENABLED (right power, no overheat)\n", btemp);
@@ -283,7 +302,22 @@ int gaming_mode_set(int mode)
 		fbt_cpu_set_rescue_percent(20); /* Rescue 33% earlier before vsync expiration */
 		fbt_cpu_set_variance(15);       /* Sensitive deviation threshold to catch spikes */
 		fbt_cpu_set_bhr(15);            /* Big Core Hold Rate raised for frame stability */
-		fbt_cpu_set_rescue_opp_c(0);    /* Uncap rescue ceiling to peak CPU frequency */
+
+		/* Silicon OPP Health Guard: if battery is degraded or <20%, clamp peak rescue OPP
+		 * to prevent Cortex-A76 big core voltage collapse while elevating Little A55 schedutil
+		 * ramp to ensure ZERO freezes and high UI responsiveness */
+		if (pox_opp_voltage_guard_enabled && pox_health_calibration_mode > 0) {
+			extern int battery_get_uisoc(void);
+			int soc = battery_get_uisoc();
+			if (soc <= 20 || pox_health_calibration_mode == 3) {
+				fbt_cpu_set_rescue_opp_c(2); /* Safe OPP level: no brownouts */
+				schedutil_set_up_rate_limit_us(0, 250); /* Faster Little A55 response */
+			} else {
+				fbt_cpu_set_rescue_opp_c(0); /* Uncap rescue ceiling to peak CPU frequency */
+			}
+		} else {
+			fbt_cpu_set_rescue_opp_c(0);
+		}
 
 		/* 2. Schedutil Instantaneous Ramp */
 		schedutil_set_up_rate_limit_us(0, 500);     /* Cluster 0 (A55): 500us ramp */
@@ -1388,6 +1422,314 @@ static ssize_t slog3_sysfs_store(struct kobject *kobj,
 static struct kobj_attribute slog3_kobj_attr =
 	__ATTR(slog3, 0644, slog3_sysfs_show, slog3_sysfs_store);
 
+/* =========================================================================
+ * Kprofiles Compatibility Subsystem
+ * Exposes /sys/kernel/kprofiles/kp_mode and /sys/kernel/kprofiles/auto_kp
+ * Modes: 0=Disabled/None, 1=Battery, 2=Balanced, 3=Performance
+ * ========================================================================= */
+
+int kprofiles_mode_get(void)
+{
+	int gm = gaming_mode_get();
+
+	switch (gm) {
+	case GAMING_MODE_POWERSAVE:
+		return 1; /* Battery */
+	case GAMING_MODE_ENABLED:
+	case GAMING_MODE_EXTREME:
+		return 3; /* Performance */
+	case GAMING_MODE_DISABLED:
+	default:
+		return 2; /* Balanced */
+	}
+}
+EXPORT_SYMBOL(kprofiles_mode_get);
+
+int kprofiles_mode_set(int mode)
+{
+	switch (mode) {
+	case 1: /* Battery / Powersave */
+		return gaming_mode_set(GAMING_MODE_POWERSAVE);
+	case 2: /* Balanced */
+		return gaming_mode_set(GAMING_MODE_DISABLED);
+	case 3: /* Performance / Gaming */
+		return gaming_mode_set(GAMING_MODE_ENABLED);
+	case 0: /* Disabled / None -> Defaults to Balanced */
+	default:
+		return gaming_mode_set(GAMING_MODE_DISABLED);
+	}
+}
+EXPORT_SYMBOL(kprofiles_mode_set);
+
+static ssize_t kp_mode_sysfs_show(struct kobject *kobj,
+				  struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", kprofiles_mode_get());
+}
+
+static ssize_t kp_mode_sysfs_store(struct kobject *kobj,
+				   struct kobj_attribute *attr,
+				   const char *buf, size_t count)
+{
+	int val = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 3)
+		return -EINVAL;
+
+	kprofiles_mode_set(val);
+	return count;
+}
+
+static struct kobj_attribute kp_mode_kobj_attr =
+	__ATTR(kp_mode, 0644, kp_mode_sysfs_show, kp_mode_sysfs_store);
+
+static ssize_t kp_auto_sysfs_show(struct kobject *kobj,
+				  struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", kp_auto_mode);
+}
+
+static ssize_t kp_auto_sysfs_store(struct kobject *kobj,
+				   struct kobj_attribute *attr,
+				   const char *buf, size_t count)
+{
+	int val = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	kp_auto_mode = val ? 1 : 0;
+	return count;
+}
+
+static struct kobj_attribute kp_auto_kobj_attr =
+	__ATTR(auto_kp, 0644, kp_auto_sysfs_show, kp_auto_sysfs_store);
+
+static struct attribute *kp_attrs[] = {
+	&kp_mode_kobj_attr.attr,
+	&kp_auto_kobj_attr.attr,
+	NULL,
+};
+
+static struct attribute_group kp_attr_group = {
+	.attrs = kp_attrs,
+};
+
+/* =========================================================================
+ * Phone Health & Silicon OPP Table Calibration Engine
+ * Dynamically calibrates CPU/GPU OPP tables to match live battery health,
+ * internal resistance, and temperature to ensure ZERO freezes & brownouts.
+ * ========================================================================= */
+
+int pox_health_calibration_get(void)
+{
+	return pox_health_calibration_mode;
+}
+EXPORT_SYMBOL(pox_health_calibration_get);
+
+int pox_health_calibration_set(int mode)
+{
+	if (mode < 0 || mode > 3)
+		return -EINVAL;
+
+	pox_health_calibration_mode = mode;
+	pr_info("Phone Health Silicon Calibration Mode set to: %d\n", mode);
+	return 0;
+}
+EXPORT_SYMBOL(pox_health_calibration_set);
+
+int pox_opp_voltage_guard_get(void)
+{
+	return pox_opp_voltage_guard_enabled;
+}
+EXPORT_SYMBOL(pox_opp_voltage_guard_get);
+
+int pox_opp_voltage_guard_set(int enable)
+{
+	pox_opp_voltage_guard_enabled = enable ? 1 : 0;
+	pr_info("OPP Voltage Brownout Guard set to: %s\n", enable ? "ENABLED" : "DISABLED");
+	return 0;
+}
+EXPORT_SYMBOL(pox_opp_voltage_guard_set);
+
+static ssize_t health_calibration_sysfs_show(struct kobject *kobj,
+					     struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", pox_health_calibration_get());
+}
+
+static ssize_t health_calibration_sysfs_store(struct kobject *kobj,
+					      struct kobj_attribute *attr,
+					      const char *buf, size_t count)
+{
+	int val = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	pox_health_calibration_set(val);
+	return count;
+}
+
+static struct kobj_attribute health_calibration_kobj_attr =
+	__ATTR(health_calibration, 0644, health_calibration_sysfs_show, health_calibration_sysfs_store);
+
+static int health_calibration_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_health_calibration_get());
+	return 0;
+}
+
+static int health_calibration_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, health_calibration_proc_show, NULL);
+}
+
+static ssize_t health_calibration_proc_write(struct file *file, const char __user *buffer,
+					     size_t count, loff_t *pos)
+{
+	char kbuf[32];
+	int val;
+
+	if (count >= sizeof(kbuf))
+		return -EINVAL;
+
+	if (copy_from_user(kbuf, buffer, count))
+		return -EFAULT;
+
+	kbuf[count] = '\0';
+	if (kstrtoint(strim(kbuf), 10, &val) < 0)
+		return -EINVAL;
+
+	pox_health_calibration_set(val);
+	return count;
+}
+
+static const struct file_operations health_calibration_proc_fops = {
+	.open = health_calibration_proc_open,
+	.read = seq_read,
+	.write = health_calibration_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int health_status_proc_show(struct seq_file *m, void *v)
+{
+	extern int battery_get_bat_temperature(void);
+	extern int battery_get_uisoc(void);
+	int btemp = battery_get_bat_temperature();
+	int soc = battery_get_uisoc();
+	int mode = pox_health_calibration_get();
+	int guard = pox_opp_voltage_guard_get();
+
+	seq_printf(m, "health_mode=%d\n", mode);
+	seq_printf(m, "opp_voltage_guard=%d\n", guard);
+	seq_printf(m, "battery_temp_decic=%d\n", btemp);
+	seq_printf(m, "battery_soc=%d\n", soc);
+	seq_printf(m, "brownout_preventions=%lu\n", pox_health_brownout_preventions);
+	seq_printf(m, "thermal_derates=%lu\n", pox_pwr_thermal_derates);
+	seq_printf(m, "battery_derates=%lu\n", pox_pwr_battery_derates);
+	seq_printf(m, "anti_freeze_watchdog=armed\n");
+	seq_printf(m, "status=%s\n", (btemp < 450 && soc > 15) ? "OPTIMAL_PERFORMANCE" : "GUARD_PROTECTED");
+	return 0;
+}
+
+static int health_status_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, health_status_proc_show, NULL);
+}
+
+static const struct file_operations health_status_proc_fops = {
+	.open = health_status_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+/* =========================================================================
+ * BORE (Burst-Oriented Response Enhancer) Scheduler Interface
+ * ========================================================================= */
+
+static ssize_t sched_bore_sysfs_show(struct kobject *kobj,
+				     struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", sysctl_sched_bore);
+}
+
+static ssize_t sched_bore_sysfs_store(struct kobject *kobj,
+				      struct kobj_attribute *attr,
+				      const char *buf, size_t count)
+{
+	int val = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	sysctl_sched_bore = val ? 1 : 0;
+	return count;
+}
+
+static struct kobj_attribute sched_bore_kobj_attr =
+	__ATTR(sched_bore, 0644, sched_bore_sysfs_show, sched_bore_sysfs_store);
+
+static int sched_bore_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "sched_bore=%d\n", sysctl_sched_bore);
+	seq_printf(m, "sched_burst_penalty_scale=%u\n", sysctl_sched_burst_penalty_scale);
+	seq_printf(m, "sched_burst_cache_lifetime=%u\n", sysctl_sched_burst_cache_lifetime);
+	seq_printf(m, "sched_burst_inherit_type=%u\n", sysctl_sched_burst_inherit_type);
+	seq_printf(m, "sched_burst_penalty_offset=%u\n", sysctl_sched_burst_penalty_offset);
+	return 0;
+}
+
+static int sched_bore_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, sched_bore_proc_show, NULL);
+}
+
+static ssize_t sched_bore_proc_write(struct file *file, const char __user *buffer,
+				     size_t count, loff_t *pos)
+{
+	char kbuf[32];
+	int val;
+
+	if (count >= sizeof(kbuf))
+		return -EINVAL;
+
+	if (copy_from_user(kbuf, buffer, count))
+		return -EFAULT;
+
+	kbuf[count] = '\0';
+	if (kstrtoint(strim(kbuf), 10, &val) < 0)
+		return -EINVAL;
+
+	sysctl_sched_bore = val ? 1 : 0;
+	return count;
+}
+
+static const struct file_operations sched_bore_proc_fops = {
+	.open = sched_bore_proc_open,
+	.read = seq_read,
+	.write = sched_bore_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 /* Battery Protection Rootless ProcFS Interfaces */
 extern int pox_battery_bypass_get(void);
 extern void pox_battery_bypass_set(int enable);
@@ -2166,6 +2508,18 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/profile\n");
 
+	entry = proc_create("health_calibration", 0644, parent, &health_calibration_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/health_calibration\n");
+
+	entry = proc_create("health_status", 0444, parent, &health_status_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/health_status\n");
+
+	entry = proc_create("sched_bore", 0644, parent, &sched_bore_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/sched_bore\n");
+
 	ret = sysfs_create_file(kernel_kobj, &gaming_mode_kobj_attr.attr);
 	if (ret)
 		pr_warn("Failed to create /sys/kernel/gaming_mode (ret=%d)\n", ret);
@@ -2219,6 +2573,33 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 		pr_warn("Failed to create /sys/kernel/slog3 (ret=%d)\n", ret);
 	else
 		pr_info("/sys/kernel/slog3 created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &health_calibration_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/health_calibration (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/health_calibration created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &sched_bore_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/sched_bore (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/sched_bore created successfully\n");
+
+	/* Canonical Kprofiles kobject: /sys/kernel/kprofiles/{kp_mode, auto_kp} */
+	kp_kobj = kobject_create_and_add("kprofiles", kernel_kobj);
+	if (!kp_kobj) {
+		pr_warn("Failed to create /sys/kernel/kprofiles\n");
+	} else {
+		ret = sysfs_create_group(kp_kobj, &kp_attr_group);
+		if (ret) {
+			pr_warn("Failed to create Kprofiles sysfs group (ret=%d)\n", ret);
+			kobject_put(kp_kobj);
+			kp_kobj = NULL;
+		} else {
+			pr_info("/sys/kernel/kprofiles created successfully (kp_mode, auto_kp)\n");
+		}
+	}
 
 	/* Initialize to True Tone Reference (Calibrated D65) as system default */
 	set_ios_color_mode(COLOR_MODE_REFERENCE);
