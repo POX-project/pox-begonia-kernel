@@ -1,0 +1,255 @@
+name: Mainline Escalation Probe
+
+# Merge an upstream mainline/stable ref into a Pox branch and probe the build.
+# Designed to run the heavy git clone + kernel build in CI (local machine cannot).
+
+on:
+  workflow_dispatch:
+    inputs:
+      upstream_repo:
+        description: 'Upstream repo URL'
+        required: true
+        default: 'https://github.com/torvalds/linux'
+      upstream_ref:
+        description: 'Upstream tag/ref to merge (e.g. v4.15)'
+        required: true
+      base_branch:
+        description: 'Branch to start from'
+        required: true
+        default: 'onyx'
+      target_branch:
+        description: 'Branch to create/check out'
+        required: true
+      merge_strategy:
+        description: 'git merge -X strategy'
+        required: true
+        default: 'default'
+        type: choice
+        options:
+          - default
+          - ours
+          - theirs
+          - union
+      resolve_conflicts:
+        description: 'How to resolve conflicts so the build can proceed'
+        required: true
+        default: 'none'
+        type: choice
+        options:
+          - none
+          - theirs
+          - ours
+      attempt_build:
+        description: 'Attempt kernel build after the merge'
+        required: true
+        default: true
+        type: boolean
+      push_result:
+        description: 'Push the resulting branch'
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  escalate:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout ${{ inputs.base_branch }} (full history)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.base_branch }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name  "Pox Escalation Bot"
+          git config user.email "escalation@pox.local"
+
+      - name: Record base info
+        run: |
+          {
+            echo "### Escalation probe"
+            echo ""
+            echo "- base branch : ${{ inputs.base_branch }}"
+            echo "- base commit : $(git rev-parse --short HEAD)"
+            echo "- base version: $(sed -n 's/^VERSION = //p;s/^PATCHLEVEL = //p;s/^SUBLEVEL = //p' Makefile | paste -sd. -)"
+            echo "- upstream    : ${{ inputs.upstream_repo }} @ ${{ inputs.upstream_ref }}"
+            echo "- target      : ${{ inputs.target_branch }}"
+            echo "- strategy    : ${{ inputs.merge_strategy }} / resolve=${{ inputs.resolve_conflicts }}"
+            echo ""
+          } > report.md
+
+      - name: Add upstream remote and fetch ref
+        run: |
+          set -euo pipefail
+          git remote add upstream "${{ inputs.upstream_repo }}" 2>/dev/null || git remote set-url upstream "${{ inputs.upstream_repo }}"
+          git fetch --no-tags upstream "${{ inputs.upstream_ref }}"
+          UP_SHA=$(git rev-parse FETCH_HEAD)
+          echo "UPSTREAM_SHA=$UP_SHA" >> $GITHUB_ENV
+          echo "upstream sha: $UP_SHA"
+          echo "- upstream sha: \`$UP_SHA\`" >> report.md
+
+      - name: Compute merge base and delta size
+        run: |
+          set +e
+          MB=$(git merge-base HEAD "$UPSTREAM_SHA" 2>&1)
+          echo "MERGE_BASE=$MB" >> $GITHUB_ENV
+          {
+            echo "- merge-base: \`$MB\`"
+          } >> report.md
+          if [[ -n "$MB" ]]; then
+            AHEAD=$(git rev-list --count "$MB..HEAD")
+            BEHIND=$(git rev-list --count "$MB..$UPSTREAM_SHA")
+            echo "- commits vendor-side (ahead): $AHEAD"  >> report.md
+            echo "- commits upstream-side (behind): $BEHIND" >> report.md
+          fi
+          echo "=== merge-base: $MB"
+          git --no-pager diff --shortstat "$MB" HEAD || true
+          git --no-pager diff --shortstat "$MB" "$UPSTREAM_SHA" || true
+
+      - name: Create branch and merge upstream
+        id: merge
+        run: |
+          set +e
+          git checkout -B "${{ inputs.target_branch }}"
+          case "${{ inputs.merge_strategy }}" in
+            ours)   X="-X ours" ;;
+            theirs) X="-X theirs" ;;
+            union)  X="-X union" ;;
+            *)      X="" ;;
+          esac
+          git merge --no-commit --no-ff $X "$UPSTREAM_SHA" > merge_out.txt 2>&1
+          echo "merge_exit=$?" >> $GITHUB_OUTPUT
+          git diff --name-only --diff-filter=U > conflicts.txt
+          CONFLICTS=$(wc -l < conflicts.txt | tr -d ' ')
+          echo "conflicts=$CONFLICTS" >> $GITHUB_OUTPUT
+          echo "=== merge exit / conflicts: $CONFLICTS"
+
+      - name: Summarize conflicts
+        run: |
+          set +e
+          CONFLICTS=$(wc -l < conflicts.txt | tr -d ' ')
+          {
+            echo ""
+            echo "## Merge result"
+            echo ""
+            echo "- merge exit code: ${{ steps.merge.outputs.merge_exit }}"
+            echo "- **conflicted files: $CONFLICTS**"
+            echo ""
+          } >> report.md
+          {
+            echo "### merge output (tail)"
+            echo '```'
+            tail -40 merge_out.txt
+            echo '```'
+          } >> report.md
+          if [[ "$CONFLICTS" -gt 0 ]]; then
+            {
+              echo ""
+              echo "### conflict count by top-level dir"
+              echo '```'
+              awk -F/ '{if (NF>1) print $1"/"$2; else print $1}' conflicts.txt | sort | uniq -c | sort -rn | head -40
+              echo '```'
+              echo ""
+              echo "### first 100 conflicted files"
+              echo '```'
+              head -100 conflicts.txt
+              echo '```'
+            } >> report.md
+          fi
+          cat report.md
+
+      - name: Resolve conflicts (optional)
+        if: inputs.resolve_conflicts != 'none'
+        run: |
+          set +e
+          SIDE="${{ inputs.resolve_conflicts }}"
+          FILES=$(git diff --name-only --diff-filter=U)
+          if [[ -n "$FILES" ]]; then
+            echo "$FILES" | xargs -r git checkout --$SIDE --
+            git add -A
+          fi
+          git -c user.name="Pox Escalation Bot" -c user.email="escalation@pox.local" \
+              commit -m "merge(${{ inputs.upstream_ref }}): merge upstream into ${{ inputs.base_branch }} (conflicts resolved: $SIDE)" || true
+          echo "resolved with: $SIDE" >> report.md
+
+      - name: Install host build dependencies
+        if: inputs.attempt_build
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison build-essential ccache curl flex g++-multilib \
+            gcc-multilib git gnupg gperf libelf-dev libssl-dev lz4 \
+            make zip python3 python-is-python3 libncurses5-dev libncurses5
+
+      - name: Cache toolchain (kerdevdep)
+        if: inputs.attempt_build
+        uses: actions/cache@v4
+        with:
+          path: |
+            kerdevdep/clang
+            kerdevdep/gcc
+            kerdevdep/anykernel
+          key: kerdevdep-toolchains-v2
+          restore-keys: |
+            kerdevdep-toolchains-v2
+            kerdevdep-toolchains-
+
+      - name: Probe build
+        id: build
+        if: inputs.attempt_build
+        run: |
+          set +e
+          bash kerdevdep/setup_kerdevdep.sh > setup.log 2>&1
+          ./build.sh kernel > build_log.txt 2>&1
+          RC=$?
+          echo "build_rc=$RC" >> $GITHUB_OUTPUT
+          ERRORS=$(grep -c -E 'error:|\bError [0-9]+|fatal error' build_log.txt || true)
+          echo "errors=$ERRORS" >> $GITHUB_OUTPUT
+          {
+            echo ""
+            echo "## Build probe"
+            echo ""
+            echo "- build exit code: $RC"
+            echo "- error-line matches: $ERRORS"
+            echo ""
+            echo "### first 80 error lines"
+            echo '```'
+            grep -E 'error:|\bError [0-9]+|fatal error' build_log.txt | head -80
+            echo '```'
+            echo ""
+            echo "### distinct error messages (top 40)"
+            echo '```'
+            grep -E 'error:' build_log.txt | sed 's/.*error: //' | sort | uniq -c | sort -rn | head -40
+            echo '```'
+            echo ""
+            echo "### tail of build log"
+            echo '```'
+            tail -40 build_log.txt
+            echo '```'
+          } >> report.md
+          tail -60 build_log.txt
+
+      - name: Push resulting branch
+        if: inputs.push_result
+        run: |
+          git push --force-with-lease origin "${{ inputs.target_branch }}"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: escalation-${{ inputs.target_branch }}-${{ inputs.upstream_ref }}
+          path: |
+            report.md
+            conflicts.txt
+            merge_out.txt
+            build_log.txt
+          retention-days: 30
+
+      - name: Job summary
+        if: always()
+        run: cat report.md >> $GITHUB_STEP_SUMMARY
