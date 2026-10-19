@@ -217,6 +217,33 @@ jobs:
           fi
           echo "resolved with: $SIDE" >> report.md
 
+      - name: Apply fixups
+        run: |
+          set +e
+          FIX=""
+          for f in ".github/fixups/${{ inputs.target_branch }}.sh" ".github/fixups/fix.sh"; do
+            if [[ -f "$f" ]]; then FIX="$f"; break; fi
+          done
+          if [[ -n "$FIX" ]]; then
+            echo "applying $FIX"
+            bash "$FIX" > fixup.log 2>&1
+            echo "fixup exit: $?"
+            tail -40 fixup.log
+            {
+              echo ""
+              echo "## Fixups ($FIX)"
+              echo ""
+              echo '```'
+              tail -60 fixup.log
+              echo '```'
+            } >> report.md
+            git add -A
+            git -c user.name="Pox Escalation Bot" -c user.email="escalation@pox.local" \
+                commit -m "fix(${{ inputs.target_branch }}): apply fixups for ${{ inputs.upstream_ref }}" || true
+          else
+            echo "no fixup script found (looked for .github/fixups/${{ inputs.target_branch }}.sh and .github/fixups/fix.sh)"
+          fi
+
       - name: Install host build dependencies
         if: inputs.attempt_build
         run: |
@@ -294,7 +321,12 @@ jobs:
             report.md
             conflicts.txt
             merge_out.txt
+            merge_out2.txt
+            unmerged.txt
+            pick_ours.txt
+            pick_theirs.txt
             build_log.txt
+            fixup.log
           retention-days: 30
 
       - name: Job summary
