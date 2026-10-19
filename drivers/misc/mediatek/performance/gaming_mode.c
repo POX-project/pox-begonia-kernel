@@ -1993,6 +1993,7 @@ static int profile_proc_show(struct seq_file *m, void *v)
 	int dyn_fsync = pox_dynamic_fsync_get();
 	int hp_gain = pox_headphone_gain_get();
 	int mic_gain = pox_mic_gain_get();
+	int a_mic = pox_active_mic_get();
 	int vib_str = pox_vibrator_strength_get();
 	int t_game = pox_touch_game_mode_get();
 	int t_sens = pox_touch_sensitivity_get();
@@ -2021,6 +2022,8 @@ static int profile_proc_show(struct seq_file *m, void *v)
 	seq_printf(m, "fast_charge: %d\n", fast_chg);
 	seq_printf(m, "headphone_gain: +%ddB\n", hp_gain);
 	seq_printf(m, "mic_gain: %d\n", mic_gain);
+	seq_printf(m, "active_mic: %d (%s)\n", a_mic,
+		   a_mic == 1 ? "MAIN_MIC" : (a_mic == 2 ? "TOP_MIC" : (a_mic == 3 ? "DUAL_STEREO" : "DEFAULT_AUTO")));
 	seq_printf(m, "vibrator_strength: 0x%02X\n", vib_str);
 	seq_printf(m, "torch_brightness: %d\n", t_bri);
 	seq_printf(m, "dynamic_fsync: %d\n", dyn_fsync);

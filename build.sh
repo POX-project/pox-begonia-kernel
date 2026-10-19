@@ -619,6 +619,7 @@ on boot
     chmod 0644 /proc/perfmgr/battery_bypass
     chmod 0644 /proc/perfmgr/battery_limit
     chmod 0444 /proc/perfmgr/battery_status
+    chmod 0644 /sys/module/workqueue/parameters/power_efficient
     chmod 0644 /sys/module/ged/parameters/gx_game_mode
     chmod 0644 /sys/module/ged/parameters/gx_boost_on
     chmod 0644 /sys/module/ged/parameters/boost_gpu_enable
