@@ -168,28 +168,60 @@ jobs:
         run: |
           set +e
           SIDE="${{ inputs.resolve_conflicts }}"
-          FILES=$(git diff --name-only --diff-filter=U)
-          echo "conflicted files to resolve: $(echo "$FILES" | grep -c . )"
+          UP="$UPSTREAM_SHA"
+          BASE_SHA=$(git rev-parse HEAD)   # branch tip == "ours"
+          echo "base(ours) sha: $BASE_SHA"
+
+          # Restart the merge cleanly so git resolves content conflicts itself.
+          # This avoids leaving conflict markers in the tree (the previous
+          # per-file `git checkout --ours` approach corrupted add/add paths).
+          git merge --abort 2>/dev/null || true
+
+          case "$SIDE" in
+            ours)        X="-X ours"   ;;
+            theirs)      X="-X theirs" ;;
+            auto-vendor) X="-X theirs" ;;
+            *)           X=""          ;;
+          esac
+
+          git merge --no-commit --no-ff $X "$UP" > merge_out2.txt 2>&1 || true
+
           if [[ "$SIDE" == "auto-vendor" ]]; then
-            # Porter heuristic: keep vendor code for MediaTek paths, take upstream for core kernel files.
             VENDOR_RE='mediatek|/mtk|mtk_|/mt6[0-9]|mt67|mt68|mtk-|dts/mediatek'
-            echo "$FILES" | grep -E   "$VENDOR_RE"                > resolved_ours.txt  || true
-            echo "$FILES" | grep -Ev  "$VENDOR_RE"                > resolved_theirs.txt || true
-            echo "auto-vendor -> ours (vendor):   $(grep -c . resolved_ours.txt)"
-            echo "auto-vendor -> theirs (core):   $(grep -c . resolved_theirs.txt)"
-            xargs -r git checkout --ours   -- < resolved_ours.txt   || true
-            xargs -r git checkout --theirs -- < resolved_theirs.txt || true
-            SIDE="auto-vendor (ours=$(grep -c . resolved_ours.txt) theirs=$(grep -c . resolved_theirs.txt))"
-          else
-            if [[ -n "$FILES" ]]; then
-              echo "$FILES" | xargs -r git checkout --$SIDE --
+            grep -E  "$VENDOR_RE" conflicts.txt > ours_paths.txt   || true
+            grep -Ev "$VENDOR_RE" conflicts.txt > theirs_paths.txt || true
+            echo "auto-vendor: restore-ours=$(grep -c . ours_paths.txt) stay-theirs=$(grep -c . theirs_paths.txt)"
+            if [[ -s ours_paths.txt ]]; then
+              xargs -r git checkout "$BASE_SHA" -- < ours_paths.txt || true
             fi
+            SIDE="auto-vendor (ours=$(grep -c . ours_paths.txt), theirs=$(grep -c . theirs_paths.txt))"
           fi
+
+          # Any paths still unmerged (e.g. add/add): resolve defensively.
+          git diff --name-only --diff-filter=U > leftover.txt
+          if [[ -s leftover.txt ]]; then
+            echo "leftover unmerged: $(grep -c . leftover.txt) -> resolving defensively"
+            while IFS= read -r f; do
+              [[ -n "$f" ]] || continue
+              if   git checkout --theirs -- "$f" 2>/dev/null; then :
+              elif git checkout --ours   -- "$f" 2>/dev/null; then :
+              elif git checkout "$BASE_SHA" -- "$f" 2>/dev/null; then :
+              else git rm -f -- "$f" 2>/dev/null || true; fi
+            done < leftover.txt
+          fi
+
           git add -A
           git -c user.name="Pox Escalation Bot" -c user.email="escalation@pox.local" \
               commit -m "merge(${{ inputs.upstream_ref }}): merge upstream into ${{ inputs.base_branch }} (conflicts resolved: $SIDE)" || true
+
           echo "resolved with: $SIDE" >> report.md
           echo "resolved with: $SIDE"
+          # A marker-free tree is mandatory; verify it.
+          if grep -rl '^<<<<<<< ' --include='*' . > markers.txt 2>/dev/null && [[ -s markers.txt ]]; then
+            echo "WARNING: conflict markers still present in $(grep -c . markers.txt) files" | tee -a report.md
+          else
+            echo "verified: no conflict markers in tree"
+          fi
 
       - name: Install host build dependencies
         if: inputs.attempt_build
@@ -222,7 +254,8 @@ jobs:
           ./build.sh kernel > build_log.txt 2>&1
           RC=$?
           echo "build_rc=$RC" >> $GITHUB_OUTPUT
-          ERRORS=$(grep -c -E 'error:|\bError [0-9]+|fatal error' build_log.txt || true)
+          ERE='error:|\bError [0-9]+|fatal error|\*\*\*|No such file or directory|undefined reference|not declared'
+          ERRORS=$(grep -c -E "$ERE" build_log.txt || true)
           echo "errors=$ERRORS" >> $GITHUB_OUTPUT
           {
             echo ""
@@ -231,9 +264,14 @@ jobs:
             echo "- build exit code: $RC"
             echo "- error-line matches: $ERRORS"
             echo ""
+            echo "### head of build log (first 40 lines)"
+            echo '```'
+            head -40 build_log.txt
+            echo '```'
+            echo ""
             echo "### first 80 error lines"
             echo '```'
-            grep -E 'error:|\bError [0-9]+|fatal error' build_log.txt | head -80
+            grep -E "$ERE" build_log.txt | head -80
             echo '```'
             echo ""
             echo "### distinct error messages (top 40)"
