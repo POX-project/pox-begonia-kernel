@@ -19,6 +19,7 @@
 #define COLOR_MODE_TRUE_TONE 1
 #define COLOR_MODE_VIVID     2
 #define COLOR_MODE_SLOG3     3
+#define COLOR_MODE_CUSTOM    4
 
 #define HBM_MODE_OFF         0
 #define HBM_MODE_L1          1
@@ -31,6 +32,8 @@ int pox_true_tone_set(int enable);
 int pox_true_tone_get(void);
 int color_mode_set(int mode);
 int color_mode_get(void);
+int pox_color_custom_set(int sat, int contrast, int brightness, int sat_adj);
+void pox_color_custom_get(int *sat, int *contrast, int *brightness, int *sat_adj);
 int hbm_mode_set(int mode);
 int hbm_mode_get(void);
 int camera_4k60_set(int force);

@@ -569,6 +569,8 @@ on boot
     chmod 0644 /sys/kernel/true_tone
     chmod 0644 /proc/perfmgr/color_mode
     chmod 0644 /sys/kernel/color_mode
+    chmod 0644 /proc/perfmgr/color_custom
+    chmod 0644 /sys/kernel/color_custom
     chmod 0644 /proc/perfmgr/hbm_mode
     chmod 0644 /sys/kernel/hbm_mode
     # Pox standout safe-rootless torch: 0666 by design so stock

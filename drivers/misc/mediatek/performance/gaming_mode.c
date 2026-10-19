@@ -41,6 +41,8 @@ extern int boost_write_for_perf_idx(int idx, int boost_value);
 extern int prefer_idle_for_perf_idx(int idx, int prefer_idle);
 extern int set_ios_color_mode(int mode);
 extern int get_ios_color_mode(void);
+extern int set_ios_color_custom(int sat, int contrast, int brightness, int sat_adj);
+extern void get_ios_color_custom(int *sat, int *contrast, int *brightness, int *sat_adj);
 extern int pox_dynamic_fsync_get(void);
 extern void pox_dynamic_fsync_set(int enable);
 
@@ -96,6 +98,19 @@ int color_mode_get(void)
 	return get_ios_color_mode();
 }
 EXPORT_SYMBOL(color_mode_get);
+
+int pox_color_custom_set(int sat, int contrast, int brightness, int sat_adj)
+{
+	user_color_mode_override = COLOR_MODE_CUSTOM;
+	return set_ios_color_custom(sat, contrast, brightness, sat_adj);
+}
+EXPORT_SYMBOL(pox_color_custom_set);
+
+void pox_color_custom_get(int *sat, int *contrast, int *brightness, int *sat_adj)
+{
+	get_ios_color_custom(sat, contrast, brightness, sat_adj);
+}
+EXPORT_SYMBOL(pox_color_custom_get);
 
 int pox_true_tone_set(int enable)
 {
@@ -793,7 +808,9 @@ static int color_mode_proc_show(struct seq_file *m, void *v)
 	int mode = get_ios_color_mode();
 
 	seq_printf(m, "color_mode: %d\n", mode);
-	if (mode == COLOR_MODE_SLOG3)
+	if (mode == COLOR_MODE_CUSTOM)
+		seq_printf(m, "status: Custom User Profile\n");
+	else if (mode == COLOR_MODE_SLOG3)
 		seq_printf(m, "status: Sony S-Log3 / Cinema Flat Profile (Logarithmic Dynamic Range for LUT Grading)\n");
 	else if (mode == COLOR_MODE_VIVID)
 		seq_printf(m, "status: iOS Vivid / Cinema HDR\n");
@@ -827,8 +844,8 @@ static ssize_t color_mode_proc_write(struct file *file, const char __user *ubuf,
 
 	if (val < 0)
 		val = 0;
-	else if (val > 3)
-		val = 3;
+	else if (val > 4)
+		val = 4;
 
 	user_color_mode_override = val;
 	set_ios_color_mode(val);
@@ -845,6 +862,54 @@ static const struct file_operations color_mode_proc_fops = {
 	.open    = color_mode_proc_open,
 	.read    = seq_read,
 	.write   = color_mode_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+static int color_custom_proc_show(struct seq_file *m, void *v)
+{
+	int sat = 4, con = 4, bri = 4, sat_adj = 0;
+
+	get_ios_color_custom(&sat, &con, &bri, &sat_adj);
+	seq_printf(m, "sat: %d\ncontrast: %d\nbrightness: %d\nsat_adj: %d\nvalues: %d %d %d %d\n",
+		   sat, con, bri, sat_adj, sat, con, bri, sat_adj);
+	return 0;
+}
+
+static ssize_t color_custom_proc_write(struct file *file, const char __user *ubuf,
+				       size_t count, loff_t *ppos)
+{
+	char buf[64];
+	int sat = 4, con = 4, bri = 4, sat_adj = 0;
+	size_t len;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	len = min(count, sizeof(buf) - 1);
+	if (copy_from_user(buf, ubuf, len))
+		return -EFAULT;
+	buf[len] = '\0';
+
+	if (sscanf(buf, "%d %d %d %d", &sat, &con, &bri, &sat_adj) >= 3 ||
+	    sscanf(buf, "%d,%d,%d,%d", &sat, &con, &bri, &sat_adj) >= 3) {
+		pox_color_custom_set(sat, con, bri, sat_adj);
+		return count;
+	}
+
+	return -EINVAL;
+}
+
+static int color_custom_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, color_custom_proc_show, NULL);
+}
+
+static const struct file_operations color_custom_proc_fops = {
+	.owner   = THIS_MODULE,
+	.open    = color_custom_proc_open,
+	.read    = seq_read,
+	.write   = color_custom_proc_write,
 	.llseek  = seq_lseek,
 	.release = single_release,
 };
@@ -1288,8 +1353,8 @@ static ssize_t color_mode_sysfs_store(struct kobject *kobj,
 
 	if (val < 0)
 		val = 0;
-	else if (val > 3)
-		val = 3;
+	else if (val > 4)
+		val = 4;
 
 	user_color_mode_override = val;
 	set_ios_color_mode(val);
@@ -1298,6 +1363,36 @@ static ssize_t color_mode_sysfs_store(struct kobject *kobj,
 
 static struct kobj_attribute color_mode_kobj_attr =
 	__ATTR(color_mode, 0644, color_mode_sysfs_show, color_mode_sysfs_store);
+
+static ssize_t color_custom_sysfs_show(struct kobject *kobj,
+				       struct kobj_attribute *attr, char *buf)
+{
+	int sat = 4, con = 4, bri = 4, sat_adj = 0;
+
+	get_ios_color_custom(&sat, &con, &bri, &sat_adj);
+	return sprintf(buf, "%d %d %d %d\n", sat, con, bri, sat_adj);
+}
+
+static ssize_t color_custom_sysfs_store(struct kobject *kobj,
+				        struct kobj_attribute *attr,
+				        const char *buf, size_t count)
+{
+	int sat = 4, con = 4, bri = 4, sat_adj = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (sscanf(buf, "%d %d %d %d", &sat, &con, &bri, &sat_adj) >= 3 ||
+	    sscanf(buf, "%d,%d,%d,%d", &sat, &con, &bri, &sat_adj) >= 3) {
+		pox_color_custom_set(sat, con, bri, sat_adj);
+		return count;
+	}
+
+	return -EINVAL;
+}
+
+static struct kobj_attribute color_custom_kobj_attr =
+	__ATTR(color_custom, 0644, color_custom_sysfs_show, color_custom_sysfs_store);
 
 static struct kobj_attribute camera_profile_kobj_attr =
 	__ATTR(camera_profile, 0644, color_mode_sysfs_show, color_mode_sysfs_store);
@@ -1452,13 +1547,19 @@ static struct kobj_attribute slog3_kobj_attr =
 /* =========================================================================
  * Kprofiles Compatibility Subsystem
  * Exposes /sys/kernel/kprofiles/kp_mode and /sys/kernel/kprofiles/auto_kp
- * Modes: 0=Disabled/None, 1=Battery, 2=Balanced, 3=Performance
+ * Modes: 0=Disabled/None, 1=Battery, 2=Balanced, 3=Performance, 4=Custom
  * ========================================================================= */
+
+static int kprofiles_custom_active;
 
 int kprofiles_mode_get(void)
 {
-	int gm = gaming_mode_get();
+	int gm;
 
+	if (kprofiles_custom_active)
+		return 4; /* Custom */
+
+	gm = gaming_mode_get();
 	switch (gm) {
 	case GAMING_MODE_POWERSAVE:
 		return 1; /* Battery */
@@ -1474,6 +1575,12 @@ EXPORT_SYMBOL(kprofiles_mode_get);
 
 int kprofiles_mode_set(int mode)
 {
+	if (mode == 4) {
+		kprofiles_custom_active = 1;
+		return 0;
+	}
+
+	kprofiles_custom_active = 0;
 	switch (mode) {
 	case 1: /* Battery / Powersave */
 		return gaming_mode_set(GAMING_MODE_POWERSAVE);
@@ -1506,7 +1613,7 @@ static ssize_t kp_mode_sysfs_store(struct kobject *kobj,
 	if (kstrtoint(buf, 10, &val) < 0)
 		return -EINVAL;
 
-	if (val < 0 || val > 3)
+	if (val < 0 || val > 4)
 		return -EINVAL;
 
 	kprofiles_mode_set(val);
@@ -2570,7 +2677,7 @@ static int profile_proc_show(struct seq_file *m, void *v)
 	seq_printf(m, "true_tone: %d (%s)\n", pox_true_tone_get(),
 		   pox_true_tone_get() ? "ENABLED [DEFAULT]" : "DISABLED");
 	seq_printf(m, "color_mode: %d (%s)\n", c_mode,
-		   c_mode == 3 ? "SLOG3" : (c_mode == 2 ? "VIVID" : (c_mode == 1 ? "REFERENCE_D65" : "STANDARD")));
+		   c_mode == 4 ? "CUSTOM" : (c_mode == 3 ? "SLOG3" : (c_mode == 2 ? "VIVID" : (c_mode == 1 ? "REFERENCE_D65" : "STANDARD"))));
 	seq_printf(m, "hbm_mode: %d (%s)\n", h_mode,
 		   h_mode == 3 ? "L3_PEAK" : (h_mode == 2 ? "L2_HIGH" : (h_mode == 1 ? "L1_BOOST" : "OFF")));
 	seq_printf(m, "touch_game_mode: %d\n", t_game);
@@ -2636,6 +2743,10 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	entry = proc_create("color_mode", 0644, parent, &color_mode_proc_fops);
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/color_mode\n");
+
+	entry = proc_create("color_custom", 0644, parent, &color_custom_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/color_custom\n");
 
 	entry = proc_create("true_tone", 0644, parent, &true_tone_proc_fops);
 	if (!entry)
@@ -2752,6 +2863,12 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 		pr_warn("Failed to create /sys/kernel/color_mode (ret=%d)\n", ret);
 	else
 		pr_info("/sys/kernel/color_mode created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &color_custom_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/color_custom (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/color_custom created successfully\n");
 
 	ret = sysfs_create_file(kernel_kobj, &true_tone_kobj_attr.attr);
 	if (ret)
