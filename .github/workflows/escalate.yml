@@ -39,6 +39,7 @@ on:
           - none
           - theirs
           - ours
+          - auto-vendor
       attempt_build:
         description: 'Attempt kernel build after the merge'
         required: true
@@ -168,13 +169,27 @@ jobs:
           set +e
           SIDE="${{ inputs.resolve_conflicts }}"
           FILES=$(git diff --name-only --diff-filter=U)
-          if [[ -n "$FILES" ]]; then
-            echo "$FILES" | xargs -r git checkout --$SIDE --
-            git add -A
+          echo "conflicted files to resolve: $(echo "$FILES" | grep -c . )"
+          if [[ "$SIDE" == "auto-vendor" ]]; then
+            # Porter heuristic: keep vendor code for MediaTek paths, take upstream for core kernel files.
+            VENDOR_RE='mediatek|/mtk|mtk_|/mt6[0-9]|mt67|mt68|mtk-|dts/mediatek'
+            echo "$FILES" | grep -E   "$VENDOR_RE"                > resolved_ours.txt  || true
+            echo "$FILES" | grep -Ev  "$VENDOR_RE"                > resolved_theirs.txt || true
+            echo "auto-vendor -> ours (vendor):   $(grep -c . resolved_ours.txt)"
+            echo "auto-vendor -> theirs (core):   $(grep -c . resolved_theirs.txt)"
+            xargs -r git checkout --ours   -- < resolved_ours.txt   || true
+            xargs -r git checkout --theirs -- < resolved_theirs.txt || true
+            SIDE="auto-vendor (ours=$(grep -c . resolved_ours.txt) theirs=$(grep -c . resolved_theirs.txt))"
+          else
+            if [[ -n "$FILES" ]]; then
+              echo "$FILES" | xargs -r git checkout --$SIDE --
+            fi
           fi
+          git add -A
           git -c user.name="Pox Escalation Bot" -c user.email="escalation@pox.local" \
               commit -m "merge(${{ inputs.upstream_ref }}): merge upstream into ${{ inputs.base_branch }} (conflicts resolved: $SIDE)" || true
           echo "resolved with: $SIDE" >> report.md
+          echo "resolved with: $SIDE"
 
       - name: Install host build dependencies
         if: inputs.attempt_build
