@@ -606,6 +606,8 @@ on boot
     chmod 0644 /sys/kernel/sound_control/headphone_gain
     chmod 0644 /proc/perfmgr/mic_gain
     chmod 0644 /sys/kernel/sound_control/mic_gain
+    chmod 0644 /proc/perfmgr/active_mic
+    chmod 0644 /sys/kernel/sound_control/active_mic
     chmod 0644 /proc/perfmgr/vibrator_strength
     chmod 0644 /proc/perfmgr/wakelock_blocker
     chmod 0644 /proc/perfmgr/fast_charge

@@ -1885,6 +1885,54 @@ static const struct file_operations mic_gain_proc_fops = {
 	.release = single_release,
 };
 
+/* Active Microphone Selection Interface */
+extern int pox_active_mic_get(void);
+extern int pox_active_mic_set(int mode);
+
+static int active_mic_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_active_mic_get());
+	return 0;
+}
+
+static int active_mic_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, active_mic_proc_show, NULL);
+}
+
+static ssize_t active_mic_proc_write(struct file *file, const char __user *buffer,
+				     size_t count, loff_t *pos)
+{
+	char buf[16];
+	int val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, buffer, count))
+		return -EFAULT;
+	buf[count] = '\0';
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 3)
+		return -EINVAL;
+
+	pox_active_mic_set(val);
+	return count;
+}
+
+static const struct file_operations active_mic_proc_fops = {
+	.open    = active_mic_proc_open,
+	.read    = seq_read,
+	.write   = active_mic_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
 /* Dynamic Fsync Interface */
 extern int pox_dynamic_fsync_get(void);
 extern void pox_dynamic_fsync_set(int enable);
@@ -2086,6 +2134,10 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	entry = proc_create("mic_gain", 0644, parent, &mic_gain_proc_fops);
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/mic_gain\n");
+
+	entry = proc_create("active_mic", 0644, parent, &active_mic_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/active_mic\n");
 
 	entry = proc_create("dynamic_fsync", 0644, parent, &dynamic_fsync_proc_fops);
 	if (!entry)
