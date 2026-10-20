@@ -2707,10 +2707,16 @@ static const struct file_operations wakelock_blocker_proc_fops = {
 /* Fast Charge Control Interface */
 extern int pox_fast_charge_get(void);
 extern void pox_fast_charge_set(int enable);
+extern int pox_charge_watt_get(void);
+extern void pox_charge_watt_set(int watt);
+extern int pox_pd_min_watt_get(void);
+extern void pox_pd_min_watt_set(int watt);
+extern int pox_pd_max_watt_get(void);
+extern void pox_pd_max_watt_set(int watt);
 
 static int fast_charge_proc_show(struct seq_file *m, void *v)
 {
-	seq_printf(m, "%d\n", pox_fast_charge_get());
+	seq_printf(m, "%d\n", pox_fast_charge_get() ? pox_charge_watt_get() : 0);
 	return 0;
 }
 
@@ -2737,10 +2743,16 @@ static ssize_t fast_charge_proc_write(struct file *file, const char __user *buff
 	if (kstrtoint(buf, 10, &val) < 0)
 		return -EINVAL;
 
-	if (val < 0 || val > 1)
+	if (val < 0)
 		return -EINVAL;
 
-	pox_fast_charge_set(val);
+	if (val == 0)
+		pox_fast_charge_set(0);
+	else if (val == 1)
+		pox_fast_charge_set(1);
+	else
+		pox_charge_watt_set(val);
+
 	return count;
 }
 
@@ -2748,6 +2760,132 @@ static const struct file_operations fast_charge_proc_fops = {
 	.open    = fast_charge_proc_open,
 	.read    = seq_read,
 	.write   = fast_charge_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+/* Charge Watt Interface */
+static int charge_watt_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_charge_watt_get());
+	return 0;
+}
+
+static int charge_watt_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, charge_watt_proc_show, NULL);
+}
+
+static ssize_t charge_watt_proc_write(struct file *file, const char __user *buffer,
+				      size_t count, loff_t *pos)
+{
+	char buf[16];
+	int val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, buffer, count))
+		return -EFAULT;
+	buf[count] = '\0';
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	pox_charge_watt_set(val);
+	return count;
+}
+
+static const struct file_operations charge_watt_proc_fops = {
+	.open    = charge_watt_proc_open,
+	.read    = seq_read,
+	.write   = charge_watt_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+/* PD Min Watt Interface */
+static int pd_min_watt_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_pd_min_watt_get());
+	return 0;
+}
+
+static int pd_min_watt_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, pd_min_watt_proc_show, NULL);
+}
+
+static ssize_t pd_min_watt_proc_write(struct file *file, const char __user *buffer,
+				      size_t count, loff_t *pos)
+{
+	char buf[16];
+	int val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, buffer, count))
+		return -EFAULT;
+	buf[count] = '\0';
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	pox_pd_min_watt_set(val);
+	return count;
+}
+
+static const struct file_operations pd_min_watt_proc_fops = {
+	.open    = pd_min_watt_proc_open,
+	.read    = seq_read,
+	.write   = pd_min_watt_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+/* PD Max Watt Interface */
+static int pd_max_watt_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_pd_max_watt_get());
+	return 0;
+}
+
+static int pd_max_watt_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, pd_max_watt_proc_show, NULL);
+}
+
+static ssize_t pd_max_watt_proc_write(struct file *file, const char __user *buffer,
+				      size_t count, loff_t *pos)
+{
+	char buf[16];
+	int val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, buffer, count))
+		return -EFAULT;
+	buf[count] = '\0';
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	pox_pd_max_watt_set(val);
+	return count;
+}
+
+static const struct file_operations pd_max_watt_proc_fops = {
+	.open    = pd_max_watt_proc_open,
+	.read    = seq_read,
+	.write   = pd_max_watt_proc_write,
 	.llseek  = seq_lseek,
 	.release = single_release,
 };
@@ -2982,7 +3120,8 @@ static int profile_proc_show(struct seq_file *m, void *v)
 	seq_printf(m, "double_tap_to_wake: %d\n", dt2w);
 	seq_printf(m, "battery_status: %s\n", bat_buf);
 	seq_printf(m, "battery_limit: %d%%\n", pox_battery_limit_get());
-	seq_printf(m, "fast_charge: %d\n", fast_chg);
+	seq_printf(m, "fast_charge: %d (watt: %dW, pd_min: %dW, pd_max: %dW)\n",
+		   fast_chg, pox_charge_watt_get(), pox_pd_min_watt_get(), pox_pd_max_watt_get());
 	seq_printf(m, "headphone_gain: +%ddB\n", hp_gain);
 	seq_printf(m, "mic_gain: %d\n", mic_gain);
 	seq_printf(m, "active_mic: %d (%s)\n", a_mic,
@@ -3096,6 +3235,18 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	entry = proc_create("fast_charge", 0644, parent, &fast_charge_proc_fops);
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/fast_charge\n");
+
+	entry = proc_create("charge_watt", 0644, parent, &charge_watt_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/charge_watt\n");
+
+	entry = proc_create("pd_min_watt", 0644, parent, &pd_min_watt_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/pd_min_watt\n");
+
+	entry = proc_create("pd_max_watt", 0644, parent, &pd_max_watt_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/pd_max_watt\n");
 
 	entry = proc_create("dt2w", 0644, parent, &dt2w_proc_fops);
 	if (!entry)

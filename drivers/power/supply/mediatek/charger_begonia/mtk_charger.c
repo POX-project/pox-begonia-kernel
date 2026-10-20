@@ -3578,6 +3578,9 @@ int pox_battery_status_get(char *buf, size_t size)
 EXPORT_SYMBOL(pox_battery_status_get);
 
 static int g_battery_fast_charge = 1;
+static int g_battery_charge_watt = 18;
+static int g_battery_pd_min_watt = 5;
+static int g_battery_pd_max_watt = 90;
 
 int pox_fast_charge_get(void)
 {
@@ -3587,11 +3590,117 @@ EXPORT_SYMBOL(pox_fast_charge_get);
 
 void pox_fast_charge_set(int enable)
 {
-	g_battery_fast_charge = enable ? 1 : 0;
+	if (enable <= 0) {
+		g_battery_fast_charge = 0;
+	} else if (enable == 1) {
+		g_battery_fast_charge = 1;
+		if (g_battery_charge_watt <= 0)
+			g_battery_charge_watt = 18;
+	} else {
+		g_battery_fast_charge = 1;
+		g_battery_charge_watt = clamp(enable, 5, 120);
+	}
 	if (pinfo)
 		_wake_up_charger(pinfo);
 }
 EXPORT_SYMBOL(pox_fast_charge_set);
+
+int pox_charge_watt_get(void)
+{
+	return g_battery_charge_watt;
+}
+EXPORT_SYMBOL(pox_charge_watt_get);
+
+void pox_charge_watt_set(int watt)
+{
+	if (watt <= 0) {
+		g_battery_fast_charge = 0;
+	} else {
+		g_battery_fast_charge = 1;
+		g_battery_charge_watt = clamp(watt, 5, 120);
+	}
+	if (pinfo)
+		_wake_up_charger(pinfo);
+}
+EXPORT_SYMBOL(pox_charge_watt_set);
+
+int pox_pd_min_watt_get(void)
+{
+	return g_battery_pd_min_watt;
+}
+EXPORT_SYMBOL(pox_pd_min_watt_get);
+
+void pox_pd_min_watt_set(int watt)
+{
+	g_battery_pd_min_watt = clamp(watt, 5, 100);
+	if (g_battery_pd_max_watt < g_battery_pd_min_watt)
+		g_battery_pd_max_watt = g_battery_pd_min_watt;
+	if (pinfo)
+		_wake_up_charger(pinfo);
+}
+EXPORT_SYMBOL(pox_pd_min_watt_set);
+
+int pox_pd_max_watt_get(void)
+{
+	return g_battery_pd_max_watt;
+}
+EXPORT_SYMBOL(pox_pd_max_watt_get);
+
+void pox_pd_max_watt_set(int watt)
+{
+	g_battery_pd_max_watt = clamp(watt, 5, 100);
+	if (g_battery_pd_min_watt > g_battery_pd_max_watt)
+		g_battery_pd_min_watt = g_battery_pd_max_watt;
+	if (pinfo)
+		_wake_up_charger(pinfo);
+}
+EXPORT_SYMBOL(pox_pd_max_watt_set);
+
+void pox_get_target_currents(int watt, int vbus_mv, int vbat_mv,
+			     int *p_aicr1, int *p_aicr2,
+			     int *p_ichg1, int *p_ichg2)
+{
+	int total_ichg;
+	int total_aicr;
+
+	if (watt <= 0)
+		watt = 18;
+	if (vbus_mv < 4000)
+		vbus_mv = 5000;
+	if (vbat_mv < 3400)
+		vbat_mv = 4000;
+
+	/* Input current: W / Vbus (in uA) */
+	total_aicr = (int)(((u64)watt * 1000000000ULL) / (u32)vbus_mv);
+
+	/* Battery charging current: (W * 0.90) / Vbat (in uA) */
+	total_ichg = (int)(((u64)watt * 900000000ULL) / (u32)vbat_mv);
+
+	/* Clamp total battery current safely between 500mA and 6.2A */
+	if (total_ichg < 500000)
+		total_ichg = 500000;
+	if (total_ichg > 6200000)
+		total_ichg = 6200000;
+
+	/* Distribute charging current between master (chg1) and slave (chg2) */
+	if (total_ichg <= 2000000) {
+		*p_ichg1 = total_ichg;
+		*p_ichg2 = 0;
+	} else {
+		*p_ichg1 = min(3200000, total_ichg / 2 + 200000);
+		*p_ichg2 = min(3000000, total_ichg - *p_ichg1);
+	}
+
+	/* Distribute input current */
+	if (total_aicr <= 2000000) {
+		*p_aicr1 = total_aicr;
+		*p_aicr2 = 0;
+	} else {
+		*p_aicr1 = min(3500000, total_aicr / 2 + 200000);
+		*p_aicr2 = min(3000000, total_aicr - *p_aicr1);
+	}
+}
+EXPORT_SYMBOL(pox_get_target_currents);
 
 static ssize_t battery_protect_soc_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
 {
