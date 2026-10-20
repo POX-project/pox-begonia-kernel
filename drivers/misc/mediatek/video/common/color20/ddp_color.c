@@ -305,23 +305,23 @@ int set_ios_color_custom(int sat, int contrast, int brightness, int sat_adj)
 {
 	if (sat < 0)
 		sat = 0;
-	else if (sat > 15)
-		sat = 15;
+	else if (sat > (GLOBAL_SAT_SIZE - 1))
+		sat = GLOBAL_SAT_SIZE - 1;
 
 	if (contrast < 0)
 		contrast = 0;
-	else if (contrast > 15)
-		contrast = 15;
+	else if (contrast > (CONTRAST_SIZE - 1))
+		contrast = CONTRAST_SIZE - 1;
 
 	if (brightness < 0)
 		brightness = 0;
-	else if (brightness > 15)
-		brightness = 15;
+	else if (brightness > (BRIGHTNESS_SIZE - 1))
+		brightness = BRIGHTNESS_SIZE - 1;
 
 	if (sat_adj < 0)
 		sat_adj = 0;
-	else if (sat_adj > 15)
-		sat_adj = 15;
+	else if (sat_adj > (COLOR_TUNING_INDEX - 1))
+		sat_adj = COLOR_TUNING_INDEX - 1;
 
 	mutex_lock(&g_pox_color_mode_lock);
 	pox_pq_profiles[COLOR_MODE_CUSTOM].sat = (unsigned int)sat;
@@ -2029,6 +2029,8 @@ void DpEngine_COLORonConfig(enum DISP_MODULE_ENUM module, void *__cmdq)
  * mechanism mtk_color_setbypass() uses on MT6785).  The COLOR block latches on
  * the next frame boundary, so this is safe while the display is running.
  */
+static void color_trigger_refresh(enum DISP_MODULE_ENUM module);
+
 static void pox_pq_apply_to_hw(void)
 {
 	enum DISP_MODULE_ENUM module = DISP_MODULE_COLOR0;
@@ -2043,6 +2045,7 @@ static void pox_pq_apply_to_hw(void)
 
 	DpEngine_COLORonInit(module, NULL);
 	DpEngine_COLORonConfig(module, NULL);
+	color_trigger_refresh(module);
 }
 
 
