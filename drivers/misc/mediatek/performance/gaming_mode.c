@@ -1940,6 +1940,72 @@ static ssize_t health_calibration_sysfs_store(struct kobject *kobj,
 static struct kobj_attribute health_calibration_kobj_attr =
 	__ATTR(health_calibration, 0644, health_calibration_sysfs_show, health_calibration_sysfs_store);
 
+static ssize_t opp_voltage_guard_sysfs_show(struct kobject *kobj,
+					    struct kobj_attribute *attr,
+					    char *buf)
+{
+	return sprintf(buf, "%d\n", pox_opp_voltage_guard_get());
+}
+
+static ssize_t opp_voltage_guard_sysfs_store(struct kobject *kobj,
+					     struct kobj_attribute *attr,
+					     const char *buf, size_t count)
+{
+	int val = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	pox_opp_voltage_guard_set(val);
+	return count;
+}
+
+static struct kobj_attribute opp_voltage_guard_kobj_attr =
+	__ATTR(opp_voltage_guard, 0644, opp_voltage_guard_sysfs_show, opp_voltage_guard_sysfs_store);
+
+static int opp_voltage_guard_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_opp_voltage_guard_get());
+	return 0;
+}
+
+static int opp_voltage_guard_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, opp_voltage_guard_proc_show, NULL);
+}
+
+static ssize_t opp_voltage_guard_proc_write(struct file *file,
+					    const char __user *buffer,
+					    size_t count, loff_t *pos)
+{
+	char kbuf[32];
+	int val;
+
+	if (count >= sizeof(kbuf))
+		return -EINVAL;
+
+	if (copy_from_user(kbuf, buffer, count))
+		return -EFAULT;
+
+	kbuf[count] = '\0';
+	if (kstrtoint(strim(kbuf), 10, &val) < 0)
+		return -EINVAL;
+
+	pox_opp_voltage_guard_set(val);
+	return count;
+}
+
+static const struct file_operations opp_voltage_guard_proc_fops = {
+	.open = opp_voltage_guard_proc_open,
+	.read = seq_read,
+	.write = opp_voltage_guard_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
 static int health_calibration_proc_show(struct seq_file *m, void *v)
 {
 	seq_printf(m, "%d\n", pox_health_calibration_get());
@@ -3058,6 +3124,10 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/health_calibration\n");
 
+	entry = proc_create("opp_voltage_guard", 0644, parent, &opp_voltage_guard_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/opp_voltage_guard\n");
+
 	entry = proc_create("health_status", 0444, parent, &health_status_proc_fops);
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/health_status\n");
@@ -3139,6 +3209,12 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 		pr_warn("Failed to create /sys/kernel/health_calibration (ret=%d)\n", ret);
 	else
 		pr_info("/sys/kernel/health_calibration created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &opp_voltage_guard_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/opp_voltage_guard (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/opp_voltage_guard created successfully\n");
 
 	ret = sysfs_create_file(kernel_kobj, &sched_bore_kobj_attr.attr);
 	if (ret)

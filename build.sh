@@ -586,10 +586,12 @@ on boot
     chmod 0644 /proc/perfmgr/camera_profile
     chmod 0644 /sys/kernel/camera_profile
     chmod 0644 /proc/perfmgr/health_calibration
+    chmod 0644 /proc/perfmgr/opp_voltage_guard
     chmod 0444 /proc/perfmgr/health_status
     chmod 0644 /proc/perfmgr/sched_bore
     chmod 0644 /proc/perfmgr/usb_cdrom
     chmod 0644 /sys/kernel/health_calibration
+    chmod 0644 /sys/kernel/opp_voltage_guard
     chmod 0644 /sys/kernel/sched_bore
     chmod 0644 /sys/kernel/sched_burst_penalty_scale
     chmod 0644 /sys/kernel/sched_burst_penalty_offset
