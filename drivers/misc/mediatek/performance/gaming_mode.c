@@ -774,10 +774,12 @@ static ssize_t gaming_mode_proc_write(struct file *file, const char __user *ubuf
 		val = GAMING_MODE_DISABLED;
 	} else if (strcasecmp(buf, "auto") == 0 || strcasecmp(buf, "dynamic") == 0) {
 		pox_pwr_auto = 1;
+		kp_auto_mode = 1;
 		pox_gaming_hint(pox_pwr_hint);
 		return count;
 	} else if (strcasecmp(buf, "manual") == 0) {
 		pox_pwr_auto = 0;
+		kp_auto_mode = 0;
 		cancel_delayed_work_sync(&pox_dynamic_work);
 		return count;
 	} else {
@@ -1746,6 +1748,17 @@ static ssize_t kp_auto_sysfs_store(struct kobject *kobj,
 		return -EINVAL;
 
 	kp_auto_mode = val ? 1 : 0;
+
+	/* Bind auto_kp to the real autonomous power engine: with auto_kp
+	 * off, the ROM hint is applied once and the guessing loop stops
+	 * overriding it; with auto_kp on, the engine keeps re-evaluating
+	 * every 8s.  A placebo toggle that only stores state is useless. */
+	pox_pwr_auto = kp_auto_mode;
+	cancel_delayed_work(&pox_dynamic_work);
+	if (pox_pwr_auto)
+		schedule_delayed_work(&pox_dynamic_work,
+				      msecs_to_jiffies(8000));
+
 	return count;
 }
 
