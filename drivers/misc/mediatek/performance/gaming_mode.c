@@ -80,12 +80,15 @@ static int pox_health_calibration_mode = 1;
 static int pox_opp_voltage_guard_enabled = 1;
 static unsigned long pox_health_brownout_preventions;
 
-/* BORE Scheduler Runtime Interface */
-static int sysctl_sched_bore = 1;
-static unsigned int sysctl_sched_burst_cache_lifetime = 75000000;
-static unsigned int sysctl_sched_burst_inherit_type = 2;
-static unsigned int sysctl_sched_burst_penalty_offset = 24;
-static unsigned int sysctl_sched_burst_penalty_scale = 1536;
+/* BORE Scheduler Runtime Interface
+ * Variables live in kernel/sched/fair.c where the CFS wakeup-preemption
+ * logic consumes them; they must never be static copies here, or these
+ * nodes would become placebos. */
+extern int sysctl_sched_bore;
+extern unsigned int sysctl_sched_burst_cache_lifetime;
+extern unsigned int sysctl_sched_burst_inherit_type;
+extern unsigned int sysctl_sched_burst_penalty_offset;
+extern unsigned int sysctl_sched_burst_penalty_scale;
 
 int color_mode_set(int mode)
 {

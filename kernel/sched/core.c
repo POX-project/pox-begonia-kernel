@@ -3561,6 +3561,12 @@ static void __sched_fork(unsigned long clone_flags, struct task_struct *p)
 	p->se.prev_sum_exec_runtime	= 0;
 	p->se.nr_migrations		= 0;
 	p->se.vruntime			= 0;
+
+	/* Pox BORE: new tasks start with an empty burst cache. */
+	p->se.burst_exec_hi		= 0;
+	p->se.burst_exec_lo		= 0;
+	p->se.burst_exec_acc		= 0;
+	p->se.burst_stamp		= 0;
 #ifdef CONFIG_SCHED_WALT
 	p->last_sleep_ts		= 0;
 #endif
