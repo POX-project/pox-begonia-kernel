@@ -22,6 +22,7 @@
 #include <linux/capability.h>
 #include <linux/jiffies.h>
 #include <linux/sched/loadavg.h>
+#include <linux/slab.h>
 
 #include "gaming_mode.h"
 
@@ -3154,6 +3155,307 @@ static const struct file_operations profile_proc_fops = {
 	.release = single_release,
 };
 
+/* =========================================================================
+ * Unified Pox Kernel Configuration Subsystem (/proc/perfmgr/pox_config)
+ * Single-file atomic read/write interface for Pox Manager
+ * Eliminates multi-process shell IPC overhead and prevents ADB/PC lag
+ * ========================================================================= */
+
+static void pox_config_apply_line(const char *key, const char *val_str)
+{
+	int val = 0;
+
+	if (strcmp(key, "kprofiles_custom") == 0) {
+		struct pox_kprofile_custom_tunables t = pox_custom_kp;
+		int matched = sscanf(val_str, "%d %d %d %d %d %d %d %d %d %d",
+				     &t.schedutil_up_little_us,
+				     &t.schedutil_down_little_us,
+				     &t.schedutil_up_big_us,
+				     &t.schedutil_down_big_us,
+				     &t.top_app_boost,
+				     &t.fg_boost,
+				     &t.gpu_boost,
+				     &t.dram_boost,
+				     &t.touch_boost,
+				     &t.rescue_opp);
+		if (matched >= 2)
+			pox_kprofile_custom_set(&t);
+		return;
+	}
+
+	if (kstrtoint(val_str, 10, &val) < 0)
+		return;
+
+	if (strcmp(key, "gaming_mode") == 0)
+		gaming_mode_set(val);
+	else if (strcmp(key, "kprofiles_mode") == 0)
+		kprofiles_mode_set(val);
+	else if (strcmp(key, "auto_kp") == 0) {
+		kp_auto_mode = val ? 1 : 0;
+		pox_pwr_auto = kp_auto_mode;
+		cancel_delayed_work(&pox_dynamic_work);
+		if (pox_pwr_auto)
+			schedule_delayed_work(&pox_dynamic_work, msecs_to_jiffies(8000));
+	} else if (strcmp(key, "health_calibration") == 0)
+		pox_health_calibration_set(val);
+	else if (strcmp(key, "opp_voltage_guard") == 0)
+		pox_opp_voltage_guard_set(val);
+	else if (strcmp(key, "hbm_mode") == 0)
+		hbm_mode_set(val);
+	else if (strcmp(key, "torch_brightness") == 0)
+		torch_brightness_set(val);
+	else if (strcmp(key, "color_mode") == 0)
+		set_ios_color_mode(val);
+	else if (strcmp(key, "true_tone") == 0)
+		pox_true_tone_set(val);
+	else if (strcmp(key, "touch_game_mode") == 0)
+		pox_touch_game_mode_set(val);
+	else if (strcmp(key, "touch_sensitivity") == 0)
+		pox_touch_sensitivity_set(val);
+	else if (strcmp(key, "dt2w") == 0)
+		pox_dt2w_set(val);
+	else if (strcmp(key, "dynamic_fsync") == 0)
+		pox_dynamic_fsync_set(val);
+	else if (strcmp(key, "fast_charge") == 0)
+		pox_fast_charge_set(val);
+	else if (strcmp(key, "charge_watt") == 0)
+		pox_charge_watt_set(val);
+	else if (strcmp(key, "pd_min_watt") == 0)
+		pox_pd_min_watt_set(val);
+	else if (strcmp(key, "pd_max_watt") == 0)
+		pox_pd_max_watt_set(val);
+	else if (strcmp(key, "headphone_gain") == 0)
+		pox_headphone_gain_set(val);
+	else if (strcmp(key, "mic_gain") == 0)
+		pox_mic_gain_set(val);
+	else if (strcmp(key, "active_mic") == 0)
+		pox_active_mic_set(val);
+	else if (strcmp(key, "vibrator_strength") == 0)
+		pox_vibrator_strength_set(val);
+	else if (strcmp(key, "camera_4k60") == 0)
+		camera_4k60_set(val);
+	else if (strcmp(key, "camera_slog3") == 0 || strcmp(key, "slog3") == 0)
+		camera_slog3_set(val);
+	else if (strcmp(key, "battery_bypass") == 0)
+		pox_battery_bypass_set(val);
+	else if (strcmp(key, "battery_limit") == 0)
+		pox_battery_limit_set(val);
+	else if (strcmp(key, "sched_bore") == 0)
+		sysctl_sched_bore = val ? 1 : 0;
+	else if (strcmp(key, "wakelock_blocker") == 0)
+		pox_wakelock_blocker_set(val);
+	else if (strcmp(key, "usb_cdrom") == 0)
+		pox_usb_cdrom_set(val);
+}
+
+static void pox_config_parse_and_apply(char *buf)
+{
+	char *line, *p;
+
+	p = buf;
+	while ((line = strsep(&p, "\r\n")) != NULL) {
+		char *key, *val_str, *sep;
+
+		line = strim(line);
+		if (!*line || *line == '#')
+			continue;
+
+		sep = strpbrk(line, "=:");
+		if (!sep)
+			continue;
+
+		*sep = '\0';
+		key = strim(line);
+		val_str = strim(sep + 1);
+
+		if (!*key || !*val_str)
+			continue;
+
+		pox_config_apply_line(key, val_str);
+	}
+}
+
+static int pox_config_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "gaming_mode=%d\n", gaming_mode_get());
+	seq_printf(m, "kprofiles_mode=%d\n", kprofiles_mode_get());
+	seq_printf(m, "auto_kp=%d\n", kp_auto_mode);
+	seq_printf(m, "kprofiles_custom=%d %d %d %d %d %d %d %d %d %d\n",
+		   pox_custom_kp.schedutil_up_little_us,
+		   pox_custom_kp.schedutil_down_little_us,
+		   pox_custom_kp.schedutil_up_big_us,
+		   pox_custom_kp.schedutil_down_big_us,
+		   pox_custom_kp.top_app_boost,
+		   pox_custom_kp.fg_boost,
+		   pox_custom_kp.gpu_boost,
+		   pox_custom_kp.dram_boost,
+		   pox_custom_kp.touch_boost,
+		   pox_custom_kp.rescue_opp);
+	seq_printf(m, "health_calibration=%d\n", pox_health_calibration_get());
+	seq_printf(m, "opp_voltage_guard=%d\n", pox_opp_voltage_guard_get());
+	seq_printf(m, "hbm_mode=%d\n", hbm_mode_get());
+	seq_printf(m, "torch_brightness=%d\n", torch_brightness_get());
+	seq_printf(m, "color_mode=%d\n", get_ios_color_mode());
+	seq_printf(m, "true_tone=%d\n", pox_true_tone_get());
+	seq_printf(m, "touch_game_mode=%d\n", pox_touch_game_mode_get());
+	seq_printf(m, "touch_sensitivity=%d\n", pox_touch_sensitivity_get());
+	seq_printf(m, "dt2w=%d\n", pox_dt2w_get());
+	seq_printf(m, "dynamic_fsync=%d\n", pox_dynamic_fsync_get());
+	seq_printf(m, "fast_charge=%d\n", pox_fast_charge_get());
+	seq_printf(m, "charge_watt=%d\n", pox_charge_watt_get());
+	seq_printf(m, "pd_min_watt=%d\n", pox_pd_min_watt_get());
+	seq_printf(m, "pd_max_watt=%d\n", pox_pd_max_watt_get());
+	seq_printf(m, "headphone_gain=%d\n", pox_headphone_gain_get());
+	seq_printf(m, "mic_gain=%d\n", pox_mic_gain_get());
+	seq_printf(m, "active_mic=%d\n", pox_active_mic_get());
+	seq_printf(m, "vibrator_strength=%d\n", pox_vibrator_strength_get());
+	seq_printf(m, "camera_4k60=%d\n", camera_4k60_get());
+	seq_printf(m, "camera_slog3=%d\n", camera_slog3_get());
+	seq_printf(m, "battery_bypass=%d\n", pox_battery_bypass_get());
+	seq_printf(m, "battery_limit=%d\n", pox_battery_limit_get());
+	seq_printf(m, "sched_bore=%d\n", sysctl_sched_bore);
+	seq_printf(m, "wakelock_blocker=%d\n", pox_wakelock_blocker_get());
+	seq_printf(m, "usb_cdrom=%d\n", pox_usb_cdrom_get());
+	return 0;
+}
+
+static ssize_t pox_config_proc_write(struct file *file, const char __user *ubuf,
+				     size_t count, loff_t *ppos)
+{
+	char *buf;
+
+	if (count == 0)
+		return 0;
+	if (count > 4096)
+		return -EINVAL;
+
+	buf = kmalloc(count + 1, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	if (copy_from_user(buf, ubuf, count)) {
+		kfree(buf);
+		return -EFAULT;
+	}
+	buf[count] = '\0';
+
+	pox_config_parse_and_apply(buf);
+
+	kfree(buf);
+	return count;
+}
+
+static int pox_config_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, pox_config_proc_show, NULL);
+}
+
+static const struct file_operations pox_config_proc_fops = {
+	.owner   = THIS_MODULE,
+	.open    = pox_config_proc_open,
+	.read    = seq_read,
+	.write   = pox_config_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+static ssize_t pox_config_sysfs_show(struct kobject *kobj,
+				     struct kobj_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE,
+			 "gaming_mode=%d\n"
+			 "kprofiles_mode=%d\n"
+			 "auto_kp=%d\n"
+			 "kprofiles_custom=%d %d %d %d %d %d %d %d %d %d\n"
+			 "health_calibration=%d\n"
+			 "opp_voltage_guard=%d\n"
+			 "hbm_mode=%d\n"
+			 "torch_brightness=%d\n"
+			 "color_mode=%d\n"
+			 "true_tone=%d\n"
+			 "touch_game_mode=%d\n"
+			 "touch_sensitivity=%d\n"
+			 "dt2w=%d\n"
+			 "dynamic_fsync=%d\n"
+			 "fast_charge=%d\n"
+			 "charge_watt=%d\n"
+			 "pd_min_watt=%d\n"
+			 "pd_max_watt=%d\n"
+			 "headphone_gain=%d\n"
+			 "mic_gain=%d\n"
+			 "active_mic=%d\n"
+			 "vibrator_strength=%d\n"
+			 "camera_4k60=%d\n"
+			 "camera_slog3=%d\n"
+			 "battery_bypass=%d\n"
+			 "battery_limit=%d\n"
+			 "sched_bore=%d\n"
+			 "wakelock_blocker=%d\n"
+			 "usb_cdrom=%d\n",
+			 gaming_mode_get(),
+			 kprofiles_mode_get(),
+			 kp_auto_mode,
+			 pox_custom_kp.schedutil_up_little_us,
+			 pox_custom_kp.schedutil_down_little_us,
+			 pox_custom_kp.schedutil_up_big_us,
+			 pox_custom_kp.schedutil_down_big_us,
+			 pox_custom_kp.top_app_boost,
+			 pox_custom_kp.fg_boost,
+			 pox_custom_kp.gpu_boost,
+			 pox_custom_kp.dram_boost,
+			 pox_custom_kp.touch_boost,
+			 pox_custom_kp.rescue_opp,
+			 pox_health_calibration_get(),
+			 pox_opp_voltage_guard_get(),
+			 hbm_mode_get(),
+			 torch_brightness_get(),
+			 get_ios_color_mode(),
+			 pox_true_tone_get(),
+			 pox_touch_game_mode_get(),
+			 pox_touch_sensitivity_get(),
+			 pox_dt2w_get(),
+			 pox_dynamic_fsync_get(),
+			 pox_fast_charge_get(),
+			 pox_charge_watt_get(),
+			 pox_pd_min_watt_get(),
+			 pox_pd_max_watt_get(),
+			 pox_headphone_gain_get(),
+			 pox_mic_gain_get(),
+			 pox_active_mic_get(),
+			 pox_vibrator_strength_get(),
+			 camera_4k60_get(),
+			 camera_slog3_get(),
+			 pox_battery_bypass_get(),
+			 pox_battery_limit_get(),
+			 sysctl_sched_bore,
+			 pox_wakelock_blocker_get(),
+			 pox_usb_cdrom_get());
+}
+
+static ssize_t pox_config_sysfs_store(struct kobject *kobj,
+				      struct kobj_attribute *attr,
+				      const char *buf, size_t count)
+{
+	char *kbuf;
+
+	if (count == 0)
+		return 0;
+	if (count > 4096)
+		return -EINVAL;
+
+	kbuf = kstrndup(buf, count, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	pox_config_parse_and_apply(kbuf);
+
+	kfree(kbuf);
+	return count;
+}
+
+static struct kobj_attribute pox_config_kobj_attr =
+	__ATTR(pox_config, 0644, pox_config_sysfs_show, pox_config_sysfs_store);
+
 /* ------------------ Init Function ------------------ */
 
 int init_gaming_mode(struct proc_dir_entry *parent)
@@ -3308,6 +3610,10 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/kprofiles_custom\n");
 
+	entry = proc_create("pox_config", 0666, parent, &pox_config_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/pox_config\n");
+
 	ret = sysfs_create_file(kernel_kobj, &gaming_mode_kobj_attr.attr);
 	if (ret)
 		pr_warn("Failed to create /sys/kernel/gaming_mode (ret=%d)\n", ret);
@@ -3407,6 +3713,12 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 		pr_warn("Failed to create /sys/kernel/usb_cdrom (ret=%d)\n", ret);
 	else
 		pr_info("/sys/kernel/usb_cdrom created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &pox_config_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/pox_config (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/pox_config created successfully\n");
 
 	/* Canonical Kprofiles kobject: /sys/kernel/kprofiles/{kp_mode, auto_kp} */
 	kp_kobj = kobject_create_and_add("kprofiles", kernel_kobj);
