@@ -1735,8 +1735,7 @@ static void check_battery_exist(struct charger_manager *info)
 			chr_info("boot_mode = %d, bypass battery check\n",
 				boot_mode);
 		else {
-			chr_err("battery doesn't exist, shutdown\n");
-			orderly_poweroff(true);
+			chr_err("battery doesn't exist, bypass shutdown (anti-shutdown guard)\n");
 		}
 	}
 }
