@@ -137,8 +137,10 @@ static int pox_hbm_forced_mode = 0;
 int pox_lm36273_hbm_set(int mode)
 {
 	int hbm_val = 0;
-	int std_max;
 	int target_max;
+	int cur_level;
+	int boost_pct;
+	int base_val;
 
 	if (mode < 0 || mode > 3)
 		return -EINVAL;
@@ -146,32 +148,53 @@ int pox_lm36273_hbm_set(int mode)
 	mutex_lock(&g_lm36273_led.lock);
 	pox_hbm_forced_mode = mode;
 
-	if (g_lm36273_led.client && g_lm36273_led.level > 0) {
+	/* If level has not been cached yet, default to full scale 2047 */
+	cur_level = g_lm36273_led.level;
+	if (cur_level <= 0)
+		cur_level = BL_LEVEL_MAX;
+
+	if (g_lm36273_led.client) {
 		if (mode > 0) {
 			target_max = (mode == 3) ? BL_HBM_L3 :
 				     (mode == 2 ? BL_HBM_L2 : BL_HBM_L1);
-			std_max = bl_level_remap[BL_LEVEL_MAX];
-			if (std_max <= 0)
-				std_max = 2047;
-			/* Scale current backlight level proportionally to new HBM ceiling */
-			hbm_val = (bl_level_remap[g_lm36273_led.level] * target_max) / std_max;
+
+			/*
+			 * Grading boost calculation:
+			 * Scale current grading level up towards the HBM ceiling
+			 * with an active boost multiplier for each grade:
+			 * L1: +12% boost
+			 * L2: +25% boost
+			 * L3: +40% boost (overdriving to 2047 max 30mA)
+			 */
+			boost_pct = (mode == 3) ? 140 :
+				    (mode == 2 ? 125 : 112);
+			base_val = bl_level_remap[cur_level];
+			hbm_val = (base_val * boost_pct) / 100;
 			if (hbm_val > target_max)
 				hbm_val = target_max;
-			if (hbm_val < bl_level_remap[g_lm36273_led.level])
-				hbm_val = bl_level_remap[g_lm36273_led.level];
+			if (hbm_val < base_val)
+				hbm_val = base_val;
 		} else {
-			hbm_val = bl_level_remap[g_lm36273_led.level];
+			hbm_val = bl_level_remap[cur_level];
 		}
+
+		/* Commit brightness to LM36273 IC */
 		lm36273_reg_write_bytes(LP36273_DISP_BB_LSB, hbm_val & 0x7);
 		lm36273_reg_write_bytes(LP36273_DISP_BB_MSB, hbm_val >> 3);
+
+		/* Ensure backlight and current sinks are enabled */
+		lm36273_reg_write_bytes(LP36273_DISP_BL_ENABLE, 0x17);
+		lm36273_reg_write_bytes(LP36273_DISP_BC2, 0xcd);
 		g_lm36273_led.hbm_on = (mode > 0) ? 1 : 0;
+		g_lm36273_led.level = cur_level;
 	}
 	mutex_unlock(&g_lm36273_led.lock);
 
-	pr_info("LM36273 High Brightness Mode (HBM Sunlight Overdrive): %s\n",
-		(mode == 3) ? "LEVEL 3 (27.5mA Max Sunlight Boost)" :
-		(mode == 2) ? "LEVEL 2 (25.3mA Boost)" :
-		(mode == 1) ? "LEVEL 1 (22.0mA Boost)" : "OFF (Standard Backlight Curve)");
+	pr_info("LM36273 High Brightness Mode (HBM Sunlight Overdrive): %s (hbm_val=%d)\n",
+		(mode == 3) ? "LEVEL 3 (30.0mA Max Sunlight Overdrive)" :
+		(mode == 2) ? "LEVEL 2 (26.0mA Boost)" :
+		(mode == 1) ? "LEVEL 1 (22.5mA Boost)" : "OFF (Standard Backlight Curve)",
+		hbm_val);
 
 	return 0;
 }
@@ -186,10 +209,11 @@ EXPORT_SYMBOL(pox_lm36273_hbm_get);
 int lm36273_brightness_set(int level)
 {
 	int tmp_bl = 0;
-	int std_max;
 	int target_max;
+	int boost_pct;
+	int base_val;
 
-	if (level < 0 || level > BL_LEVEL_MAX || level == g_lm36273_led.level)
+	if (level < 0 || level > BL_LEVEL_MAX)
 		return 0;
 
 	if (level == 0) {
@@ -197,15 +221,14 @@ int lm36273_brightness_set(int level)
 	} else if (pox_hbm_forced_mode > 0) {
 		target_max = (pox_hbm_forced_mode == 3) ? BL_HBM_L3 :
 			     (pox_hbm_forced_mode == 2 ? BL_HBM_L2 : BL_HBM_L1);
-		std_max = bl_level_remap[BL_LEVEL_MAX];
-		if (std_max <= 0)
-			std_max = 2047;
-		/* Proportional curve boost: scale current grading to HBM ceiling */
-		tmp_bl = (bl_level_remap[level] * target_max) / std_max;
+		boost_pct = (pox_hbm_forced_mode == 3) ? 140 :
+			    (pox_hbm_forced_mode == 2 ? 125 : 112);
+		base_val = bl_level_remap[level];
+		tmp_bl = (base_val * boost_pct) / 100;
 		if (tmp_bl > target_max)
 			tmp_bl = target_max;
-		if (tmp_bl < bl_level_remap[level])
-			tmp_bl = bl_level_remap[level];
+		if (tmp_bl < base_val)
+			tmp_bl = base_val;
 	} else {
 		tmp_bl = bl_level_remap[level];
 	}
@@ -417,7 +440,7 @@ static ssize_t led_i2c_reg_store(struct device *device,
 {
 	int rc = 0;
 	rc = led_i2c_reg_write((char *)buf, count);
-	return rc;
+	return (rc >= 0) ? count : rc;
 }
 
 static DEVICE_ATTR_RW(led_i2c_reg);
@@ -438,6 +461,7 @@ static int lm36273_probe(struct i2c_client *client,
 	pr_debug("lm36273_probe: %s\n", client->name);
 	g_lm36273_led.client = client;
 	mutex_init(&g_lm36273_led.lock);
+	g_lm36273_led.level = BL_LEVEL_MAX;
 	g_lm36273_led.hbm_on = 0;
 	
 	pr_debug("lm36273_sysfs create: %s\n", client->name);

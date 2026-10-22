@@ -451,9 +451,27 @@ static void disp_pwm_set_enabled(struct cmdqRecStruct *cmdq,
  * Returns:
  *  PWM duty in [0, 1023]
  */
+extern int pox_lm36273_hbm_get(void);
+int disp_pwm_get_max_backlight(enum disp_pwm_id_t id);
+
 static int disp_pwm_level_remap(enum disp_pwm_id_t id, int level_1024)
 {
-	return level_1024;
+	int mode = pox_lm36273_hbm_get();
+	int max_level = disp_pwm_get_max_backlight(id);
+	int boost_pct;
+	int boosted;
+
+	if (level_1024 <= 0 || mode <= 0)
+		return level_1024;
+
+	boost_pct = (mode == 3) ? 140 :
+		    (mode == 2 ? 125 : 112);
+
+	boosted = (level_1024 * boost_pct) / 100;
+	if (boosted > max_level)
+		boosted = max_level;
+
+	return boosted;
 }
 
 #define LOGBUFFERSIZE 384
@@ -556,6 +574,19 @@ int disp_bls_set_backlight(int level_1024)
 {
 	return disp_pwm_set_backlight(disp_pwm_get_main(), level_1024);
 }
+EXPORT_SYMBOL(disp_bls_set_backlight);
+
+int disp_pwm_get_backlight_level(void)
+{
+#ifndef CONFIG_FPGA_EARLY_PORTING
+	int index = index_of_pwm(disp_pwm_get_main());
+
+	return atomic_read(&g_pwm_backlight[index]);
+#else
+	return 1023;
+#endif
+}
+EXPORT_SYMBOL(disp_pwm_get_backlight_level);
 
 int disp_pwm_set_backlight(enum disp_pwm_id_t id, int level_1024)
 {

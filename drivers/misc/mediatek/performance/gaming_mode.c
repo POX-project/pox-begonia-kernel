@@ -203,10 +203,19 @@ EXPORT_SYMBOL(pox_camera_launch_boost);
 
 extern int pox_lm36273_hbm_set(int mode);
 extern int pox_lm36273_hbm_get(void);
+extern int disp_bls_set_backlight(int level_1024);
+extern int disp_pwm_get_backlight_level(void);
 
 int hbm_mode_set(int mode)
 {
-	return pox_lm36273_hbm_set(mode);
+	int ret = pox_lm36273_hbm_set(mode);
+	int cur_level = disp_pwm_get_backlight_level();
+
+	if (cur_level <= 0)
+		cur_level = 1023;
+	disp_bls_set_backlight(cur_level);
+
+	return ret;
 }
 EXPORT_SYMBOL(hbm_mode_set);
 

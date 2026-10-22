@@ -2198,7 +2198,7 @@ static long mtk_vcu_unlocked_compat_ioctl(struct file *file, unsigned int cmd,
 			return err;
 		break;
 	default:
-		pr_err("[VCU] Invalid cmd_number 0x%x.\n", cmd);
+		pr_err_ratelimited("[VCU] Invalid cmd_number 0x%x.\n", cmd);
 		break;
 	}
 	return ret;

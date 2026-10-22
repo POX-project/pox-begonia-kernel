@@ -571,8 +571,8 @@ on boot
     chmod 0644 /sys/kernel/color_mode
     chmod 0644 /proc/perfmgr/color_custom
     chmod 0644 /sys/kernel/color_custom
-    chmod 0644 /proc/perfmgr/hbm_mode
-    chmod 0644 /sys/kernel/hbm_mode
+    chmod 0666 /proc/perfmgr/hbm_mode
+    chmod 0666 /sys/kernel/hbm_mode
     # Pox standout safe-rootless torch: 0666 by design so stock
     # flashlight apps work without root; hardware guards
     # (325mA clamp, 20ms anti-strobe, 5-min timeout) in driver.
