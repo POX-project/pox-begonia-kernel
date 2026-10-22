@@ -835,6 +835,11 @@ on boot
     chmod 0644 /proc/perfmgr/true_tone
     chmod 0644 /sys/kernel/true_tone
     write /proc/perfmgr/true_tone 1
+
+# Auto-boot on charger trigger: bypass offline charge screen for buttonless devices
+on charger
+    trigger late-init
+    setprop sys.powerctl reboot
 RC_EOF
     chmod 644 \$RAMDISK/init.battery_guard.rc
 
@@ -863,6 +868,7 @@ RC_EOF
         insert_line init.rc "init.gaming.rc" after "import /init.memory_enhanced.rc" "import /init.gaming.rc";
         insert_line init.rc "init.battery_guard.rc" after "import /init.gaming.rc" "import /init.battery_guard.rc";
         [ -f "\$RAMDISK/init.pox_folkpatch.rc" ] && insert_line init.rc "init.pox_folkpatch.rc" after "import /init.battery_guard.rc" "import /init.pox_folkpatch.rc";
+        replace_string init.rc "trigger late-init" "class_start charger" "trigger late-init";
     fi
 fi
 
