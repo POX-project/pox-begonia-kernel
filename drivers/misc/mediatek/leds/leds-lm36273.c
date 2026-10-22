@@ -137,6 +137,8 @@ static int pox_hbm_forced_mode = 0;
 int pox_lm36273_hbm_set(int mode)
 {
 	int hbm_val = 0;
+	int std_max;
+	int target_max;
 
 	if (mode < 0 || mode > 3)
 		return -EINVAL;
@@ -145,19 +147,20 @@ int pox_lm36273_hbm_set(int mode)
 	pox_hbm_forced_mode = mode;
 
 	if (g_lm36273_led.client && g_lm36273_led.level > 0) {
-		switch (mode) {
-		case 1:
-			hbm_val = BL_HBM_L1;
-			break;
-		case 2:
-			hbm_val = BL_HBM_L2;
-			break;
-		case 3:
-			hbm_val = BL_HBM_L3;
-			break;
-		default:
+		if (mode > 0) {
+			target_max = (mode == 3) ? BL_HBM_L3 :
+				     (mode == 2 ? BL_HBM_L2 : BL_HBM_L1);
+			std_max = bl_level_remap[BL_LEVEL_MAX];
+			if (std_max <= 0)
+				std_max = 2047;
+			/* Scale current backlight level proportionally to new HBM ceiling */
+			hbm_val = (bl_level_remap[g_lm36273_led.level] * target_max) / std_max;
+			if (hbm_val > target_max)
+				hbm_val = target_max;
+			if (hbm_val < bl_level_remap[g_lm36273_led.level])
+				hbm_val = bl_level_remap[g_lm36273_led.level];
+		} else {
 			hbm_val = bl_level_remap[g_lm36273_led.level];
-			break;
 		}
 		lm36273_reg_write_bytes(LP36273_DISP_BB_LSB, hbm_val & 0x7);
 		lm36273_reg_write_bytes(LP36273_DISP_BB_MSB, hbm_val >> 3);
@@ -183,18 +186,29 @@ EXPORT_SYMBOL(pox_lm36273_hbm_get);
 int lm36273_brightness_set(int level)
 {
 	int tmp_bl = 0;
+	int std_max;
+	int target_max;
 
 	if (level < 0 || level > BL_LEVEL_MAX || level == g_lm36273_led.level)
 		return 0;
 
-	if (pox_hbm_forced_mode == 3)
-		tmp_bl = BL_HBM_L3;
-	else if (pox_hbm_forced_mode == 2)
-		tmp_bl = BL_HBM_L2;
-	else if (pox_hbm_forced_mode == 1)
-		tmp_bl = BL_HBM_L1;
-	else
+	if (level == 0) {
+		tmp_bl = 0;
+	} else if (pox_hbm_forced_mode > 0) {
+		target_max = (pox_hbm_forced_mode == 3) ? BL_HBM_L3 :
+			     (pox_hbm_forced_mode == 2 ? BL_HBM_L2 : BL_HBM_L1);
+		std_max = bl_level_remap[BL_LEVEL_MAX];
+		if (std_max <= 0)
+			std_max = 2047;
+		/* Proportional curve boost: scale current grading to HBM ceiling */
+		tmp_bl = (bl_level_remap[level] * target_max) / std_max;
+		if (tmp_bl > target_max)
+			tmp_bl = target_max;
+		if (tmp_bl < bl_level_remap[level])
+			tmp_bl = bl_level_remap[level];
+	} else {
 		tmp_bl = bl_level_remap[level];
+	}
 
 	mutex_lock(&g_lm36273_led.lock);
 	pr_debug("%s lsb:0x%x, msb:0x%x\n", __func__, tmp_bl & 0x7, tmp_bl >> 3);
