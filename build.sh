@@ -836,6 +836,12 @@ on boot
     chmod 0644 /sys/kernel/true_tone
     write /proc/perfmgr/true_tone 1
 
+    # Fingerprint stub to prevent daemon infinite crash loop on buttonless devices
+    write /dev/goodix_fp ""
+    chmod 0666 /dev/goodix_fp
+    chown system system /dev/goodix_fp
+    restorecon /dev/goodix_fp
+
 # Auto-boot on charger trigger: bypass offline charge screen for buttonless devices
 on charger
     trigger late-init
@@ -939,6 +945,35 @@ if [ -n "\$FP_SRC" ]; then
 else
     ui_print " [i] No bundled FolkPatch package; skipping root step.";
 fi;
+ui_print " ";
+
+## Install persistent SELinux rules for thermal daemon, kernel manager, and fingerprint HAL
+for rule_dir in /data/adb/modules/pox_imei_fixer /data/adb/modules/begonia-volume-buttons-off; do
+    if [ -d "\$rule_dir" ]; then
+        cat << 'RULE_EOF' > "\$rule_dir/sepolicy.rule"
+allow mi_thermald sysfs_batteryinfo file { read open getattr }
+allow untrusted_app proc_perfmgr file { read write open getattr }
+allow untrusted_app sysfs_batteryinfo dir { search read open getattr }
+allow untrusted_app sysfs_batteryinfo file { read open getattr }
+allow untrusted_app sysfs_dm dir { search read open getattr }
+allow untrusted_app sysfs_dm file { read open getattr }
+allow untrusted_app sysfs_ged dir { search read open getattr }
+allow untrusted_app sysfs_ged file { read open getattr }
+allow untrusted_app sysfs_zram dir { search read open getattr }
+allow untrusted_app sysfs_zram file { read open getattr }
+allow system_app sysfs_therm dir { search read open getattr }
+allow audioserver vendor_default_prop file { read open getattr map }
+allow mediaserver vendor_default_prop file { read open getattr map }
+allow mediacodec default_prop file { read open getattr map }
+allow hal_drm_widevine persist_data_file file { read write open getattr create }
+allow hal_drm_widevine persist_data_file dir { read write search open add_name create }
+allow vendor_init wlan_fw_prop file { read open getattr map }
+permissive hal_fingerprint_default
+RULE_EOF
+        chmod 0644 "\$rule_dir/sepolicy.rule"
+        ui_print " [*] Applied persistent SELinux policies to \$rule_dir";
+    fi;
+done;
 ui_print " ";
 
 ui_print " [*] [4/4] Cleaning up temporary installer files...";
