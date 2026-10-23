@@ -493,16 +493,19 @@ end:
 }
 EXPORT_SYMBOL_GPL(vcu_ipi_send);
 
-static int vcu_ipi_get(struct mtk_vcu *vcu, unsigned long arg)
+static int vcu_ipi_get(struct mtk_vcu *vcu, unsigned long arg, size_t size)
 {
 	unsigned int i = 0;
 	int ret;
 	unsigned char *user_data_addr = NULL;
 	struct share_obj share_buff_data;
 
+	if (size > sizeof(struct share_obj))
+		size = sizeof(struct share_obj);
+
+	memset(&share_buff_data, 0, sizeof(share_buff_data));
 	user_data_addr = (unsigned char *)arg;
-	ret = (long)copy_from_user(&share_buff_data, user_data_addr,
-				   (unsigned long)sizeof(struct share_obj));
+	ret = (long)copy_from_user(&share_buff_data, user_data_addr, size);
 	if (ret != 0) {
 		pr_info("[VCU] %s(%d) Copy data from user failed!\n",
 			__func__, __LINE__);
@@ -510,6 +513,8 @@ static int vcu_ipi_get(struct mtk_vcu *vcu, unsigned long arg)
 	}
 
 	i = ipi_id_to_inst_id(share_buff_data.id);
+	if (i >= IPI_MAX)
+		return -EINVAL;
 
 	/* mutex protection here is unnecessary, since different app service
 	 * threads of daemon are corresponding to different vcu_ipi_get thread.
@@ -524,8 +529,7 @@ static int vcu_ipi_get(struct mtk_vcu *vcu, unsigned long arg)
 			vcu->vcuid, i, ret, __func__);
 		return ret;
 	}
-	ret = copy_to_user(user_data_addr, &vcu->user_obj[i],
-			   (unsigned long)sizeof(struct share_obj));
+	ret = copy_to_user(user_data_addr, &vcu->user_obj[i], size);
 	if (ret != 0) {
 		pr_info("[VCU] %s(%d) Copy data to user failed!\n",
 			__func__, __LINE__);
@@ -536,10 +540,13 @@ static int vcu_ipi_get(struct mtk_vcu *vcu, unsigned long arg)
 	return ret;
 }
 
-static int vcu_log_get(struct mtk_vcu *vcu, unsigned long arg)
+static int vcu_log_get(struct mtk_vcu *vcu, unsigned long arg, size_t size)
 {
 	int ret;
 	unsigned char *user_data_addr = NULL;
+
+	if (size > sizeof(struct log_test_nofuse))
+		size = sizeof(struct log_test_nofuse);
 
 	user_data_addr = (unsigned char *)arg;
 
@@ -551,8 +558,7 @@ static int vcu_log_get(struct mtk_vcu *vcu, unsigned long arg)
 		return ret;
 	}
 
-	ret = copy_to_user(user_data_addr, vcu->vdec_log_info,
-			   (unsigned long)sizeof(struct log_test_nofuse));
+	ret = copy_to_user(user_data_addr, vcu->vdec_log_info, size);
 	if (ret != 0) {
 		pr_info("[VCU] %s(%d) Copy data to user failed!\n",
 			__func__, __LINE__);
@@ -1911,10 +1917,16 @@ static long mtk_vcu_unlocked_ioctl(struct file *file, unsigned int cmd,
 		}
 		break;
 	case VCU_GET_OBJECT:
-		ret = vcu_ipi_get(vcu_dev, arg);
+		ret = vcu_ipi_get(vcu_dev, arg, sizeof(struct share_obj));
+		break;
+	case VCU_GET_OBJECT_LEGACY:
+		ret = vcu_ipi_get(vcu_dev, arg, 80);
 		break;
 	case VCU_GET_LOG_OBJECT:
-		ret = vcu_log_get(vcu_dev, arg);
+		ret = vcu_log_get(vcu_dev, arg, sizeof(struct log_test_nofuse));
+		break;
+	case VCU_GET_LOG_OBJECT_LEGACY:
+		ret = vcu_log_get(vcu_dev, arg, 1024);
 		break;
 #if !IS_ENABLED(CONFIG_VIDEO_MEDIATEK_VCODEC_LEGACY)
 	case VCU_SET_LOG_OBJECT:
@@ -2117,7 +2129,9 @@ static long mtk_vcu_unlocked_compat_ioctl(struct file *file, unsigned int cmd,
 	switch (cmd) {
 	case COMPAT_VCU_SET_OBJECT:
 	case VCU_GET_OBJECT:
+	case VCU_GET_OBJECT_LEGACY:
 	case VCU_GET_LOG_OBJECT:
+	case VCU_GET_LOG_OBJECT_LEGACY:
 #if !IS_ENABLED(CONFIG_VIDEO_MEDIATEK_VCODEC_LEGACY)
 	case VCU_SET_LOG_OBJECT:
 #endif
