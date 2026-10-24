@@ -368,8 +368,11 @@ void mtk_color_setbypass(enum DISP_MODULE_ENUM module, bool bypass);
 #define COLOR_MODE_TRUE_TONE    1
 #define COLOR_MODE_VIVID       2
 #define COLOR_MODE_SLOG3       3
+#define COLOR_MODE_CUSTOM      4
 
 int set_ios_color_mode(int mode);
 int get_ios_color_mode(void);
+int set_ios_color_custom(int sat, int contrast, int brightness, int sat_adj);
+void get_ios_color_custom(int *sat, int *contrast, int *brightness, int *sat_adj);
 
 #endif

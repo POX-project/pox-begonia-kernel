@@ -22,6 +22,7 @@
 #include <linux/capability.h>
 #include <linux/jiffies.h>
 #include <linux/sched/loadavg.h>
+#include <linux/slab.h>
 
 #include "gaming_mode.h"
 
@@ -41,6 +42,8 @@ extern int boost_write_for_perf_idx(int idx, int boost_value);
 extern int prefer_idle_for_perf_idx(int idx, int prefer_idle);
 extern int set_ios_color_mode(int mode);
 extern int get_ios_color_mode(void);
+extern int set_ios_color_custom(int sat, int contrast, int brightness, int sat_adj);
+extern void get_ios_color_custom(int *sat, int *contrast, int *brightness, int *sat_adj);
 extern int pox_dynamic_fsync_get(void);
 extern void pox_dynamic_fsync_set(int enable);
 
@@ -68,6 +71,26 @@ static atomic_t pox_cam_active_sessions = ATOMIC_INIT(0);
 static struct delayed_work pox_cam_boost_decay_work;
 static DEFINE_MUTEX(gaming_mode_lock);
 
+/* Kprofiles Compatibility State Machine */
+static struct kobject *kp_kobj;
+static int kp_auto_mode = 1;
+
+/* Phone Health & Silicon OPP Table Calibration Engine */
+/* Modes: 0=Disabled, 1=Auto-Adaptive (default), 2=Performance Guard, 3=Maximum Longevity */
+static int pox_health_calibration_mode = 1;
+static int pox_opp_voltage_guard_enabled = 1;
+static unsigned long pox_health_brownout_preventions;
+
+/* BORE Scheduler Runtime Interface
+ * Variables live in kernel/sched/fair.c where the CFS wakeup-preemption
+ * logic consumes them; they must never be static copies here, or these
+ * nodes would become placebos. */
+extern int sysctl_sched_bore;
+extern unsigned int sysctl_sched_burst_cache_lifetime;
+extern unsigned int sysctl_sched_burst_inherit_type;
+extern unsigned int sysctl_sched_burst_penalty_offset;
+extern unsigned int sysctl_sched_burst_penalty_scale;
+
 int color_mode_set(int mode)
 {
 	return set_ios_color_mode(mode);
@@ -79,6 +102,19 @@ int color_mode_get(void)
 	return get_ios_color_mode();
 }
 EXPORT_SYMBOL(color_mode_get);
+
+int pox_color_custom_set(int sat, int contrast, int brightness, int sat_adj)
+{
+	user_color_mode_override = COLOR_MODE_CUSTOM;
+	return set_ios_color_custom(sat, contrast, brightness, sat_adj);
+}
+EXPORT_SYMBOL(pox_color_custom_set);
+
+void pox_color_custom_get(int *sat, int *contrast, int *brightness, int *sat_adj)
+{
+	get_ios_color_custom(sat, contrast, brightness, sat_adj);
+}
+EXPORT_SYMBOL(pox_color_custom_get);
 
 int pox_true_tone_set(int enable)
 {
@@ -167,10 +203,19 @@ EXPORT_SYMBOL(pox_camera_launch_boost);
 
 extern int pox_lm36273_hbm_set(int mode);
 extern int pox_lm36273_hbm_get(void);
+extern int disp_bls_set_backlight(int level_1024);
+extern int disp_pwm_get_backlight_level(void);
 
 int hbm_mode_set(int mode)
 {
-	return pox_lm36273_hbm_set(mode);
+	int ret = pox_lm36273_hbm_set(mode);
+	int cur_level = disp_pwm_get_backlight_level();
+
+	if (cur_level <= 0)
+		cur_level = 1023;
+	disp_bls_set_backlight(cur_level);
+
+	return ret;
 }
 EXPORT_SYMBOL(hbm_mode_set);
 
@@ -216,25 +261,50 @@ static void pox_memory_preset(int mode)
 {
 	if (mode > 0) {
 		vm_swappiness = 100;
-		watermark_scale_factor = 150;
+		watermark_scale_factor = 200;
 		sysctl_vfs_cache_pressure = 50;
 		page_cluster = 0;
 		vm_dirty_ratio = 10;
 		dirty_background_ratio = 5;
 	} else if (mode == GAMING_MODE_POWERSAVE) {
 		vm_swappiness = 60;
-		watermark_scale_factor = 50;
+		watermark_scale_factor = 100;
 		sysctl_vfs_cache_pressure = 100;
 		page_cluster = 0;
 		vm_dirty_ratio = 20;
 		dirty_background_ratio = 10;
 	} else {
 		vm_swappiness = 100;
-		watermark_scale_factor = 100;
-		sysctl_vfs_cache_pressure = 75;
+		watermark_scale_factor = 150;
+		sysctl_vfs_cache_pressure = 50;
 		page_cluster = 0;
 		vm_dirty_ratio = 20;
 		dirty_background_ratio = 10;
+	}
+}
+
+static void pox_health_calibration_sync(void)
+{
+	extern int battery_get_bat_temperature(void);
+	extern int battery_get_uisoc(void);
+	int btemp = battery_get_bat_temperature();
+	int soc = battery_get_uisoc();
+
+	if (!pox_opp_voltage_guard_enabled || pox_health_calibration_mode == 0)
+		return;
+
+	/* Dynamic compensation:
+	 * If battery is degraded, low (<=20%), mode is Longevity (3), or high temp (>=45C):
+	 * clamp Cortex-A76 big core peak rescue OPP to safe level 2 (1.8GHz)
+	 * to prevent high-current VBUS/battery internal resistance collapse & PMIC UVLO trips,
+	 * while accelerating Little A55 schedutil up-ramp to 250us to guarantee 0 UI thread freezes!
+	 */
+	if (soc <= 20 || pox_health_calibration_mode == 3 || btemp >= 450) {
+		fbt_cpu_set_rescue_opp_c(2);
+		schedutil_set_up_rate_limit_us(0, 250);
+	} else if (gaming_mode_state > 0) {
+		fbt_cpu_set_rescue_opp_c(0);
+		schedutil_set_up_rate_limit_us(0, 500);
 	}
 }
 
@@ -243,6 +313,7 @@ int gaming_mode_set(int mode)
 	mutex_lock(&gaming_mode_lock);
 
 	if (mode == gaming_mode_state) {
+		pox_health_calibration_sync();
 		mutex_unlock(&gaming_mode_lock);
 		return 0;
 	}
@@ -255,9 +326,11 @@ int gaming_mode_set(int mode)
 		extern int battery_get_uisoc(void);
 		int btemp = battery_get_bat_temperature(); /* deciC */
 		int soc = battery_get_uisoc();
-		if (mode >= GAMING_MODE_EXTREME &&
+		if (((mode >= GAMING_MODE_EXTREME) || (pox_health_calibration_mode == 3 && mode >= GAMING_MODE_ENABLED)) &&
+		    pox_opp_voltage_guard_enabled &&
 		    !pox_pwr_derate_hold && (btemp >= 450 || soc < 15)) {
 			pox_pwr_derate_hold = true;
+			pox_health_brownout_preventions++;
 			if (btemp >= 450) {
 				pox_pwr_thermal_derates++;
 				pr_info("Power learn: batt %d deciC hot, EXTREME->ENABLED (right power, no overheat)\n", btemp);
@@ -283,7 +356,22 @@ int gaming_mode_set(int mode)
 		fbt_cpu_set_rescue_percent(20); /* Rescue 33% earlier before vsync expiration */
 		fbt_cpu_set_variance(15);       /* Sensitive deviation threshold to catch spikes */
 		fbt_cpu_set_bhr(15);            /* Big Core Hold Rate raised for frame stability */
-		fbt_cpu_set_rescue_opp_c(0);    /* Uncap rescue ceiling to peak CPU frequency */
+
+		/* Silicon OPP Health Guard: if battery is degraded or <20%, clamp peak rescue OPP
+		 * to prevent Cortex-A76 big core voltage collapse while elevating Little A55 schedutil
+		 * ramp to ensure ZERO freezes and high UI responsiveness */
+		if (pox_opp_voltage_guard_enabled && pox_health_calibration_mode > 0) {
+			extern int battery_get_uisoc(void);
+			int soc = battery_get_uisoc();
+			if (soc <= 20 || pox_health_calibration_mode == 3) {
+				fbt_cpu_set_rescue_opp_c(2); /* Safe OPP level: no brownouts */
+				schedutil_set_up_rate_limit_us(0, 250); /* Faster Little A55 response */
+			} else {
+				fbt_cpu_set_rescue_opp_c(0); /* Uncap rescue ceiling to peak CPU frequency */
+			}
+		} else {
+			fbt_cpu_set_rescue_opp_c(0);
+		}
 
 		/* 2. Schedutil Instantaneous Ramp */
 		schedutil_set_up_rate_limit_us(0, 500);     /* Cluster 0 (A55): 500us ramp */
@@ -579,6 +667,7 @@ static void pox_dynamic_evaluate(struct work_struct *work)
 		gaming_mode_set(eff);
 		return;
 	}
+	pox_health_calibration_sync();
 	mutex_unlock(&gaming_mode_lock);
 
 	/* Autonomous: keep guessing forever in auto. 8s cadence is
@@ -695,16 +784,21 @@ static ssize_t gaming_mode_proc_write(struct file *file, const char __user *ubuf
 		val = GAMING_MODE_DISABLED;
 	} else if (strcasecmp(buf, "auto") == 0 || strcasecmp(buf, "dynamic") == 0) {
 		pox_pwr_auto = 1;
+		kp_auto_mode = 1;
 		pox_gaming_hint(pox_pwr_hint);
 		return count;
 	} else if (strcasecmp(buf, "manual") == 0) {
 		pox_pwr_auto = 0;
-		cancel_delayed_work(&pox_dynamic_work);
+		kp_auto_mode = 0;
+		cancel_delayed_work_sync(&pox_dynamic_work);
 		return count;
 	} else {
 		if (kstrtoint(buf, 10, &val) < 0)
 			return -EINVAL;
 	}
+
+	if (val < GAMING_MODE_POWERSAVE || val > GAMING_MODE_EXTREME)
+		return -EINVAL;
 
 	pox_gaming_hint(val);
 	return count;
@@ -729,7 +823,9 @@ static int color_mode_proc_show(struct seq_file *m, void *v)
 	int mode = get_ios_color_mode();
 
 	seq_printf(m, "color_mode: %d\n", mode);
-	if (mode == COLOR_MODE_SLOG3)
+	if (mode == COLOR_MODE_CUSTOM)
+		seq_printf(m, "status: Custom User Profile\n");
+	else if (mode == COLOR_MODE_SLOG3)
 		seq_printf(m, "status: Sony S-Log3 / Cinema Flat Profile (Logarithmic Dynamic Range for LUT Grading)\n");
 	else if (mode == COLOR_MODE_VIVID)
 		seq_printf(m, "status: iOS Vivid / Cinema HDR\n");
@@ -763,8 +859,8 @@ static ssize_t color_mode_proc_write(struct file *file, const char __user *ubuf,
 
 	if (val < 0)
 		val = 0;
-	else if (val > 3)
-		val = 3;
+	else if (val > 4)
+		val = 4;
 
 	user_color_mode_override = val;
 	set_ios_color_mode(val);
@@ -781,6 +877,54 @@ static const struct file_operations color_mode_proc_fops = {
 	.open    = color_mode_proc_open,
 	.read    = seq_read,
 	.write   = color_mode_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+static int color_custom_proc_show(struct seq_file *m, void *v)
+{
+	int sat = 4, con = 4, bri = 4, sat_adj = 0;
+
+	get_ios_color_custom(&sat, &con, &bri, &sat_adj);
+	seq_printf(m, "sat: %d\ncontrast: %d\nbrightness: %d\nsat_adj: %d\nvalues: %d %d %d %d\n",
+		   sat, con, bri, sat_adj, sat, con, bri, sat_adj);
+	return 0;
+}
+
+static ssize_t color_custom_proc_write(struct file *file, const char __user *ubuf,
+				       size_t count, loff_t *ppos)
+{
+	char buf[64];
+	int sat = 4, con = 4, bri = 4, sat_adj = 0;
+	size_t len;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	len = min(count, sizeof(buf) - 1);
+	if (copy_from_user(buf, ubuf, len))
+		return -EFAULT;
+	buf[len] = '\0';
+
+	if (sscanf(buf, "%d %d %d %d", &sat, &con, &bri, &sat_adj) >= 3 ||
+	    sscanf(buf, "%d,%d,%d,%d", &sat, &con, &bri, &sat_adj) >= 3) {
+		pox_color_custom_set(sat, con, bri, sat_adj);
+		return count;
+	}
+
+	return -EINVAL;
+}
+
+static int color_custom_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, color_custom_proc_show, NULL);
+}
+
+static const struct file_operations color_custom_proc_fops = {
+	.owner   = THIS_MODULE,
+	.open    = color_custom_proc_open,
+	.read    = seq_read,
+	.write   = color_custom_proc_write,
 	.llseek  = seq_lseek,
 	.release = single_release,
 };
@@ -882,6 +1026,9 @@ static ssize_t hbm_mode_proc_write(struct file *file, const char __user *ubuf,
 		if (kstrtoint(buf, 10, &val) < 0)
 			return -EINVAL;
 	}
+
+	if (val < HBM_MODE_OFF || val > HBM_MODE_L3)
+		return -EINVAL;
 
 	hbm_mode_set(val);
 	return count;
@@ -1186,13 +1333,13 @@ static ssize_t gaming_mode_sysfs_store(struct kobject *kobj,
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	if (sscanf(buf, "%d", &val) != 1)
+	if (kstrtoint(buf, 10, &val) < 0)
 		return -EINVAL;
 
-	if (val < 0)
-		val = 0;
-	else if (val > 2)
-		val = 2;
+	if (val < GAMING_MODE_POWERSAVE)
+		val = GAMING_MODE_POWERSAVE;
+	else if (val > GAMING_MODE_EXTREME)
+		val = GAMING_MODE_EXTREME;
 
 	pox_gaming_hint(val);
 	return count;
@@ -1221,8 +1368,8 @@ static ssize_t color_mode_sysfs_store(struct kobject *kobj,
 
 	if (val < 0)
 		val = 0;
-	else if (val > 3)
-		val = 3;
+	else if (val > 4)
+		val = 4;
 
 	user_color_mode_override = val;
 	set_ios_color_mode(val);
@@ -1231,6 +1378,36 @@ static ssize_t color_mode_sysfs_store(struct kobject *kobj,
 
 static struct kobj_attribute color_mode_kobj_attr =
 	__ATTR(color_mode, 0644, color_mode_sysfs_show, color_mode_sysfs_store);
+
+static ssize_t color_custom_sysfs_show(struct kobject *kobj,
+				       struct kobj_attribute *attr, char *buf)
+{
+	int sat = 4, con = 4, bri = 4, sat_adj = 0;
+
+	get_ios_color_custom(&sat, &con, &bri, &sat_adj);
+	return sprintf(buf, "%d %d %d %d\n", sat, con, bri, sat_adj);
+}
+
+static ssize_t color_custom_sysfs_store(struct kobject *kobj,
+				        struct kobj_attribute *attr,
+				        const char *buf, size_t count)
+{
+	int sat = 4, con = 4, bri = 4, sat_adj = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (sscanf(buf, "%d %d %d %d", &sat, &con, &bri, &sat_adj) >= 3 ||
+	    sscanf(buf, "%d,%d,%d,%d", &sat, &con, &bri, &sat_adj) >= 3) {
+		pox_color_custom_set(sat, con, bri, sat_adj);
+		return count;
+	}
+
+	return -EINVAL;
+}
+
+static struct kobj_attribute color_custom_kobj_attr =
+	__ATTR(color_custom, 0644, color_custom_sysfs_show, color_custom_sysfs_store);
 
 static struct kobj_attribute camera_profile_kobj_attr =
 	__ATTR(camera_profile, 0644, color_mode_sysfs_show, color_mode_sysfs_store);
@@ -1275,7 +1452,10 @@ static ssize_t hbm_mode_sysfs_store(struct kobject *kobj,
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 
-	if (sscanf(buf, "%d", &val) != 1)
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < HBM_MODE_OFF || val > HBM_MODE_L3)
 		return -EINVAL;
 
 	hbm_mode_set(val);
@@ -1379,6 +1559,808 @@ static ssize_t slog3_sysfs_store(struct kobject *kobj,
 static struct kobj_attribute slog3_kobj_attr =
 	__ATTR(slog3, 0644, slog3_sysfs_show, slog3_sysfs_store);
 
+/* =========================================================================
+ * Kprofiles Compatibility Subsystem
+ * Exposes /sys/kernel/kprofiles/kp_mode, auto_kp, and custom_params
+ * Modes: 0=Disabled/None, 1=Battery, 2=Balanced, 3=Performance, 4=Custom
+ * ========================================================================= */
+
+static int kprofiles_custom_active;
+
+static struct pox_kprofile_custom_tunables pox_custom_kp = {
+	.schedutil_up_little_us = 500,
+	.schedutil_down_little_us = 20000,
+	.schedutil_up_big_us = 200,
+	.schedutil_down_big_us = 20000,
+	.top_app_boost = 20,
+	.fg_boost = 5,
+	.gpu_boost = 1,
+	.dram_boost = 0,
+	.touch_boost = 1,
+	.rescue_opp = 0,
+};
+
+static void pox_kprofile_apply_custom_hardware(void)
+{
+	/* 1. Rescue OPP */
+	fbt_cpu_set_ultra_rescue(1);
+	fbt_cpu_set_rescue_percent(20);
+	fbt_cpu_set_variance(15);
+	fbt_cpu_set_bhr(15);
+	fbt_cpu_set_rescue_opp_c(pox_custom_kp.rescue_opp);
+
+	/* 2. Schedutil up/down rate limits */
+	schedutil_set_up_rate_limit_us(0, pox_custom_kp.schedutil_up_little_us);
+	schedutil_set_down_rate_limit_us(0, pox_custom_kp.schedutil_down_little_us);
+	schedutil_set_up_rate_limit_us(6, pox_custom_kp.schedutil_up_big_us);
+	schedutil_set_down_rate_limit_us(6, pox_custom_kp.schedutil_down_big_us);
+
+	/* 3. GPU DVFS & gaming boost */
+	ged_kpi_set_gaming_boost(pox_custom_kp.gpu_boost ? 1 : 0);
+	ged_dvfs_set_gaming_boost(pox_custom_kp.gpu_boost ? 1 : 0);
+	eara_pass_perf_first_hint(pox_custom_kp.gpu_boost ? 1 : 0);
+
+	/* 4. SchedTune boost */
+	boost_write_for_perf_idx(3, pox_custom_kp.top_app_boost);
+	prefer_idle_for_perf_idx(3, 1);
+	boost_write_for_perf_idx(1, pox_custom_kp.fg_boost);
+	prefer_idle_for_perf_idx(1, 1);
+
+	/* 5. DRAM boost */
+	if (pox_custom_kp.dram_boost)
+		fbt_boost_dram(1);
+	else
+		fbt_boost_dram(0);
+
+	/* 6. Hardware touch boost */
+	{
+		extern int pox_touch_game_mode_set(int enable);
+		extern int pox_touch_sensitivity_set(int val);
+		pox_touch_game_mode_set(pox_custom_kp.touch_boost ? 1 : 0);
+		pox_touch_sensitivity_set(pox_custom_kp.touch_boost ? 2 : 0);
+	}
+}
+
+int pox_kprofile_custom_set(const struct pox_kprofile_custom_tunables *tunables)
+{
+	if (!tunables)
+		return -EINVAL;
+
+	pox_custom_kp = *tunables;
+
+	/* Clamp within safe hardware bounds */
+	if (pox_custom_kp.schedutil_up_little_us < 50) pox_custom_kp.schedutil_up_little_us = 50;
+	else if (pox_custom_kp.schedutil_up_little_us > 5000) pox_custom_kp.schedutil_up_little_us = 5000;
+
+	if (pox_custom_kp.schedutil_down_little_us < 500) pox_custom_kp.schedutil_down_little_us = 500;
+	else if (pox_custom_kp.schedutil_down_little_us > 100000) pox_custom_kp.schedutil_down_little_us = 100000;
+
+	if (pox_custom_kp.schedutil_up_big_us < 50) pox_custom_kp.schedutil_up_big_us = 50;
+	else if (pox_custom_kp.schedutil_up_big_us > 5000) pox_custom_kp.schedutil_up_big_us = 5000;
+
+	if (pox_custom_kp.schedutil_down_big_us < 500) pox_custom_kp.schedutil_down_big_us = 500;
+	else if (pox_custom_kp.schedutil_down_big_us > 100000) pox_custom_kp.schedutil_down_big_us = 100000;
+
+	if (pox_custom_kp.top_app_boost < 0) pox_custom_kp.top_app_boost = 0;
+	else if (pox_custom_kp.top_app_boost > 100) pox_custom_kp.top_app_boost = 100;
+
+	if (pox_custom_kp.fg_boost < 0) pox_custom_kp.fg_boost = 0;
+	else if (pox_custom_kp.fg_boost > 100) pox_custom_kp.fg_boost = 100;
+
+	pox_custom_kp.gpu_boost = pox_custom_kp.gpu_boost ? 1 : 0;
+	pox_custom_kp.dram_boost = pox_custom_kp.dram_boost ? 1 : 0;
+	pox_custom_kp.touch_boost = pox_custom_kp.touch_boost ? 1 : 0;
+	if (pox_custom_kp.rescue_opp < 0) pox_custom_kp.rescue_opp = 0;
+	else if (pox_custom_kp.rescue_opp > 4) pox_custom_kp.rescue_opp = 4;
+
+	if (kprofiles_custom_active)
+		pox_kprofile_apply_custom_hardware();
+
+	return 0;
+}
+EXPORT_SYMBOL(pox_kprofile_custom_set);
+
+void pox_kprofile_custom_get(struct pox_kprofile_custom_tunables *tunables)
+{
+	if (tunables)
+		*tunables = pox_custom_kp;
+}
+EXPORT_SYMBOL(pox_kprofile_custom_get);
+
+int kprofiles_mode_get(void)
+{
+	int gm;
+
+	if (kprofiles_custom_active)
+		return 4; /* Custom */
+
+	gm = gaming_mode_get();
+	switch (gm) {
+	case GAMING_MODE_POWERSAVE:
+		return 1; /* Battery */
+	case GAMING_MODE_ENABLED:
+	case GAMING_MODE_EXTREME:
+		return 3; /* Performance */
+	case GAMING_MODE_DISABLED:
+	default:
+		return 2; /* Balanced */
+	}
+}
+EXPORT_SYMBOL(kprofiles_mode_get);
+
+int kprofiles_mode_set(int mode)
+{
+	if (mode == 4) {
+		kprofiles_custom_active = 1;
+		pox_kprofile_apply_custom_hardware();
+		return 0;
+	}
+
+	kprofiles_custom_active = 0;
+	switch (mode) {
+	case 1: /* Battery / Powersave */
+		return gaming_mode_set(GAMING_MODE_POWERSAVE);
+	case 2: /* Balanced */
+		return gaming_mode_set(GAMING_MODE_DISABLED);
+	case 3: /* Performance / Gaming */
+		return gaming_mode_set(GAMING_MODE_ENABLED);
+	case 0: /* Disabled / None -> Defaults to Balanced */
+	default:
+		return gaming_mode_set(GAMING_MODE_DISABLED);
+	}
+}
+EXPORT_SYMBOL(kprofiles_mode_set);
+
+static ssize_t kp_mode_sysfs_show(struct kobject *kobj,
+				  struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", kprofiles_mode_get());
+}
+
+static ssize_t kp_mode_sysfs_store(struct kobject *kobj,
+				   struct kobj_attribute *attr,
+				   const char *buf, size_t count)
+{
+	int val = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 4)
+		return -EINVAL;
+
+	kprofiles_mode_set(val);
+	return count;
+}
+
+static struct kobj_attribute kp_mode_kobj_attr =
+	__ATTR(kp_mode, 0644, kp_mode_sysfs_show, kp_mode_sysfs_store);
+
+static ssize_t kp_auto_sysfs_show(struct kobject *kobj,
+				  struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", kp_auto_mode);
+}
+
+static ssize_t kp_auto_sysfs_store(struct kobject *kobj,
+				   struct kobj_attribute *attr,
+				   const char *buf, size_t count)
+{
+	int val = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	kp_auto_mode = val ? 1 : 0;
+
+	/* Bind auto_kp to the real autonomous power engine: with auto_kp
+	 * off, the ROM hint is applied once and the guessing loop stops
+	 * overriding it; with auto_kp on, the engine keeps re-evaluating
+	 * every 8s.  A placebo toggle that only stores state is useless. */
+	pox_pwr_auto = kp_auto_mode;
+	cancel_delayed_work(&pox_dynamic_work);
+	if (pox_pwr_auto)
+		schedule_delayed_work(&pox_dynamic_work,
+				      msecs_to_jiffies(8000));
+
+	return count;
+}
+
+static struct kobj_attribute kp_auto_kobj_attr =
+	__ATTR(auto_kp, 0644, kp_auto_sysfs_show, kp_auto_sysfs_store);
+
+static ssize_t kp_custom_sysfs_show(struct kobject *kobj,
+				    struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d %d %d %d %d %d %d %d %d %d\n",
+		       pox_custom_kp.schedutil_up_little_us,
+		       pox_custom_kp.schedutil_down_little_us,
+		       pox_custom_kp.schedutil_up_big_us,
+		       pox_custom_kp.schedutil_down_big_us,
+		       pox_custom_kp.top_app_boost,
+		       pox_custom_kp.fg_boost,
+		       pox_custom_kp.gpu_boost,
+		       pox_custom_kp.dram_boost,
+		       pox_custom_kp.touch_boost,
+		       pox_custom_kp.rescue_opp);
+}
+
+static ssize_t kp_custom_sysfs_store(struct kobject *kobj,
+				     struct kobj_attribute *attr,
+				     const char *buf, size_t count)
+{
+	struct pox_kprofile_custom_tunables t;
+	int matched;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	t = pox_custom_kp;
+	matched = sscanf(buf, "%d %d %d %d %d %d %d %d %d %d",
+			 &t.schedutil_up_little_us,
+			 &t.schedutil_down_little_us,
+			 &t.schedutil_up_big_us,
+			 &t.schedutil_down_big_us,
+			 &t.top_app_boost,
+			 &t.fg_boost,
+			 &t.gpu_boost,
+			 &t.dram_boost,
+			 &t.touch_boost,
+			 &t.rescue_opp);
+	if (matched < 2)
+		return -EINVAL;
+
+	pox_kprofile_custom_set(&t);
+	return count;
+}
+
+static struct kobj_attribute kp_custom_kobj_attr =
+	__ATTR(custom_params, 0644, kp_custom_sysfs_show, kp_custom_sysfs_store);
+
+static int kprofiles_custom_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d %d %d %d %d %d %d %d %d %d\n",
+		   pox_custom_kp.schedutil_up_little_us,
+		   pox_custom_kp.schedutil_down_little_us,
+		   pox_custom_kp.schedutil_up_big_us,
+		   pox_custom_kp.schedutil_down_big_us,
+		   pox_custom_kp.top_app_boost,
+		   pox_custom_kp.fg_boost,
+		   pox_custom_kp.gpu_boost,
+		   pox_custom_kp.dram_boost,
+		   pox_custom_kp.touch_boost,
+		   pox_custom_kp.rescue_opp);
+	return 0;
+}
+
+static ssize_t kprofiles_custom_proc_write(struct file *file, const char __user *ubuf,
+					   size_t count, loff_t *ppos)
+{
+	char buf[128];
+	size_t len;
+	struct pox_kprofile_custom_tunables t;
+	int matched;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	len = min(count, sizeof(buf) - 1);
+	if (copy_from_user(buf, ubuf, len))
+		return -EFAULT;
+	buf[len] = '\0';
+
+	t = pox_custom_kp;
+	matched = sscanf(buf, "%d %d %d %d %d %d %d %d %d %d",
+			 &t.schedutil_up_little_us,
+			 &t.schedutil_down_little_us,
+			 &t.schedutil_up_big_us,
+			 &t.schedutil_down_big_us,
+			 &t.top_app_boost,
+			 &t.fg_boost,
+			 &t.gpu_boost,
+			 &t.dram_boost,
+			 &t.touch_boost,
+			 &t.rescue_opp);
+	if (matched < 2)
+		return -EINVAL;
+
+	pox_kprofile_custom_set(&t);
+	return count;
+}
+
+static int kprofiles_custom_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, kprofiles_custom_proc_show, NULL);
+}
+
+static const struct file_operations kprofiles_custom_proc_fops = {
+	.owner   = THIS_MODULE,
+	.open    = kprofiles_custom_proc_open,
+	.read    = seq_read,
+	.write   = kprofiles_custom_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+static struct attribute *kp_attrs[] = {
+	&kp_mode_kobj_attr.attr,
+	&kp_auto_kobj_attr.attr,
+	&kp_custom_kobj_attr.attr,
+	NULL,
+};
+
+static struct attribute_group kp_attr_group = {
+	.attrs = kp_attrs,
+};
+
+/* =========================================================================
+ * Phone Health & Silicon OPP Table Calibration Engine
+ * Dynamically calibrates CPU/GPU OPP tables to match live battery health,
+ * internal resistance, and temperature to ensure ZERO freezes & brownouts.
+ * ========================================================================= */
+
+int pox_health_calibration_get(void)
+{
+	return pox_health_calibration_mode;
+}
+EXPORT_SYMBOL(pox_health_calibration_get);
+
+int pox_health_calibration_set(int mode)
+{
+	if (mode < 0 || mode > 3)
+		return -EINVAL;
+
+	pox_health_calibration_mode = mode;
+	pox_health_calibration_sync();
+	pr_info("Phone Health Silicon Calibration Mode set to: %d\n", mode);
+	return 0;
+}
+EXPORT_SYMBOL(pox_health_calibration_set);
+
+int pox_opp_voltage_guard_get(void)
+{
+	return pox_opp_voltage_guard_enabled;
+}
+EXPORT_SYMBOL(pox_opp_voltage_guard_get);
+
+int pox_opp_voltage_guard_set(int enable)
+{
+	pox_opp_voltage_guard_enabled = enable ? 1 : 0;
+	pox_health_calibration_sync();
+	pr_info("OPP Voltage Brownout Guard set to: %s\n", enable ? "ENABLED" : "DISABLED");
+	return 0;
+}
+EXPORT_SYMBOL(pox_opp_voltage_guard_set);
+
+static ssize_t health_calibration_sysfs_show(struct kobject *kobj,
+					     struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", pox_health_calibration_get());
+}
+
+static ssize_t health_calibration_sysfs_store(struct kobject *kobj,
+					      struct kobj_attribute *attr,
+					      const char *buf, size_t count)
+{
+	int val = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	pox_health_calibration_set(val);
+	return count;
+}
+
+static struct kobj_attribute health_calibration_kobj_attr =
+	__ATTR(health_calibration, 0644, health_calibration_sysfs_show, health_calibration_sysfs_store);
+
+static ssize_t opp_voltage_guard_sysfs_show(struct kobject *kobj,
+					    struct kobj_attribute *attr,
+					    char *buf)
+{
+	return sprintf(buf, "%d\n", pox_opp_voltage_guard_get());
+}
+
+static ssize_t opp_voltage_guard_sysfs_store(struct kobject *kobj,
+					     struct kobj_attribute *attr,
+					     const char *buf, size_t count)
+{
+	int val = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	pox_opp_voltage_guard_set(val);
+	return count;
+}
+
+static struct kobj_attribute opp_voltage_guard_kobj_attr =
+	__ATTR(opp_voltage_guard, 0644, opp_voltage_guard_sysfs_show, opp_voltage_guard_sysfs_store);
+
+static int opp_voltage_guard_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_opp_voltage_guard_get());
+	return 0;
+}
+
+static int opp_voltage_guard_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, opp_voltage_guard_proc_show, NULL);
+}
+
+static ssize_t opp_voltage_guard_proc_write(struct file *file,
+					    const char __user *buffer,
+					    size_t count, loff_t *pos)
+{
+	char kbuf[32];
+	int val;
+
+	if (count >= sizeof(kbuf))
+		return -EINVAL;
+
+	if (copy_from_user(kbuf, buffer, count))
+		return -EFAULT;
+
+	kbuf[count] = '\0';
+	if (kstrtoint(strim(kbuf), 10, &val) < 0)
+		return -EINVAL;
+
+	pox_opp_voltage_guard_set(val);
+	return count;
+}
+
+static const struct file_operations opp_voltage_guard_proc_fops = {
+	.open = opp_voltage_guard_proc_open,
+	.read = seq_read,
+	.write = opp_voltage_guard_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int health_calibration_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_health_calibration_get());
+	return 0;
+}
+
+static int health_calibration_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, health_calibration_proc_show, NULL);
+}
+
+static ssize_t health_calibration_proc_write(struct file *file, const char __user *buffer,
+					     size_t count, loff_t *pos)
+{
+	char kbuf[32];
+	int val;
+
+	if (count >= sizeof(kbuf))
+		return -EINVAL;
+
+	if (copy_from_user(kbuf, buffer, count))
+		return -EFAULT;
+
+	kbuf[count] = '\0';
+	if (kstrtoint(strim(kbuf), 10, &val) < 0)
+		return -EINVAL;
+
+	pox_health_calibration_set(val);
+	return count;
+}
+
+static const struct file_operations health_calibration_proc_fops = {
+	.open = health_calibration_proc_open,
+	.read = seq_read,
+	.write = health_calibration_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+static int health_status_proc_show(struct seq_file *m, void *v)
+{
+	extern int battery_get_bat_temperature(void);
+	extern int battery_get_uisoc(void);
+	int btemp = battery_get_bat_temperature();
+	int soc = battery_get_uisoc();
+	int mode = pox_health_calibration_get();
+	int guard = pox_opp_voltage_guard_get();
+
+	pox_health_calibration_sync();
+	seq_printf(m, "health_mode=%d\n", mode);
+	seq_printf(m, "opp_voltage_guard=%d\n", guard);
+	seq_printf(m, "battery_temp_decic=%d\n", btemp);
+	seq_printf(m, "battery_soc=%d\n", soc);
+	seq_printf(m, "brownout_preventions=%lu\n", pox_health_brownout_preventions);
+	seq_printf(m, "thermal_derates=%lu\n", pox_pwr_thermal_derates);
+	seq_printf(m, "battery_derates=%lu\n", pox_pwr_battery_derates);
+	seq_printf(m, "anti_freeze_watchdog=armed\n");
+	seq_printf(m, "status=%s\n", (btemp < 450 && soc > 15) ? "OPTIMAL_PERFORMANCE" : "GUARD_PROTECTED");
+	return 0;
+}
+
+static int health_status_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, health_status_proc_show, NULL);
+}
+
+static const struct file_operations health_status_proc_fops = {
+	.open = health_status_proc_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+/* =========================================================================
+ * BORE (Burst-Oriented Response Enhancer) Scheduler Interface
+ * ========================================================================= */
+
+static ssize_t sched_bore_sysfs_show(struct kobject *kobj,
+				     struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", sysctl_sched_bore);
+}
+
+static ssize_t sched_bore_sysfs_store(struct kobject *kobj,
+				      struct kobj_attribute *attr,
+				      const char *buf, size_t count)
+{
+	int val = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	sysctl_sched_bore = val ? 1 : 0;
+	return count;
+}
+
+static struct kobj_attribute sched_bore_kobj_attr =
+	__ATTR(sched_bore, 0644, sched_bore_sysfs_show, sched_bore_sysfs_store);
+
+static ssize_t sched_burst_scale_sysfs_show(struct kobject *kobj,
+					    struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", sysctl_sched_burst_penalty_scale);
+}
+
+static ssize_t sched_burst_scale_sysfs_store(struct kobject *kobj,
+					     struct kobj_attribute *attr,
+					     const char *buf, size_t count)
+{
+	unsigned int val;
+
+	if (kstrtouint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	sysctl_sched_burst_penalty_scale = min(val, 4095U);
+	return count;
+}
+
+static struct kobj_attribute sched_burst_scale_kattr =
+	__ATTR(sched_burst_penalty_scale, 0644, sched_burst_scale_sysfs_show, sched_burst_scale_sysfs_store);
+
+static ssize_t sched_burst_offset_sysfs_show(struct kobject *kobj,
+					     struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", sysctl_sched_burst_penalty_offset);
+}
+
+static ssize_t sched_burst_offset_sysfs_store(struct kobject *kobj,
+					      struct kobj_attribute *attr,
+					      const char *buf, size_t count)
+{
+	unsigned int val;
+
+	if (kstrtouint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	sysctl_sched_burst_penalty_offset = min(val, 63U);
+	return count;
+}
+
+static struct kobj_attribute sched_burst_offset_kattr =
+	__ATTR(sched_burst_penalty_offset, 0644, sched_burst_offset_sysfs_show, sched_burst_offset_sysfs_store);
+
+static ssize_t sched_burst_inherit_sysfs_show(struct kobject *kobj,
+					      struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", sysctl_sched_burst_inherit_type);
+}
+
+static ssize_t sched_burst_inherit_sysfs_store(struct kobject *kobj,
+					       struct kobj_attribute *attr,
+					       const char *buf, size_t count)
+{
+	unsigned int val;
+
+	if (kstrtouint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	sysctl_sched_burst_inherit_type = min(val, 2U);
+	return count;
+}
+
+static struct kobj_attribute sched_burst_inherit_kattr =
+	__ATTR(sched_burst_inherit_type, 0644, sched_burst_inherit_sysfs_show, sched_burst_inherit_sysfs_store);
+
+static ssize_t sched_burst_lifetime_sysfs_show(struct kobject *kobj,
+					       struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", sysctl_sched_burst_cache_lifetime);
+}
+
+static ssize_t sched_burst_lifetime_sysfs_store(struct kobject *kobj,
+						struct kobj_attribute *attr,
+						const char *buf, size_t count)
+{
+	unsigned int val;
+
+	if (kstrtouint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	sysctl_sched_burst_cache_lifetime = val;
+	return count;
+}
+
+static struct kobj_attribute sched_burst_lifetime_kattr =
+	__ATTR(sched_burst_cache_lifetime, 0644, sched_burst_lifetime_sysfs_show, sched_burst_lifetime_sysfs_store);
+
+static int sched_bore_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "sched_bore=%d\n", sysctl_sched_bore);
+	seq_printf(m, "sched_burst_penalty_scale=%u\n", sysctl_sched_burst_penalty_scale);
+	seq_printf(m, "sched_burst_cache_lifetime=%u\n", sysctl_sched_burst_cache_lifetime);
+	seq_printf(m, "sched_burst_inherit_type=%u\n", sysctl_sched_burst_inherit_type);
+	seq_printf(m, "sched_burst_penalty_offset=%u\n", sysctl_sched_burst_penalty_offset);
+	return 0;
+}
+
+static int sched_bore_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, sched_bore_proc_show, NULL);
+}
+
+static ssize_t sched_bore_proc_write(struct file *file, const char __user *buffer,
+				     size_t count, loff_t *pos)
+{
+	char kbuf[64];
+	char *str;
+	unsigned int uval;
+	int val;
+
+	if (count >= sizeof(kbuf))
+		return -EINVAL;
+
+	if (copy_from_user(kbuf, buffer, count))
+		return -EFAULT;
+
+	kbuf[count] = '\0';
+	str = strim(kbuf);
+
+	if (sscanf(str, "scale=%u", &uval) == 1 || sscanf(str, "scale %u", &uval) == 1) {
+		sysctl_sched_burst_penalty_scale = min(uval, 4095U);
+	} else if (sscanf(str, "offset=%u", &uval) == 1 || sscanf(str, "offset %u", &uval) == 1) {
+		sysctl_sched_burst_penalty_offset = min(uval, 63U);
+	} else if (sscanf(str, "inherit=%u", &uval) == 1 || sscanf(str, "inherit %u", &uval) == 1) {
+		sysctl_sched_burst_inherit_type = min(uval, 2U);
+	} else if (sscanf(str, "lifetime=%u", &uval) == 1 || sscanf(str, "lifetime %u", &uval) == 1) {
+		sysctl_sched_burst_cache_lifetime = uval;
+	} else if (kstrtoint(str, 10, &val) == 0) {
+		sysctl_sched_bore = val ? 1 : 0;
+	} else {
+		return -EINVAL;
+	}
+
+	return count;
+}
+
+static const struct file_operations sched_bore_proc_fops = {
+	.open = sched_bore_proc_open,
+	.read = seq_read,
+	.write = sched_bore_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+/* =========================================================================
+ * DriveDroid & Hardware USB CD-ROM Emulation Interface
+ * ========================================================================= */
+
+static int pox_usb_cdrom_mode = 0;
+
+int pox_usb_cdrom_get(void)
+{
+	return pox_usb_cdrom_mode;
+}
+EXPORT_SYMBOL(pox_usb_cdrom_get);
+
+int pox_usb_cdrom_set(int mode)
+{
+	pox_usb_cdrom_mode = mode ? 1 : 0;
+	pr_info("POX USB CD-ROM DriveDroid Emulation set to: %d\n", pox_usb_cdrom_mode);
+	return 0;
+}
+EXPORT_SYMBOL(pox_usb_cdrom_set);
+
+static ssize_t usb_cdrom_sysfs_show(struct kobject *kobj,
+				    struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", pox_usb_cdrom_get());
+}
+
+static ssize_t usb_cdrom_sysfs_store(struct kobject *kobj,
+				     struct kobj_attribute *attr,
+				     const char *buf, size_t count)
+{
+	int val = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	pox_usb_cdrom_set(val);
+	return count;
+}
+
+static struct kobj_attribute usb_cdrom_kobj_attr =
+	__ATTR(usb_cdrom, 0644, usb_cdrom_sysfs_show, usb_cdrom_sysfs_store);
+
+static int usb_cdrom_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_usb_cdrom_get());
+	return 0;
+}
+
+static int usb_cdrom_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, usb_cdrom_proc_show, NULL);
+}
+
+static ssize_t usb_cdrom_proc_write(struct file *file, const char __user *buffer,
+				    size_t count, loff_t *pos)
+{
+	char kbuf[32];
+	int val;
+
+	if (count >= sizeof(kbuf))
+		return -EINVAL;
+
+	if (copy_from_user(kbuf, buffer, count))
+		return -EFAULT;
+
+	kbuf[count] = '\0';
+	if (kstrtoint(strim(kbuf), 10, &val) < 0)
+		return -EINVAL;
+
+	pox_usb_cdrom_set(val);
+	return count;
+}
+
+static const struct file_operations usb_cdrom_proc_fops = {
+	.open = usb_cdrom_proc_open,
+	.read = seq_read,
+	.write = usb_cdrom_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+
 /* Battery Protection Rootless ProcFS Interfaces */
 extern int pox_battery_bypass_get(void);
 extern void pox_battery_bypass_set(int enable);
@@ -1412,7 +2394,10 @@ static ssize_t battery_bypass_proc_write(struct file *file, const char __user *b
 		return -EFAULT;
 	buf[count] = '\0';
 
-	if (sscanf(buf, "%d", &val) != 1)
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 1)
 		return -EINVAL;
 
 	pox_battery_bypass_set(val);
@@ -1453,7 +2438,10 @@ static ssize_t battery_limit_proc_write(struct file *file, const char __user *bu
 		return -EFAULT;
 	buf[count] = '\0';
 
-	if (sscanf(buf, "%d", &val) != 1)
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 100)
 		return -EINVAL;
 
 	pox_battery_limit_set(val);
@@ -1520,7 +2508,10 @@ static ssize_t touch_game_mode_proc_write(struct file *file, const char __user *
 		return -EFAULT;
 	buf[count] = '\0';
 
-	if (sscanf(buf, "%d", &val) != 1)
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 1)
 		return -EINVAL;
 
 	pox_touch_game_mode_set(val);
@@ -1561,7 +2552,10 @@ static ssize_t touch_sensitivity_proc_write(struct file *file, const char __user
 		return -EFAULT;
 	buf[count] = '\0';
 
-	if (sscanf(buf, "%d", &val) != 1)
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 3)
 		return -EINVAL;
 
 	pox_touch_sensitivity_set(val);
@@ -1606,7 +2600,10 @@ static ssize_t headphone_gain_proc_write(struct file *file, const char __user *b
 		return -EFAULT;
 	buf[count] = '\0';
 
-	if (sscanf(buf, "%d", &val) != 1)
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 8)
 		return -EINVAL;
 
 	pox_headphone_gain_set(val);
@@ -1651,7 +2648,10 @@ static ssize_t vibrator_strength_proc_write(struct file *file, const char __user
 		return -EFAULT;
 	buf[count] = '\0';
 
-	if (sscanf(buf, "%d", &val) != 1)
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 13)
 		return -EINVAL;
 
 	pox_vibrator_strength_set(val);
@@ -1696,7 +2696,10 @@ static ssize_t wakelock_blocker_proc_write(struct file *file, const char __user 
 		return -EFAULT;
 	buf[count] = '\0';
 
-	if (sscanf(buf, "%d", &val) != 1)
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 1)
 		return -EINVAL;
 
 	pox_wakelock_blocker_set(val);
@@ -1714,10 +2717,16 @@ static const struct file_operations wakelock_blocker_proc_fops = {
 /* Fast Charge Control Interface */
 extern int pox_fast_charge_get(void);
 extern void pox_fast_charge_set(int enable);
+extern int pox_charge_watt_get(void);
+extern void pox_charge_watt_set(int watt);
+extern int pox_pd_min_watt_get(void);
+extern void pox_pd_min_watt_set(int watt);
+extern int pox_pd_max_watt_get(void);
+extern void pox_pd_max_watt_set(int watt);
 
 static int fast_charge_proc_show(struct seq_file *m, void *v)
 {
-	seq_printf(m, "%d\n", pox_fast_charge_get());
+	seq_printf(m, "%d\n", pox_fast_charge_get() ? pox_charge_watt_get() : 0);
 	return 0;
 }
 
@@ -1741,10 +2750,19 @@ static ssize_t fast_charge_proc_write(struct file *file, const char __user *buff
 		return -EFAULT;
 	buf[count] = '\0';
 
-	if (sscanf(buf, "%d", &val) != 1)
+	if (kstrtoint(buf, 10, &val) < 0)
 		return -EINVAL;
 
-	pox_fast_charge_set(val);
+	if (val < 0)
+		return -EINVAL;
+
+	if (val == 0)
+		pox_fast_charge_set(0);
+	else if (val == 1)
+		pox_fast_charge_set(1);
+	else
+		pox_charge_watt_set(val);
+
 	return count;
 }
 
@@ -1752,6 +2770,132 @@ static const struct file_operations fast_charge_proc_fops = {
 	.open    = fast_charge_proc_open,
 	.read    = seq_read,
 	.write   = fast_charge_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+/* Charge Watt Interface */
+static int charge_watt_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_charge_watt_get());
+	return 0;
+}
+
+static int charge_watt_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, charge_watt_proc_show, NULL);
+}
+
+static ssize_t charge_watt_proc_write(struct file *file, const char __user *buffer,
+				      size_t count, loff_t *pos)
+{
+	char buf[16];
+	int val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, buffer, count))
+		return -EFAULT;
+	buf[count] = '\0';
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	pox_charge_watt_set(val);
+	return count;
+}
+
+static const struct file_operations charge_watt_proc_fops = {
+	.open    = charge_watt_proc_open,
+	.read    = seq_read,
+	.write   = charge_watt_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+/* PD Min Watt Interface */
+static int pd_min_watt_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_pd_min_watt_get());
+	return 0;
+}
+
+static int pd_min_watt_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, pd_min_watt_proc_show, NULL);
+}
+
+static ssize_t pd_min_watt_proc_write(struct file *file, const char __user *buffer,
+				      size_t count, loff_t *pos)
+{
+	char buf[16];
+	int val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, buffer, count))
+		return -EFAULT;
+	buf[count] = '\0';
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	pox_pd_min_watt_set(val);
+	return count;
+}
+
+static const struct file_operations pd_min_watt_proc_fops = {
+	.open    = pd_min_watt_proc_open,
+	.read    = seq_read,
+	.write   = pd_min_watt_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+/* PD Max Watt Interface */
+static int pd_max_watt_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_pd_max_watt_get());
+	return 0;
+}
+
+static int pd_max_watt_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, pd_max_watt_proc_show, NULL);
+}
+
+static ssize_t pd_max_watt_proc_write(struct file *file, const char __user *buffer,
+				      size_t count, loff_t *pos)
+{
+	char buf[16];
+	int val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, buffer, count))
+		return -EFAULT;
+	buf[count] = '\0';
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	pox_pd_max_watt_set(val);
+	return count;
+}
+
+static const struct file_operations pd_max_watt_proc_fops = {
+	.open    = pd_max_watt_proc_open,
+	.read    = seq_read,
+	.write   = pd_max_watt_proc_write,
 	.llseek  = seq_lseek,
 	.release = single_release,
 };
@@ -1786,7 +2930,10 @@ static ssize_t dt2w_proc_write(struct file *file, const char __user *buffer,
 		return -EFAULT;
 	buf[count] = '\0';
 
-	if (sscanf(buf, "%d", &val) != 1)
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 1)
 		return -EINVAL;
 
 	pox_dt2w_set(val);
@@ -1831,7 +2978,10 @@ static ssize_t mic_gain_proc_write(struct file *file, const char __user *buffer,
 		return -EFAULT;
 	buf[count] = '\0';
 
-	if (sscanf(buf, "%d", &val) != 1)
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 4)
 		return -EINVAL;
 
 	pox_mic_gain_set(val);
@@ -1842,6 +2992,54 @@ static const struct file_operations mic_gain_proc_fops = {
 	.open    = mic_gain_proc_open,
 	.read    = seq_read,
 	.write   = mic_gain_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+/* Active Microphone Selection Interface */
+extern int pox_active_mic_get(void);
+extern int pox_active_mic_set(int mode);
+
+static int active_mic_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_active_mic_get());
+	return 0;
+}
+
+static int active_mic_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, active_mic_proc_show, NULL);
+}
+
+static ssize_t active_mic_proc_write(struct file *file, const char __user *buffer,
+				     size_t count, loff_t *pos)
+{
+	char buf[16];
+	int val;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (count >= sizeof(buf))
+		return -EINVAL;
+	if (copy_from_user(buf, buffer, count))
+		return -EFAULT;
+	buf[count] = '\0';
+
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 3)
+		return -EINVAL;
+
+	pox_active_mic_set(val);
+	return count;
+}
+
+static const struct file_operations active_mic_proc_fops = {
+	.open    = active_mic_proc_open,
+	.read    = seq_read,
+	.write   = active_mic_proc_write,
 	.llseek  = seq_lseek,
 	.release = single_release,
 };
@@ -1876,7 +3074,10 @@ static ssize_t dynamic_fsync_proc_write(struct file *file, const char __user *bu
 		return -EFAULT;
 	buf[count] = '\0';
 
-	if (sscanf(buf, "%d", &val) != 1)
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+
+	if (val < 0 || val > 1)
 		return -EINVAL;
 
 	pox_dynamic_fsync_set(val);
@@ -1903,6 +3104,7 @@ static int profile_proc_show(struct seq_file *m, void *v)
 	int dyn_fsync = pox_dynamic_fsync_get();
 	int hp_gain = pox_headphone_gain_get();
 	int mic_gain = pox_mic_gain_get();
+	int a_mic = pox_active_mic_get();
 	int vib_str = pox_vibrator_strength_get();
 	int t_game = pox_touch_game_mode_get();
 	int t_sens = pox_touch_sensitivity_get();
@@ -1920,7 +3122,7 @@ static int profile_proc_show(struct seq_file *m, void *v)
 	seq_printf(m, "true_tone: %d (%s)\n", pox_true_tone_get(),
 		   pox_true_tone_get() ? "ENABLED [DEFAULT]" : "DISABLED");
 	seq_printf(m, "color_mode: %d (%s)\n", c_mode,
-		   c_mode == 3 ? "SLOG3" : (c_mode == 2 ? "VIVID" : (c_mode == 1 ? "REFERENCE_D65" : "STANDARD")));
+		   c_mode == 4 ? "CUSTOM" : (c_mode == 3 ? "SLOG3" : (c_mode == 2 ? "VIVID" : (c_mode == 1 ? "REFERENCE_D65" : "STANDARD"))));
 	seq_printf(m, "hbm_mode: %d (%s)\n", h_mode,
 		   h_mode == 3 ? "L3_PEAK" : (h_mode == 2 ? "L2_HIGH" : (h_mode == 1 ? "L1_BOOST" : "OFF")));
 	seq_printf(m, "touch_game_mode: %d\n", t_game);
@@ -1928,9 +3130,12 @@ static int profile_proc_show(struct seq_file *m, void *v)
 	seq_printf(m, "double_tap_to_wake: %d\n", dt2w);
 	seq_printf(m, "battery_status: %s\n", bat_buf);
 	seq_printf(m, "battery_limit: %d%%\n", pox_battery_limit_get());
-	seq_printf(m, "fast_charge: %d\n", fast_chg);
+	seq_printf(m, "fast_charge: %d (watt: %dW, pd_min: %dW, pd_max: %dW)\n",
+		   fast_chg, pox_charge_watt_get(), pox_pd_min_watt_get(), pox_pd_max_watt_get());
 	seq_printf(m, "headphone_gain: +%ddB\n", hp_gain);
 	seq_printf(m, "mic_gain: %d\n", mic_gain);
+	seq_printf(m, "active_mic: %d (%s)\n", a_mic,
+		   a_mic == 1 ? "MAIN_MIC" : (a_mic == 2 ? "TOP_MIC" : (a_mic == 3 ? "DUAL_STEREO" : "DEFAULT_AUTO")));
 	seq_printf(m, "vibrator_strength: 0x%02X\n", vib_str);
 	seq_printf(m, "torch_brightness: %d\n", t_bri);
 	seq_printf(m, "dynamic_fsync: %d\n", dyn_fsync);
@@ -1959,6 +3164,307 @@ static const struct file_operations profile_proc_fops = {
 	.release = single_release,
 };
 
+/* =========================================================================
+ * Unified Pox Kernel Configuration Subsystem (/proc/perfmgr/pox_config)
+ * Single-file atomic read/write interface for Pox Manager
+ * Eliminates multi-process shell IPC overhead and prevents ADB/PC lag
+ * ========================================================================= */
+
+static void pox_config_apply_line(const char *key, const char *val_str)
+{
+	int val = 0;
+
+	if (strcmp(key, "kprofiles_custom") == 0) {
+		struct pox_kprofile_custom_tunables t = pox_custom_kp;
+		int matched = sscanf(val_str, "%d %d %d %d %d %d %d %d %d %d",
+				     &t.schedutil_up_little_us,
+				     &t.schedutil_down_little_us,
+				     &t.schedutil_up_big_us,
+				     &t.schedutil_down_big_us,
+				     &t.top_app_boost,
+				     &t.fg_boost,
+				     &t.gpu_boost,
+				     &t.dram_boost,
+				     &t.touch_boost,
+				     &t.rescue_opp);
+		if (matched >= 2)
+			pox_kprofile_custom_set(&t);
+		return;
+	}
+
+	if (kstrtoint(val_str, 10, &val) < 0)
+		return;
+
+	if (strcmp(key, "gaming_mode") == 0)
+		gaming_mode_set(val);
+	else if (strcmp(key, "kprofiles_mode") == 0)
+		kprofiles_mode_set(val);
+	else if (strcmp(key, "auto_kp") == 0) {
+		kp_auto_mode = val ? 1 : 0;
+		pox_pwr_auto = kp_auto_mode;
+		cancel_delayed_work(&pox_dynamic_work);
+		if (pox_pwr_auto)
+			schedule_delayed_work(&pox_dynamic_work, msecs_to_jiffies(8000));
+	} else if (strcmp(key, "health_calibration") == 0)
+		pox_health_calibration_set(val);
+	else if (strcmp(key, "opp_voltage_guard") == 0)
+		pox_opp_voltage_guard_set(val);
+	else if (strcmp(key, "hbm_mode") == 0)
+		hbm_mode_set(val);
+	else if (strcmp(key, "torch_brightness") == 0)
+		torch_brightness_set(val);
+	else if (strcmp(key, "color_mode") == 0)
+		set_ios_color_mode(val);
+	else if (strcmp(key, "true_tone") == 0)
+		pox_true_tone_set(val);
+	else if (strcmp(key, "touch_game_mode") == 0)
+		pox_touch_game_mode_set(val);
+	else if (strcmp(key, "touch_sensitivity") == 0)
+		pox_touch_sensitivity_set(val);
+	else if (strcmp(key, "dt2w") == 0)
+		pox_dt2w_set(val);
+	else if (strcmp(key, "dynamic_fsync") == 0)
+		pox_dynamic_fsync_set(val);
+	else if (strcmp(key, "fast_charge") == 0)
+		pox_fast_charge_set(val);
+	else if (strcmp(key, "charge_watt") == 0)
+		pox_charge_watt_set(val);
+	else if (strcmp(key, "pd_min_watt") == 0)
+		pox_pd_min_watt_set(val);
+	else if (strcmp(key, "pd_max_watt") == 0)
+		pox_pd_max_watt_set(val);
+	else if (strcmp(key, "headphone_gain") == 0)
+		pox_headphone_gain_set(val);
+	else if (strcmp(key, "mic_gain") == 0)
+		pox_mic_gain_set(val);
+	else if (strcmp(key, "active_mic") == 0)
+		pox_active_mic_set(val);
+	else if (strcmp(key, "vibrator_strength") == 0)
+		pox_vibrator_strength_set(val);
+	else if (strcmp(key, "camera_4k60") == 0)
+		camera_4k60_set(val);
+	else if (strcmp(key, "camera_slog3") == 0 || strcmp(key, "slog3") == 0)
+		camera_slog3_set(val);
+	else if (strcmp(key, "battery_bypass") == 0)
+		pox_battery_bypass_set(val);
+	else if (strcmp(key, "battery_limit") == 0)
+		pox_battery_limit_set(val);
+	else if (strcmp(key, "sched_bore") == 0)
+		sysctl_sched_bore = val ? 1 : 0;
+	else if (strcmp(key, "wakelock_blocker") == 0)
+		pox_wakelock_blocker_set(val);
+	else if (strcmp(key, "usb_cdrom") == 0)
+		pox_usb_cdrom_set(val);
+}
+
+static void pox_config_parse_and_apply(char *buf)
+{
+	char *line, *p;
+
+	p = buf;
+	while ((line = strsep(&p, "\r\n")) != NULL) {
+		char *key, *val_str, *sep;
+
+		line = strim(line);
+		if (!*line || *line == '#')
+			continue;
+
+		sep = strpbrk(line, "=:");
+		if (!sep)
+			continue;
+
+		*sep = '\0';
+		key = strim(line);
+		val_str = strim(sep + 1);
+
+		if (!*key || !*val_str)
+			continue;
+
+		pox_config_apply_line(key, val_str);
+	}
+}
+
+static int pox_config_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "gaming_mode=%d\n", gaming_mode_get());
+	seq_printf(m, "kprofiles_mode=%d\n", kprofiles_mode_get());
+	seq_printf(m, "auto_kp=%d\n", kp_auto_mode);
+	seq_printf(m, "kprofiles_custom=%d %d %d %d %d %d %d %d %d %d\n",
+		   pox_custom_kp.schedutil_up_little_us,
+		   pox_custom_kp.schedutil_down_little_us,
+		   pox_custom_kp.schedutil_up_big_us,
+		   pox_custom_kp.schedutil_down_big_us,
+		   pox_custom_kp.top_app_boost,
+		   pox_custom_kp.fg_boost,
+		   pox_custom_kp.gpu_boost,
+		   pox_custom_kp.dram_boost,
+		   pox_custom_kp.touch_boost,
+		   pox_custom_kp.rescue_opp);
+	seq_printf(m, "health_calibration=%d\n", pox_health_calibration_get());
+	seq_printf(m, "opp_voltage_guard=%d\n", pox_opp_voltage_guard_get());
+	seq_printf(m, "hbm_mode=%d\n", hbm_mode_get());
+	seq_printf(m, "torch_brightness=%d\n", torch_brightness_get());
+	seq_printf(m, "color_mode=%d\n", get_ios_color_mode());
+	seq_printf(m, "true_tone=%d\n", pox_true_tone_get());
+	seq_printf(m, "touch_game_mode=%d\n", pox_touch_game_mode_get());
+	seq_printf(m, "touch_sensitivity=%d\n", pox_touch_sensitivity_get());
+	seq_printf(m, "dt2w=%d\n", pox_dt2w_get());
+	seq_printf(m, "dynamic_fsync=%d\n", pox_dynamic_fsync_get());
+	seq_printf(m, "fast_charge=%d\n", pox_fast_charge_get());
+	seq_printf(m, "charge_watt=%d\n", pox_charge_watt_get());
+	seq_printf(m, "pd_min_watt=%d\n", pox_pd_min_watt_get());
+	seq_printf(m, "pd_max_watt=%d\n", pox_pd_max_watt_get());
+	seq_printf(m, "headphone_gain=%d\n", pox_headphone_gain_get());
+	seq_printf(m, "mic_gain=%d\n", pox_mic_gain_get());
+	seq_printf(m, "active_mic=%d\n", pox_active_mic_get());
+	seq_printf(m, "vibrator_strength=%d\n", pox_vibrator_strength_get());
+	seq_printf(m, "camera_4k60=%d\n", camera_4k60_get());
+	seq_printf(m, "camera_slog3=%d\n", camera_slog3_get());
+	seq_printf(m, "battery_bypass=%d\n", pox_battery_bypass_get());
+	seq_printf(m, "battery_limit=%d\n", pox_battery_limit_get());
+	seq_printf(m, "sched_bore=%d\n", sysctl_sched_bore);
+	seq_printf(m, "wakelock_blocker=%d\n", pox_wakelock_blocker_get());
+	seq_printf(m, "usb_cdrom=%d\n", pox_usb_cdrom_get());
+	return 0;
+}
+
+static ssize_t pox_config_proc_write(struct file *file, const char __user *ubuf,
+				     size_t count, loff_t *ppos)
+{
+	char *buf;
+
+	if (count == 0)
+		return 0;
+	if (count > 4096)
+		return -EINVAL;
+
+	buf = kmalloc(count + 1, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	if (copy_from_user(buf, ubuf, count)) {
+		kfree(buf);
+		return -EFAULT;
+	}
+	buf[count] = '\0';
+
+	pox_config_parse_and_apply(buf);
+
+	kfree(buf);
+	return count;
+}
+
+static int pox_config_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, pox_config_proc_show, NULL);
+}
+
+static const struct file_operations pox_config_proc_fops = {
+	.owner   = THIS_MODULE,
+	.open    = pox_config_proc_open,
+	.read    = seq_read,
+	.write   = pox_config_proc_write,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+static ssize_t pox_config_sysfs_show(struct kobject *kobj,
+				     struct kobj_attribute *attr, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE,
+			 "gaming_mode=%d\n"
+			 "kprofiles_mode=%d\n"
+			 "auto_kp=%d\n"
+			 "kprofiles_custom=%d %d %d %d %d %d %d %d %d %d\n"
+			 "health_calibration=%d\n"
+			 "opp_voltage_guard=%d\n"
+			 "hbm_mode=%d\n"
+			 "torch_brightness=%d\n"
+			 "color_mode=%d\n"
+			 "true_tone=%d\n"
+			 "touch_game_mode=%d\n"
+			 "touch_sensitivity=%d\n"
+			 "dt2w=%d\n"
+			 "dynamic_fsync=%d\n"
+			 "fast_charge=%d\n"
+			 "charge_watt=%d\n"
+			 "pd_min_watt=%d\n"
+			 "pd_max_watt=%d\n"
+			 "headphone_gain=%d\n"
+			 "mic_gain=%d\n"
+			 "active_mic=%d\n"
+			 "vibrator_strength=%d\n"
+			 "camera_4k60=%d\n"
+			 "camera_slog3=%d\n"
+			 "battery_bypass=%d\n"
+			 "battery_limit=%d\n"
+			 "sched_bore=%d\n"
+			 "wakelock_blocker=%d\n"
+			 "usb_cdrom=%d\n",
+			 gaming_mode_get(),
+			 kprofiles_mode_get(),
+			 kp_auto_mode,
+			 pox_custom_kp.schedutil_up_little_us,
+			 pox_custom_kp.schedutil_down_little_us,
+			 pox_custom_kp.schedutil_up_big_us,
+			 pox_custom_kp.schedutil_down_big_us,
+			 pox_custom_kp.top_app_boost,
+			 pox_custom_kp.fg_boost,
+			 pox_custom_kp.gpu_boost,
+			 pox_custom_kp.dram_boost,
+			 pox_custom_kp.touch_boost,
+			 pox_custom_kp.rescue_opp,
+			 pox_health_calibration_get(),
+			 pox_opp_voltage_guard_get(),
+			 hbm_mode_get(),
+			 torch_brightness_get(),
+			 get_ios_color_mode(),
+			 pox_true_tone_get(),
+			 pox_touch_game_mode_get(),
+			 pox_touch_sensitivity_get(),
+			 pox_dt2w_get(),
+			 pox_dynamic_fsync_get(),
+			 pox_fast_charge_get(),
+			 pox_charge_watt_get(),
+			 pox_pd_min_watt_get(),
+			 pox_pd_max_watt_get(),
+			 pox_headphone_gain_get(),
+			 pox_mic_gain_get(),
+			 pox_active_mic_get(),
+			 pox_vibrator_strength_get(),
+			 camera_4k60_get(),
+			 camera_slog3_get(),
+			 pox_battery_bypass_get(),
+			 pox_battery_limit_get(),
+			 sysctl_sched_bore,
+			 pox_wakelock_blocker_get(),
+			 pox_usb_cdrom_get());
+}
+
+static ssize_t pox_config_sysfs_store(struct kobject *kobj,
+				      struct kobj_attribute *attr,
+				      const char *buf, size_t count)
+{
+	char *kbuf;
+
+	if (count == 0)
+		return 0;
+	if (count > 4096)
+		return -EINVAL;
+
+	kbuf = kstrndup(buf, count, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	pox_config_parse_and_apply(kbuf);
+
+	kfree(kbuf);
+	return count;
+}
+
+static struct kobj_attribute pox_config_kobj_attr =
+	__ATTR(pox_config, 0644, pox_config_sysfs_show, pox_config_sysfs_store);
+
 /* ------------------ Init Function ------------------ */
 
 int init_gaming_mode(struct proc_dir_entry *parent)
@@ -1984,6 +3490,10 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	entry = proc_create("color_mode", 0644, parent, &color_mode_proc_fops);
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/color_mode\n");
+
+	entry = proc_create("color_custom", 0644, parent, &color_custom_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/color_custom\n");
 
 	entry = proc_create("true_tone", 0644, parent, &true_tone_proc_fops);
 	if (!entry)
@@ -2037,6 +3547,18 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/fast_charge\n");
 
+	entry = proc_create("charge_watt", 0644, parent, &charge_watt_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/charge_watt\n");
+
+	entry = proc_create("pd_min_watt", 0644, parent, &pd_min_watt_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/pd_min_watt\n");
+
+	entry = proc_create("pd_max_watt", 0644, parent, &pd_max_watt_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/pd_max_watt\n");
+
 	entry = proc_create("dt2w", 0644, parent, &dt2w_proc_fops);
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/dt2w\n");
@@ -2044,6 +3566,10 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	entry = proc_create("mic_gain", 0644, parent, &mic_gain_proc_fops);
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/mic_gain\n");
+
+	entry = proc_create("active_mic", 0644, parent, &active_mic_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/active_mic\n");
 
 	entry = proc_create("dynamic_fsync", 0644, parent, &dynamic_fsync_proc_fops);
 	if (!entry)
@@ -2069,6 +3595,34 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/profile\n");
 
+	entry = proc_create("health_calibration", 0644, parent, &health_calibration_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/health_calibration\n");
+
+	entry = proc_create("opp_voltage_guard", 0644, parent, &opp_voltage_guard_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/opp_voltage_guard\n");
+
+	entry = proc_create("health_status", 0444, parent, &health_status_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/health_status\n");
+
+	entry = proc_create("sched_bore", 0644, parent, &sched_bore_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/sched_bore\n");
+
+	entry = proc_create("usb_cdrom", 0644, parent, &usb_cdrom_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/usb_cdrom\n");
+
+	entry = proc_create("kprofiles_custom", 0644, parent, &kprofiles_custom_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/kprofiles_custom\n");
+
+	entry = proc_create("pox_config", 0666, parent, &pox_config_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/pox_config\n");
+
 	ret = sysfs_create_file(kernel_kobj, &gaming_mode_kobj_attr.attr);
 	if (ret)
 		pr_warn("Failed to create /sys/kernel/gaming_mode (ret=%d)\n", ret);
@@ -2080,6 +3634,12 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 		pr_warn("Failed to create /sys/kernel/color_mode (ret=%d)\n", ret);
 	else
 		pr_info("/sys/kernel/color_mode created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &color_custom_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/color_custom (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/color_custom created successfully\n");
 
 	ret = sysfs_create_file(kernel_kobj, &true_tone_kobj_attr.attr);
 	if (ret)
@@ -2122,6 +3682,67 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 		pr_warn("Failed to create /sys/kernel/slog3 (ret=%d)\n", ret);
 	else
 		pr_info("/sys/kernel/slog3 created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &health_calibration_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/health_calibration (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/health_calibration created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &opp_voltage_guard_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/opp_voltage_guard (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/opp_voltage_guard created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &sched_bore_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/sched_bore (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/sched_bore created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &sched_burst_scale_kattr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/sched_burst_penalty_scale (ret=%d)\n", ret);
+
+	ret = sysfs_create_file(kernel_kobj, &sched_burst_offset_kattr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/sched_burst_penalty_offset (ret=%d)\n", ret);
+
+	ret = sysfs_create_file(kernel_kobj, &sched_burst_inherit_kattr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/sched_burst_inherit_type (ret=%d)\n", ret);
+
+	ret = sysfs_create_file(kernel_kobj, &sched_burst_lifetime_kattr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/sched_burst_cache_lifetime (ret=%d)\n", ret);
+
+	ret = sysfs_create_file(kernel_kobj, &usb_cdrom_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/usb_cdrom (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/usb_cdrom created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &pox_config_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/pox_config (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/pox_config created successfully\n");
+
+	/* Canonical Kprofiles kobject: /sys/kernel/kprofiles/{kp_mode, auto_kp} */
+	kp_kobj = kobject_create_and_add("kprofiles", kernel_kobj);
+	if (!kp_kobj) {
+		pr_warn("Failed to create /sys/kernel/kprofiles\n");
+	} else {
+		ret = sysfs_create_group(kp_kobj, &kp_attr_group);
+		if (ret) {
+			pr_warn("Failed to create Kprofiles sysfs group (ret=%d)\n", ret);
+			kobject_put(kp_kobj);
+			kp_kobj = NULL;
+		} else {
+			pr_info("/sys/kernel/kprofiles created successfully (kp_mode, auto_kp)\n");
+		}
+	}
 
 	/* Initialize to True Tone Reference (Calibrated D65) as system default */
 	set_ios_color_mode(COLOR_MODE_REFERENCE);

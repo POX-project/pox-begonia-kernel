@@ -189,7 +189,7 @@ void thaw_fingerprintd(void)
 
 	read_lock(&tasklist_lock);
 	for_each_process(p) {
-		if (!memcmp(p->comm, "mfp-daemon", 10)) {
+		if (!strcmp(p->comm, "mfp-daemon")) {
 			__thaw_task(p);
 			break;
 		}

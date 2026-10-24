@@ -74,6 +74,18 @@ static int __init dt_get_boot_common(unsigned long node, const char *uname,
 		if ((g_boot_type > 2) || (g_boot_type < 0))
 			g_boot_type = BOOTDEV_SDMMC;
 		atomic_set(&g_boot_status, 1);
+
+		/*
+		 * Pox Kernel: Auto-boot into normal mode on charge.
+		 * If Little Kernel enters off-mode charging (KPOC), override it
+		 * to NORMAL_BOOT so buttonless devices boot directly into Android.
+		 */
+		if (g_boot_mode == KERNEL_POWER_OFF_CHARGING_BOOT ||
+		    g_boot_mode == LOW_POWER_OFF_CHARGING_BOOT) {
+			pr_info("Auto-boot on charge: overriding boot_mode %d -> NORMAL_BOOT\n",
+				g_boot_mode);
+			g_boot_mode = NORMAL_BOOT;
+		}
 	} else {
 		pr_warn("'atag,boot' is not found\n");
 	}
@@ -127,9 +139,22 @@ unsigned int get_boot_mode(void)
 		pr_warn("fail, %s (%d) state(%d,%d)\n", __func__, __LINE__,
 			atomic_read(&g_boot_init), g_boot_mode);
 	}
+	if (g_boot_mode == KERNEL_POWER_OFF_CHARGING_BOOT ||
+	    g_boot_mode == LOW_POWER_OFF_CHARGING_BOOT)
+		return NORMAL_BOOT;
 	return g_boot_mode;
 }
 EXPORT_SYMBOL(get_boot_mode);
+
+static int __init pox_cmdline_charger_sanitize(char *str)
+{
+	if (str && strncmp(str, "charger", 7) == 0) {
+		pr_info("Rewriting androidboot.mode=charger -> normal\n");
+		memcpy(str, "normal ", 7);
+	}
+	return 1;
+}
+__setup("androidboot.mode=", pox_cmdline_charger_sanitize);
 
 unsigned int get_boot_type(void)
 {

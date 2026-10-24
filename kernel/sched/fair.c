@@ -53,11 +53,12 @@
  *
  * (to see the precise effective timeslice length of your workload,
  *  run vmstat and monitor the context-switches (cs) field)
-/*
- * (default: 4ms unscaled, units: nanoseconds)
  */
-unsigned int sysctl_sched_latency			= 4000000ULL;
-unsigned int normalized_sysctl_sched_latency		= 4000000ULL;
+/*
+ * (default: 3ms unscaled, units: nanoseconds)
+ */
+unsigned int sysctl_sched_latency			= 3000000ULL;
+unsigned int normalized_sysctl_sched_latency		= 3000000ULL;
 
 /*
  * Enable/disable honoring sync flag in energy-aware wakeups.
@@ -90,15 +91,15 @@ enum sched_tunable_scaling sysctl_sched_tunable_scaling = SCHED_TUNABLESCALING_N
 /*
  * Minimal preemption granularity for CPU-bound tasks:
  *
- * (default: 0.5 msec unscaled, units: nanoseconds)
+ * (default: 0.3 msec unscaled, units: nanoseconds)
  */
-unsigned int sysctl_sched_min_granularity		= 500000ULL;
-unsigned int normalized_sysctl_sched_min_granularity	= 500000ULL;
+unsigned int sysctl_sched_min_granularity		= 300000ULL;
+unsigned int normalized_sysctl_sched_min_granularity	= 300000ULL;
 
 /*
  * This value is kept at sysctl_sched_latency/sysctl_sched_min_granularity
  */
-static unsigned int sched_nr_latency = 8;
+static unsigned int sched_nr_latency = 10;
 
 /*
  * After fork, child runs first. If set to 0 (default) then
@@ -113,12 +114,31 @@ unsigned int sysctl_sched_child_runs_first __read_mostly;
  * and reduces their over-scheduling. Synchronous workloads will still
  * have immediate wakeup/sleep latencies.
  *
- * (default: 0.5 msec unscaled, units: nanoseconds)
+ * (default: 0.25 msec unscaled, units: nanoseconds)
  */
-unsigned int sysctl_sched_wakeup_granularity		= 500000UL;
-unsigned int normalized_sysctl_sched_wakeup_granularity	= 500000UL;
+unsigned int sysctl_sched_wakeup_granularity		= 250000UL;
+unsigned int normalized_sysctl_sched_wakeup_granularity	= 250000UL;
 
-const_debug unsigned int sysctl_sched_migration_cost	= 250000UL;
+/*
+ * Pox: BORE (Burst-Oriented Response Enhancer) tunables.
+ *
+ * Consumed by the wakeup-preemption decision below and shared with the
+ * tunable interfaces exposed by the gaming_mode controller
+ * (/proc/perfmgr/sched_bore, /sys/kernel/sched_bore*).  These must never
+ * be const or const_debug: they are written at runtime by userspace
+ * tuners (Pox Kernel Manager, vendor HALs).
+ */
+int sysctl_sched_bore				= 1;
+unsigned int sysctl_sched_burst_penalty_scale	= 1536;
+unsigned int sysctl_sched_burst_penalty_offset	= 24;
+unsigned int sysctl_sched_burst_inherit_type	= 2;
+unsigned int sysctl_sched_burst_cache_lifetime	= 75000000; /* ns (75ms) */
+
+/* Hard ceilings keeping the burst math in sane ns territory. */
+#define BORE_GAP_MAX_NS		100000000ULL	/* burst spread cap: 100ms */
+#define BORE_PENALTY_MAX_NS	200000000ULL	/* penalty cap: 200ms */
+
+unsigned int sysctl_sched_migration_cost	= 250000UL;
 
 #ifdef CONFIG_SCHED_WALT
 unsigned int sysctl_sched_use_walt_cpu_util = 1;
@@ -884,6 +904,10 @@ static void update_curr(struct cfs_rq *cfs_rq)
 		trace_sched_stat_runtime(curtask, delta_exec, curr->vruntime);
 		cpuacct_charge(curtask, delta_exec);
 		account_group_exec_runtime(curtask, delta_exec);
+
+		/* Pox BORE: accumulate the contiguous runtime burst. */
+		if (sysctl_sched_bore)
+			curr->burst_exec_acc += delta_exec;
 	}
 
 	account_cfs_rq_runtime(cfs_rq, delta_exec);
@@ -892,6 +916,83 @@ static void update_curr(struct cfs_rq *cfs_rq)
 static void update_curr_fair(struct rq *rq)
 {
 	update_curr(cfs_rq_of(&rq->curr->se));
+}
+
+/*
+ * Pox BORE: close the task's contiguous runtime burst.
+ *
+ * Called when the task goes to sleep (DEQUEUE_SLEEP).  The closed burst
+ * length is folded into the per-task hi/lo spread cache; statistics older
+ * than sysctl_sched_burst_cache_lifetime expire, so a task that changed
+ * behavior (e.g. a game ending) does not keep a stale hog reputation.
+ */
+static void bore_burst_end(struct sched_entity *se, u64 now)
+{
+	u64 acc = se->burst_exec_acc;
+
+	se->burst_exec_acc = 0;
+
+	if (!acc)
+		return;
+
+	if (se->burst_stamp &&
+	    now - se->burst_stamp > sysctl_sched_burst_cache_lifetime) {
+		/* Cache lifetime exceeded: drop the burst reputation. */
+		se->burst_exec_hi = 0;
+		se->burst_exec_lo = 0;
+	}
+
+	if (acc > se->burst_exec_hi)
+		se->burst_exec_hi = acc;
+	if (!se->burst_exec_lo || acc < se->burst_exec_lo)
+		se->burst_exec_lo = acc;
+
+	se->burst_stamp = now;
+}
+
+/*
+ * Pox BORE: vruntime preemption penalty for a bursty wakeup candidate.
+ *
+ * gap = max(0, (hi - lo) - offset)   clamped to BORE_GAP_MAX_NS
+ * penalty = (gap * scale) >> 12      clamped to BORE_PENALTY_MAX_NS
+ *
+ * Interactive tasks with short, uniform bursts (spread below the offset
+ * floor, default 24ms) stay stock: penalty 0.  Long-burst compute hogs
+ * must carry a proportionally larger vruntime advantage to preempt, so
+ * short-burst tasks (UI threads, audio, binder) win wakeup races.
+ * Anything stale beyond the cache lifetime is treated as neutral.
+ */
+static s64 bore_preempt_penalty(struct sched_entity *se)
+{
+	u64 now = rq_clock_task(rq_of(cfs_rq_of(se)));
+	u64 gap, hi, lo, penalty;
+
+	if (!sysctl_sched_bore)
+		return 0;
+
+	hi = se->burst_exec_hi;
+	lo = se->burst_exec_lo;
+
+	if (!hi || hi <= lo)
+		return 0;
+
+	if (se->burst_stamp &&
+	    now - se->burst_stamp > sysctl_sched_burst_cache_lifetime)
+		return 0;
+
+	gap = hi - lo;
+	if (gap > BORE_GAP_MAX_NS)
+		gap = BORE_GAP_MAX_NS;
+
+	if (gap < ((u64)sysctl_sched_burst_penalty_offset * NSEC_PER_MSEC))
+		return 0;
+	gap -= (u64)sysctl_sched_burst_penalty_offset * NSEC_PER_MSEC;
+
+	penalty = (gap * sysctl_sched_burst_penalty_scale) >> 12;
+	if (penalty > BORE_PENALTY_MAX_NS)
+		penalty = BORE_PENALTY_MAX_NS;
+
+	return (s64)penalty;
 }
 
 static inline void
@@ -4193,6 +4294,13 @@ dequeue_entity(struct cfs_rq *cfs_rq, struct sched_entity *se, int flags)
 	dequeue_entity_load_avg(cfs_rq, se);
 
 	update_stats_dequeue(cfs_rq, se, flags);
+
+	/*
+	 * Pox BORE: a sleep closes the task's contiguous runtime burst;
+	 * fold it into the hi/lo spread cache used by wakeup preemption.
+	 */
+	if ((flags & DEQUEUE_SLEEP) && entity_is_task(se))
+		bore_burst_end(se, rq_clock_task(rq_of(cfs_rq)));
 
 	clear_buddies(cfs_rq, se);
 
@@ -8640,6 +8748,24 @@ wakeup_preempt_entity(struct sched_entity *curr, struct sched_entity *se)
 		return -1;
 
 	gran = wakeup_gran(curr, se);
+
+	/*
+	 * Dynamic I/O & Interactive Priority Boosting (Windows NT & FreeBSD ULE heuristic):
+	 * When a task is waking up from an I/O wait (e.g. touch/display event,
+	 * binder IPC, audio, or network packet), cut wakeup granularity by half
+	 * so latency-sensitive interactive tasks immediately preempt compute tasks.
+	 */
+	if (entity_is_task(se) && task_of(se)->in_iowait)
+		gran >>= 1;
+
+	/*
+	 * Pox BORE: bill the candidate for its burstiness.  Tasks that
+	 * historically run in short, uniform bursts keep full preemption
+	 * power; long continuous bursts lose vrange advantage and must be
+	 * further ahead in vruntime to preempt the incumbent.
+	 */
+	gran += bore_preempt_penalty(se);
+
 	if (vdiff > gran)
 		return 1;
 
@@ -12204,6 +12330,34 @@ static void task_fork_fair(struct task_struct *p)
 		update_curr(cfs_rq);
 		se->vruntime = curr->vruntime;
 	}
+
+	/*
+	 * Pox BORE: per-task burst reputation inheritance.
+	 *
+	 * 0: none      - the child starts with a clean burst cache.
+	 * 1: parent    - exact copy of the parent's hi/lo spread.
+	 * 2: diluted   - parent's spread with the gap halved, so hog
+	 *                reputations decay across fork chains (default):
+	 *                matches the "tree" knob exposed to userspace.
+	 */
+	if (sysctl_sched_bore && sysctl_sched_burst_inherit_type) {
+		struct sched_entity *pse = &current->se;
+
+		if (sysctl_sched_burst_inherit_type >= 2) {
+			u64 hi = pse->burst_exec_hi;
+			u64 lo = pse->burst_exec_lo;
+
+			se->burst_exec_hi = hi;
+			se->burst_exec_lo = lo;
+			if (hi > lo)
+				se->burst_exec_hi = lo + ((hi - lo) >> 1);
+		} else {
+			se->burst_exec_hi = pse->burst_exec_hi;
+			se->burst_exec_lo = pse->burst_exec_lo;
+		}
+		se->burst_stamp = pse->burst_stamp;
+	}
+
 	place_entity(cfs_rq, se, 1);
 
 	if (sysctl_sched_child_runs_first && curr && entity_before(curr, se)) {
