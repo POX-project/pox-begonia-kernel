@@ -2144,23 +2144,15 @@ static int gf_probe(struct spi_device *spi)
 				 "%s, get goodix FP sensor chipID fail!!\n",
 				 __func__);
 
-			//workaround to solve two spi device
-			pr_err("%s cannot find the sensor,now exit\n",
+			/*
+			 * Workaround to solve two SPI devices and maintain
+			 * /dev/goodix_fp device node so that vendor fingerprint
+			 * daemons (mfp-daemon) do not null-dereference and
+			 * trigger an infinite restart loop in system_server.
+			 */
+			pr_err("%s cannot find sensor, keeping dev node for HAL stability\n",
 			       __func__);
 			spi_fingerprint = spi;
-                        pinctrl_put(gf_dev->pinctrl_gpios);
-                        gf_dev->pinctrl_gpios = NULL;
-			gf_hw_power_enable(gf_dev, 0);
-			gf_spi_clk_enable(gf_dev, 0);
-			kfree(gf_dev->spi_buffer);
-			mutex_destroy(&gf_dev->buf_lock);
-			mutex_destroy(&gf_dev->release_lock);
-			spi_set_drvdata(spi, NULL);
-			gf_dev->spi = NULL;
-			kfree(gf_dev);
-			gf_dev = NULL;
-			return 0;
-
 		} else {
 			goodix_fp_exist = true;
 			memcpy(&uuid_fp, &uuid_ta_gf, sizeof(struct TEEC_UUID));

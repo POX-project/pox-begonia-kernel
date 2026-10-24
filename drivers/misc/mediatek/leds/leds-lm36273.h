@@ -234,9 +234,9 @@ const int bl_level_remap[BL_LEVEL_MAX+1] = {
 1944, 1944, 1944, 1944, 1944, 1945, 1945, 1945 };
 #else
 #define BL_LEVEL_MAX 2047
-#define BL_HBM_L1 1913 /* 22mA for exponential mapping*/
-#define BL_HBM_L2 1925 /* 25.3mA for exponential mapping*/
-#define BL_HBM_L3 1987 /* 27.5mA for exponential mapping*/
+#define BL_HBM_L1 1945 /* 22.5mA for exponential mapping */
+#define BL_HBM_L2 1995 /* 26.0mA for exponential mapping */
+#define BL_HBM_L3 2047 /* 30.0mA Full Scale Maximum Sunlight Overdrive */
 
 static int bl_level_remap[BL_LEVEL_MAX+1] = {
 0, 2, 3, 4, 5, 6, 7, 8, 52, 91, 126, 157, 186, 212, 237, 259,

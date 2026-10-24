@@ -550,6 +550,18 @@ struct sched_entity {
 #ifdef CONFIG_MTK_RT_THROTTLE_MON
 	u64			mtk_isr_time;
 #endif
+
+	/*
+	 * Pox BORE (Burst-Oriented Response Enhancer) burst tracking:
+	 * burst_exec_hi/lo are the longest and shortest recent contiguous
+	 * runtime bursts closed by a sleep; burst_exec_acc accumulates
+	 * runtime for the burst in progress; burst_stamp ages the cache.
+	 * Consumed by the CFS wakeup-preemption decision in fair.c.
+	 */
+	u64			burst_exec_hi;
+	u64			burst_exec_lo;
+	u64			burst_exec_acc;
+	u64			burst_stamp;
 };
 
 #ifdef CONFIG_SCHED_WALT
