@@ -273,12 +273,14 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
 			pdata->charging_current_limit =
 					info->data.ac_charger_current;
 		}
-		mtk_pe20_set_charging_current(info,
-					&pdata->charging_current_limit,
-					&pdata->input_current_limit);
-		mtk_pe_set_charging_current(info,
-					&pdata->charging_current_limit,
-					&pdata->input_current_limit);
+		if (!pox_fast_charge_get()) {
+			mtk_pe20_set_charging_current(info,
+						&pdata->charging_current_limit,
+						&pdata->input_current_limit);
+			mtk_pe_set_charging_current(info,
+						&pdata->charging_current_limit,
+						&pdata->input_current_limit);
+		}
 	} else if (info->chr_type == CHARGING_HOST) {
 		pdata->input_current_limit =
 				info->data.charging_host_charger_current;

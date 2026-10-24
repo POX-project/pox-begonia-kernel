@@ -3672,32 +3672,43 @@ void pox_get_target_currents(int watt, int vbus_mv, int vbat_mv,
 	/* Input current: W / Vbus (in uA) */
 	total_aicr = (int)(((u64)watt * 1000000000ULL) / (u32)vbus_mv);
 
+	/* Ensure total_aicr is at least 2.0A for 18W on standard 9V adapters */
+	if (watt >= 18 && vbus_mv >= 7000 && total_aicr < 2000000)
+		total_aicr = 2000000;
+
 	/* Battery charging current: (W * 0.90) / Vbat (in uA) */
 	total_ichg = (int)(((u64)watt * 900000000ULL) / (u32)vbat_mv);
 
-	/* Clamp total battery current safely between 500mA and 6.2A */
+	/* Clamp total battery current safely between 500mA and 4.5A */
 	if (total_ichg < 500000)
 		total_ichg = 500000;
-	if (total_ichg > 6200000)
-		total_ichg = 6200000;
+	if (total_ichg > 4500000)
+		total_ichg = 4500000;
 
 	/* Distribute charging current between master (chg1) and slave (chg2) */
 	if (total_ichg <= 2000000) {
 		*p_ichg1 = total_ichg;
 		*p_ichg2 = 0;
 	} else {
-		*p_ichg1 = min(3200000, total_ichg / 2 + 200000);
-		*p_ichg2 = min(3000000, total_ichg - *p_ichg1);
+		*p_ichg1 = min(2600000, total_ichg / 2 + 50000);
+		*p_ichg2 = min(2400000, total_ichg - *p_ichg1);
 	}
 
-	/* Distribute input current */
-	if (total_aicr <= 2000000) {
-		*p_aicr1 = total_aicr;
-		*p_aicr2 = 0;
-	} else {
-		*p_aicr1 = min(3500000, total_aicr / 2 + 200000);
-		*p_aicr2 = min(3000000, total_aicr - *p_aicr1);
-	}
+	/*
+	 * In dual-switch charging on begonia with parallel_vbus, both chargers
+	 * share the VBUS input rail. The dual-switch driver sets pdata and pdata2
+	 * to the total adapter current, and done: halves both by 2 so each draws
+	 * total_aicr / 2.
+	 *
+	 * Set both p_aicr1 and p_aicr2 to total_aicr.
+	 * When parallel_vbus is halved at line 698 of mtk_dual_switch_charging.c:
+	 * chg1 gets total_aicr / 2, chg2 gets total_aicr / 2.
+	 * Sum drawn from adapter: (total_aicr/2) + (total_aicr/2) = total_aicr.
+	 * For 18W @ 9V: total_aicr = 2000000 uA.
+	 * Each charger draws 1000000 uA (1.0A), sum = 2.0A = 18W.
+	 */
+	*p_aicr1 = total_aicr;
+	*p_aicr2 = total_aicr;
 }
 EXPORT_SYMBOL(pox_get_target_currents);
 
