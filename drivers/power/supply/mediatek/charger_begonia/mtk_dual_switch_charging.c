@@ -352,6 +352,8 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 				if (pox_fast_charge_get()) {
 					int a1, a2, i1, i2;
 					pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
+					pdata->input_current_limit = a1;
+					pdata2->input_current_limit = a2;
 					pdata->charging_current_limit = i1;
 					pdata2->charging_current_limit = i2;
 				} else {
@@ -363,6 +365,7 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 				if (pox_fast_charge_get()) {
 					int a1, a2, i1, i2;
 					pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
+					pdata->input_current_limit = a1;
 					pdata->charging_current_limit = i1;
 				} else {
 					pdata->charging_current_limit = info->data.chg1_ta_ac_charger_current;
@@ -441,12 +444,14 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 			pdata->charging_current_limit = 1000000;
 			pdata->input_current_limit = 1600000;
 		}
-		mtk_pe20_set_charging_current(info,
-					&pdata->charging_current_limit,
-					&pdata->input_current_limit);
-		mtk_pe_set_charging_current(info,
-					&pdata->charging_current_limit,
-					&pdata->input_current_limit);
+		if (!pox_fast_charge_get()) {
+			mtk_pe20_set_charging_current(info,
+						&pdata->charging_current_limit,
+						&pdata->input_current_limit);
+			mtk_pe_set_charging_current(info,
+						&pdata->charging_current_limit,
+						&pdata->input_current_limit);
+		}
 
 		if (!pox_fast_charge_get())
 			pdata2->input_current_limit =
@@ -482,15 +487,19 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 				if (pox_fast_charge_get()) {
 					int a1, a2, i1, i2;
 					pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
+					pdata->input_current_limit = a1;
+					pdata2->input_current_limit = a2;
 					pdata->charging_current_limit = i1;
 					pdata2->charging_current_limit = i2;
 				} else {
 					pdata->charging_current_limit = info->data.chg1_ta_ac_charger_current;
 					pdata2->charging_current_limit = info->data.chg2_ta_ac_charger_current;
 				}
-				if (info->wireless_status == WIRELESS_CHG_HVDCP ||
-					((swchgalg->vbus_mv > HVDCP2P0_VOLATGE) &&
-					(info->hvdcp_type == HVDCP))) {
+				if (!pox_fast_charge_get() &&
+				    (info->wireless_status == WIRELESS_CHG_HVDCP ||
+				     (info->wireless_status != WIRELESS_NULL &&
+				      (swchgalg->vbus_mv > HVDCP2P0_VOLATGE) &&
+				      (info->hvdcp_type == HVDCP)))) {
 					//wireless hvdcp support 9V/1.5A,set total current 2.4A
 					pdata->charging_current_limit
 						= WIRELESS_HVDCP_CHG_CURRENT;
@@ -871,9 +880,10 @@ static void dual_swchg_turn_on_charging(struct charger_manager *info)
 			chg1_enable = false;
 			chg2_enable = false;
 			pr_debug("chg1's aicr is set to 0mA, turn off\n");
-		} else if (info->chg2_data.input_current_limit < 1000000) {
+		} else if (info->chg2_data.input_current_limit < (pox_fast_charge_get() ? 500000 : 1000000)) {
 			chg2_enable = false;
-			pr_debug("chg2's aicr is less than 1A, turn off\n");
+			pr_debug("chg2's aicr is less than %dmA, turn off\n",
+				pox_fast_charge_get() ? 500 : 1000);
 		}
 
 		if (check_start_dual_charging_status(info)) {
@@ -937,7 +947,7 @@ static void dual_swchg_turn_on_charging(struct charger_manager *info)
 	}
 
 	/* If chg1 or chg2 is disabled, leave PE+/PE+20 charging */
-	if ((chg1_enable == false || chg2_enable == false) &&
+	if ((chg1_enable == false || (!pox_fast_charge_get() && chg2_enable == false)) &&
 		(info->hvdcp_type != HVDCP_NULL ||
 		info->hvdcp_check_count == HVDCP_CHECK_COUNT_MAX)) {
 		if (mtk_pe20_get_is_enable(info)) {
@@ -963,8 +973,13 @@ static void dual_swchg_turn_on_charging(struct charger_manager *info)
 
 			if (info->hvdcp_type != HVDCP_NULL) {
 				if (info->chg1_data.thermal_charging_current_limit == -1) {
-					charger_dev_set_charging_current(info->chg1_dev,
-							SINGLE_THERMAL_CHG_CURRENT);
+					int ichg = SINGLE_THERMAL_CHG_CURRENT;
+					if (pox_fast_charge_get()) {
+						int a1, a2, i1, i2;
+						pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
+						ichg = min(3200000, i1 + i2);
+					}
+					charger_dev_set_charging_current(info->chg1_dev, ichg);
 				}
 			}
 
@@ -981,7 +996,7 @@ static void dual_swchg_turn_on_charging(struct charger_manager *info)
 					if (pox_fast_charge_get()) {
 						int a1, a2, i1, i2;
 						pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
-						ichg = i1;
+						ichg = min(3200000, i1 + i2);
 					}
 					charger_dev_set_charging_current(info->chg1_dev, ichg);
 				}
@@ -992,8 +1007,13 @@ static void dual_swchg_turn_on_charging(struct charger_manager *info)
 			    (mtk_pe_get_is_enable(info) &&
 			     mtk_pe_get_is_connect(info))) {
 				if (info->chg1_data.thermal_charging_current_limit == -1) {
-					charger_dev_set_charging_current(info->chg1_dev,
-						info->data.ta_ac_charger_current);
+					int ichg = info->data.ta_ac_charger_current;
+					if (pox_fast_charge_get()) {
+						int a1, a2, i1, i2;
+						pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
+						ichg = min(3200000, i1 + i2);
+					}
+					charger_dev_set_charging_current(info->chg1_dev, ichg);
 				}
 			}
 		}
