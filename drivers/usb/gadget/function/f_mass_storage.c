@@ -2590,6 +2590,25 @@ static DEVICE_ATTR_RW(nofua);
 static DEVICE_ATTR(ro, 0, ro_show, ro_store);
 static DEVICE_ATTR(file, 0, file_show, file_store);
 
+static ssize_t cdrom_show(struct device *dev, struct device_attribute *attr,
+			  char *buf)
+{
+	struct fsg_lun		*curlun = fsg_lun_from_dev(dev);
+
+	return fsg_show_cdrom(curlun, buf);
+}
+
+static ssize_t cdrom_store(struct device *dev, struct device_attribute *attr,
+			   const char *buf, size_t count)
+{
+	struct fsg_lun		*curlun = fsg_lun_from_dev(dev);
+	struct rw_semaphore	*filesem = dev_get_drvdata(dev);
+
+	return fsg_store_cdrom(curlun, filesem, buf, count);
+}
+
+static DEVICE_ATTR(cdrom, 0, cdrom_show, cdrom_store);
+
 /****************************** FSG COMMON ******************************/
 
 static void fsg_common_release(struct kref *ref);
@@ -2758,6 +2777,7 @@ static struct attribute *fsg_lun_dev_attrs[] = {
 	&dev_attr_ro.attr,
 	&dev_attr_file.attr,
 	&dev_attr_nofua.attr,
+	&dev_attr_cdrom.attr,
 	NULL
 };
 
@@ -2771,6 +2791,8 @@ static umode_t fsg_lun_dev_is_visible(struct kobject *kobj,
 		return lun->cdrom ? S_IRUGO : (S_IWUSR | S_IRUGO);
 	if (attr == &dev_attr_file.attr)
 		return lun->removable ? (S_IWUSR | S_IRUGO) : S_IRUGO;
+	if (attr == &dev_attr_cdrom.attr)
+		return S_IRUGO | S_IWUSR;
 	return attr->mode;
 }
 

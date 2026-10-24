@@ -198,6 +198,8 @@ enum gce_event_id {
 #define VCU_GET_LOG_OBJECT	_IOW('v', 11, struct log_test_nofuse)
 #define VCU_SET_LOG_OBJECT	_IOW('v', 12, struct log_test_nofuse)
 #define VCU_SET_MMAP_TYPE	_IOW('v', 13, struct map_obj)
+#define VCU_GET_OBJECT_LEGACY		0xc050760a
+#define VCU_GET_LOG_OBJECT_LEGACY	0x4400760b
 
 #define COMPAT_VCU_SET_OBJECT		_IOW('v', 0, struct share_obj)
 #define COMPAT_VCU_MVA_ALLOCATION	_IOWR('v', 1, struct compat_mem_obj)
