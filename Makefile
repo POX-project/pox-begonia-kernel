@@ -726,13 +726,14 @@ ifeq ($(cc-name),clang)
 KBUILD_CFLAGS	+= -mcpu=cortex-a55 -mtune=cortex-a76
 
 ifdef CONFIG_LLVM_POLLY
+# -polly-detect-keep-going makes the patched TRB clang 18 crash in the
+# register coalescer while compiling drivers/md/raid10.c, so leave it out.
 KBUILD_CFLAGS	+= -mllvm -polly \
 		   -mllvm -polly-run-inliner \
 		   -mllvm -polly-reschedule=1 \
                    -mllvm -polly-loopfusion-greedy=1 \
                    -mllvm -polly-postopts=1 \
 		   -mllvm -polly-ast-use-context \
-		   -mllvm -polly-detect-keep-going \
 		   -mllvm -polly-vectorizer=stripmine \
 		   -mllvm -polly-invariant-load-hoisting
 endif

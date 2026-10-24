@@ -6998,6 +6998,80 @@ static ssize_t sound_control_mic_gain_store(struct kobject *kobj, struct kobj_at
 static struct kobj_attribute mic_gain_kattr =
 	__ATTR(mic_gain, 0644, sound_control_mic_gain_show, sound_control_mic_gain_store);
 
+static int s_active_mic = 0;
+
+int pox_active_mic_get(void)
+{
+	return s_active_mic;
+}
+EXPORT_SYMBOL(pox_active_mic_get);
+
+int pox_active_mic_set(int mode)
+{
+	if (mode < 0 || mode > 3)
+		return -EINVAL;
+	s_active_mic = mode;
+	if (s_mt6359_priv) {
+		switch (mode) {
+		case 0: /* Main / Bottom Mic (AIN0) */
+			regmap_update_bits(s_mt6359_priv->regmap, MT6359_AUDENC_ANA_CON0,
+					   RG_AUDPREAMPLINPUTSEL_MASK_SFT,
+					   PGA_L_MUX_AIN0 << RG_AUDPREAMPLINPUTSEL_SFT);
+			regmap_update_bits(s_mt6359_priv->regmap, MT6359_AUDENC_ANA_CON1,
+					   RG_AUDPREAMPRINPUTSEL_MASK_SFT,
+					   PGA_R_MUX_NONE << RG_AUDPREAMPRINPUTSEL_SFT);
+			break;
+		case 1: /* Top / Secondary Mic (AIN2) */
+			regmap_update_bits(s_mt6359_priv->regmap, MT6359_AUDENC_ANA_CON0,
+					   RG_AUDPREAMPLINPUTSEL_MASK_SFT,
+					   PGA_L_MUX_NONE << RG_AUDPREAMPLINPUTSEL_SFT);
+			regmap_update_bits(s_mt6359_priv->regmap, MT6359_AUDENC_ANA_CON1,
+					   RG_AUDPREAMPRINPUTSEL_MASK_SFT,
+					   PGA_R_MUX_AIN2 << RG_AUDPREAMPRINPUTSEL_SFT);
+			break;
+		case 2: /* Headset Mic (AIN1) */
+			regmap_update_bits(s_mt6359_priv->regmap, MT6359_AUDENC_ANA_CON0,
+					   RG_AUDPREAMPLINPUTSEL_MASK_SFT,
+					   PGA_L_MUX_AIN1 << RG_AUDPREAMPLINPUTSEL_SFT);
+			regmap_update_bits(s_mt6359_priv->regmap, MT6359_AUDENC_ANA_CON1,
+					   RG_AUDPREAMPRINPUTSEL_MASK_SFT,
+					   PGA_R_MUX_NONE << RG_AUDPREAMPRINPUTSEL_SFT);
+			break;
+		case 3: /* Dual Mic (Stereo: Main on Left, Top on Right) */
+			regmap_update_bits(s_mt6359_priv->regmap, MT6359_AUDENC_ANA_CON0,
+					   RG_AUDPREAMPLINPUTSEL_MASK_SFT,
+					   PGA_L_MUX_AIN0 << RG_AUDPREAMPLINPUTSEL_SFT);
+			regmap_update_bits(s_mt6359_priv->regmap, MT6359_AUDENC_ANA_CON1,
+					   RG_AUDPREAMPRINPUTSEL_MASK_SFT,
+					   PGA_R_MUX_AIN2 << RG_AUDPREAMPRINPUTSEL_SFT);
+			break;
+		}
+	}
+	return 0;
+}
+EXPORT_SYMBOL(pox_active_mic_set);
+
+static ssize_t sound_control_active_mic_show(struct kobject *kobj, struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", pox_active_mic_get());
+}
+
+static ssize_t sound_control_active_mic_store(struct kobject *kobj, struct kobj_attribute *attr,
+					      const char *buf, size_t count)
+{
+	int val = 0;
+
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (kstrtoint(buf, 10, &val) == 0)
+		pox_active_mic_set(val);
+	return count;
+}
+
+static struct kobj_attribute active_mic_kattr =
+	__ATTR(active_mic, 0644, sound_control_active_mic_show, sound_control_active_mic_store);
+
 static int mt6359_codec_probe(struct snd_soc_codec *codec)
 {
 	struct snd_soc_component *cmpnt = &codec->component;
@@ -7039,6 +7113,9 @@ static int mt6359_codec_probe(struct snd_soc_codec *codec)
 			sc_ret = sysfs_create_file(sc_kobj, &mic_gain_kattr.attr);
 			if (sc_ret)
 				dev_warn(priv->dev, "failed to create /sys/kernel/sound_control/mic_gain: %d\n", sc_ret);
+			sc_ret = sysfs_create_file(sc_kobj, &active_mic_kattr.attr);
+			if (sc_ret)
+				dev_warn(priv->dev, "failed to create /sys/kernel/sound_control/active_mic: %d\n", sc_ret);
 		}
 	}
 
