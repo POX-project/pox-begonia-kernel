@@ -196,7 +196,7 @@ struct pox_pq_profile {
 	unsigned int sat_adj;
 };
 
-static const struct pox_pq_profile pox_pq_profiles[] = {
+static struct pox_pq_profile pox_pq_profiles[] = {
 	/*
 	 * 0 - STANDARD: panel-native reference, zero digital processing.
 	 * 1 - REFERENCE (True Tone id / default): identical by design - an
@@ -218,6 +218,10 @@ static const struct pox_pq_profile pox_pq_profiles[] = {
 	 *     still bounded so that the UI does not become unusable.
 	 */
 	{ .sat = 2, .contrast = 2, .brightness = 6, .sat_adj = 0 },
+	/*
+	 * 4 - CUSTOM: user-defined profile (defaults to neutral before customization)
+	 */
+	{ .sat = 4, .contrast = 4, .brightness = 4, .sat_adj = 0 },
 };
 
 #define POX_PQ_MODE_COUNT (sizeof(pox_pq_profiles) / sizeof(pox_pq_profiles[0]))
@@ -296,6 +300,52 @@ int get_ios_color_mode(void)
 	return current_ios_color_mode;
 }
 EXPORT_SYMBOL(get_ios_color_mode);
+
+int set_ios_color_custom(int sat, int contrast, int brightness, int sat_adj)
+{
+	if (sat < 0)
+		sat = 0;
+	else if (sat > (GLOBAL_SAT_SIZE - 1))
+		sat = GLOBAL_SAT_SIZE - 1;
+
+	if (contrast < 0)
+		contrast = 0;
+	else if (contrast > (CONTRAST_SIZE - 1))
+		contrast = CONTRAST_SIZE - 1;
+
+	if (brightness < 0)
+		brightness = 0;
+	else if (brightness > (BRIGHTNESS_SIZE - 1))
+		brightness = BRIGHTNESS_SIZE - 1;
+
+	if (sat_adj < 0)
+		sat_adj = 0;
+	else if (sat_adj > (COLOR_TUNING_INDEX - 1))
+		sat_adj = COLOR_TUNING_INDEX - 1;
+
+	mutex_lock(&g_pox_color_mode_lock);
+	pox_pq_profiles[COLOR_MODE_CUSTOM].sat = (unsigned int)sat;
+	pox_pq_profiles[COLOR_MODE_CUSTOM].contrast = (unsigned int)contrast;
+	pox_pq_profiles[COLOR_MODE_CUSTOM].brightness = (unsigned int)brightness;
+	pox_pq_profiles[COLOR_MODE_CUSTOM].sat_adj = (unsigned int)sat_adj;
+	mutex_unlock(&g_pox_color_mode_lock);
+
+	return set_ios_color_mode(COLOR_MODE_CUSTOM);
+}
+EXPORT_SYMBOL(set_ios_color_custom);
+
+void get_ios_color_custom(int *sat, int *contrast, int *brightness, int *sat_adj)
+{
+	if (sat)
+		*sat = (int)pox_pq_profiles[COLOR_MODE_CUSTOM].sat;
+	if (contrast)
+		*contrast = (int)pox_pq_profiles[COLOR_MODE_CUSTOM].contrast;
+	if (brightness)
+		*brightness = (int)pox_pq_profiles[COLOR_MODE_CUSTOM].brightness;
+	if (sat_adj)
+		*sat_adj = (int)pox_pq_profiles[COLOR_MODE_CUSTOM].sat_adj;
+}
+EXPORT_SYMBOL(get_ios_color_custom);
 
 static struct DISP_PQ_DC_PARAM g_PQ_DC_Param = {
 param:
@@ -1979,6 +2029,8 @@ void DpEngine_COLORonConfig(enum DISP_MODULE_ENUM module, void *__cmdq)
  * mechanism mtk_color_setbypass() uses on MT6785).  The COLOR block latches on
  * the next frame boundary, so this is safe while the display is running.
  */
+static void color_trigger_refresh(enum DISP_MODULE_ENUM module);
+
 static void pox_pq_apply_to_hw(void)
 {
 	enum DISP_MODULE_ENUM module = DISP_MODULE_COLOR0;
@@ -1993,6 +2045,7 @@ static void pox_pq_apply_to_hw(void)
 
 	DpEngine_COLORonInit(module, NULL);
 	DpEngine_COLORonConfig(module, NULL);
+	color_trigger_refresh(module);
 }
 
 

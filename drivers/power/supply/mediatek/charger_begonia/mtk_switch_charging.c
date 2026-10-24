@@ -231,9 +231,20 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
 		}
 	} else if (info->chr_type == NONSTANDARD_CHARGER) {
 		extern int pox_fast_charge_get(void);
+		extern int pox_charge_watt_get(void);
+		extern void pox_get_target_currents(int watt, int vbus_mv, int vbat_mv,
+						     int *p_aicr1, int *p_aicr2,
+						     int *p_ichg1, int *p_ichg2);
 		if (pox_fast_charge_get()) {
-			pdata->input_current_limit = 3000000;
-			pdata->charging_current_limit = 3000000;
+			int aicr1, aicr2, ichg1, ichg2;
+			extern int battery_get_vbus(void);
+			extern int battery_get_bat_voltage(void);
+			pox_get_target_currents(pox_charge_watt_get(),
+						battery_get_vbus(),
+						battery_get_bat_voltage(),
+						&aicr1, &aicr2, &ichg1, &ichg2);
+			pdata->input_current_limit = aicr1;
+			pdata->charging_current_limit = min(3500000, ichg1 + ichg2);
 		} else {
 			pdata->input_current_limit =
 					info->data.non_std_ac_charger_current;
@@ -242,9 +253,20 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
 		}
 	} else if (info->chr_type == STANDARD_CHARGER) {
 		extern int pox_fast_charge_get(void);
+		extern int pox_charge_watt_get(void);
+		extern void pox_get_target_currents(int watt, int vbus_mv, int vbat_mv,
+						     int *p_aicr1, int *p_aicr2,
+						     int *p_ichg1, int *p_ichg2);
 		if (pox_fast_charge_get()) {
-			pdata->input_current_limit = 3200000;
-			pdata->charging_current_limit = 3000000; /* Force 18W Charging */
+			int aicr1, aicr2, ichg1, ichg2;
+			extern int battery_get_vbus(void);
+			extern int battery_get_bat_voltage(void);
+			pox_get_target_currents(pox_charge_watt_get(),
+						battery_get_vbus(),
+						battery_get_bat_voltage(),
+						&aicr1, &aicr2, &ichg1, &ichg2);
+			pdata->input_current_limit = aicr1;
+			pdata->charging_current_limit = min(3500000, ichg1 + ichg2);
 		} else {
 			pdata->input_current_limit =
 					info->data.ac_charger_input_current;
