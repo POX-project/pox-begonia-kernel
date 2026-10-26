@@ -335,3 +335,9 @@ added to `c2.patch`. This is a large change — see the commit history for conte
 | `drivers/misc/mediatek/performance/gaming_mode.c` | `/proc/perfmgr/pox_build` interface |
 | `.github/workflows/build.yml` | CI: build, release, Telegram notification |
 | `pox-kernel-manager/` | Android app consuming `/proc/perfmgr/pox_build` |
+
+---
+
+## TODO
+
+- **Version bump to 2.0**: When the user says "were gonna release this", change `KERNEL_VERSION` in `build.sh` from `1.0` to `2.0` and update any version references in `README.md` and workflow.
