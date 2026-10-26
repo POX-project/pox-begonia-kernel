@@ -467,7 +467,7 @@ toolchain_version() {
     cv="$("$KERDEVDEP/clang/bin/clang" --version 2>/dev/null | head -n1 \
         | sed -E 's/[[:space:]]*\([^)]*\)//g; s/[[:space:]]+/ /g; s/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
     [[ -n "$cv" ]] || cv="unknown clang"
-    bv="$("$KERDEVDEP/clang/bin/aarch64-linux-gnu-ld" --version 2>/dev/null | head -n1 \
+    bv="$("$KERDEVDEP/gcc/bin/aarch64-linux-android-ld" --version 2>/dev/null | head -n1 \
         | grep -oE '[0-9]+(\.[0-9]+)+' | head -n1 || true)"
     if [[ -n "$bv" ]]; then
         printf '%s + binutils %s' "$cv" "$bv"
@@ -499,7 +499,10 @@ TOOLCHAIN_VER="$(toolchain_version)"
 ARCH=arm64
 CC=clang
 CLANG_TRIPLE=aarch64-linux-gnu-
-CROSS_COMPILE=aarch64-linux-gnu-
+# kerdevdep ships the Android GCC 4.9 binutils (aarch64-linux-android-*).
+# Clang still targets the GNU triple for codegen; only the binutils prefix
+# has to match the toolchain that is actually installed.
+CROSS_COMPILE=aarch64-linux-android-
 AK3_DIR="$KERDEVDEP/anykernel"
 
 export KBUILD_BUILD_USER="${KBUILD_BUILD_USER:-Pox}"
