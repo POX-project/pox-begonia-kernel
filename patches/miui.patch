@@ -1,0 +1,406 @@
+diff --git a/drivers/misc/mediatek/connectivity/wlan/adaptor/wmt_cdev_wifi.c b/drivers/misc/mediatek/connectivity/wlan/adaptor/wmt_cdev_wifi.c
+index 4808f516d3dc..e39ebeef3f04 100644
+--- a/drivers/misc/mediatek/connectivity/wlan/adaptor/wmt_cdev_wifi.c
++++ b/drivers/misc/mediatek/connectivity/wlan/adaptor/wmt_cdev_wifi.c
+@@ -14,6 +14,8 @@
+ 
+ #include <linux/init.h>
+ #include <linux/module.h>
++#include <linux/notifier.h>
++#include <linux/spinlock.h>
+ #include <linux/types.h>
+ #include <linux/kernel.h>
+ #include <linux/fs.h>
+@@ -219,15 +221,90 @@ enum ENUM_WLAN_DRV_BUF_TYPE_T {
+ typedef uint8_t(*file_buf_handler)(void *ctx, const char __user *buf, uint16_t length);
+ static file_buf_handler buf_handler[BUF_TYPE_NUM];
+ static void *buf_handler_ctx[BUF_TYPE_NUM];
++static struct module *buf_handler_owner[BUF_TYPE_NUM];
++static DEFINE_SPINLOCK(buf_handler_lock);
++
+ void register_file_buf_handler(file_buf_handler handler, void *handler_ctx, uint8_t ucType)
+ {
+-	if (ucType < BUF_TYPE_NUM) {
+-		buf_handler[ucType] = handler;
+-		buf_handler_ctx[ucType] = handler_ctx;
++	unsigned long flags;
++	struct module *owner, *prev_owner;
++
++	if (ucType >= BUF_TYPE_NUM)
++		return;
++
++	spin_lock_irqsave(&buf_handler_lock, flags);
++	owner = handler ? __module_address((unsigned long)handler) : NULL;
++	prev_owner = buf_handler_owner[ucType];
++	if (handler && owner && buf_handler[ucType] && owner != prev_owner &&
++	    (prev_owner == NULL || try_module_get(prev_owner))) {
++		if (prev_owner)
++			module_put(prev_owner);
++		spin_unlock_irqrestore(&buf_handler_lock, flags);
++		WIFI_ERR_FUNC("Ignore handler %p of type %u: owned by %s\n",
++				handler, ucType, module_name(prev_owner));
++		return;
+ 	}
++	buf_handler[ucType] = handler;
++	buf_handler_ctx[ucType] = handler_ctx;
++	buf_handler_owner[ucType] = owner;
++	spin_unlock_irqrestore(&buf_handler_lock, flags);
+ }
+ EXPORT_SYMBOL(register_file_buf_handler);
+ 
++static file_buf_handler get_file_buf_handler(uint8_t ucType, void **ctx,
++					     struct module **owner)
++{
++	file_buf_handler handler;
++	unsigned long flags;
++
++	*ctx = NULL;
++	*owner = NULL;
++
++	spin_lock_irqsave(&buf_handler_lock, flags);
++	handler = buf_handler[ucType];
++	if (handler && buf_handler_owner[ucType] &&
++	    !try_module_get(buf_handler_owner[ucType])) {
++		buf_handler[ucType] = NULL;
++		buf_handler_ctx[ucType] = NULL;
++		buf_handler_owner[ucType] = NULL;
++		handler = NULL;
++	}
++	if (handler) {
++		*ctx = buf_handler_ctx[ucType];
++		*owner = buf_handler_owner[ucType];
++	}
++	spin_unlock_irqrestore(&buf_handler_lock, flags);
++
++	return handler;
++}
++
++static int buf_handler_module_notify(struct notifier_block *nb,
++				     unsigned long val, void *data)
++{
++	struct module *mod = data;
++	unsigned long flags;
++	int i;
++
++	if (val != MODULE_STATE_GOING)
++		return NOTIFY_DONE;
++
++	spin_lock_irqsave(&buf_handler_lock, flags);
++	for (i = 0; i < BUF_TYPE_NUM; i++) {
++		if (buf_handler_owner[i] == mod) {
++			buf_handler[i] = NULL;
++			buf_handler_ctx[i] = NULL;
++			buf_handler_owner[i] = NULL;
++		}
++	}
++	spin_unlock_irqrestore(&buf_handler_lock, flags);
++
++	return NOTIFY_DONE;
++}
++
++static struct notifier_block buf_handler_module_nb = {
++	.notifier_call = buf_handler_module_notify,
++};
++
+ /*******************************************************************
+  *  WHOLE CHIP RESET PROCEDURE:
+  *
+@@ -482,6 +559,7 @@ ssize_t WIFI_write(struct file *filp, const char __user *buf, size_t count, loff
+ 			}
+ 		} else if (!strncmp(local, "WR-BUF:", 7)) {
+ 			file_buf_handler handler = NULL;
++			struct module *handler_owner = NULL;
+ 			void *ctx = NULL;
+ 
+ 			if (!strncmp(&local[7], "NVRAM", 5)) {
+@@ -489,8 +567,9 @@ ssize_t WIFI_write(struct file *filp, const char __user *buf, size_t count, loff
+ 				buf += 12;
+ 				wait_cnt = 0;
+ 				while (wait_cnt < 20) {
+-					handler = buf_handler[BUF_TYPE_NVRAM];
+-					ctx = buf_handler_ctx[BUF_TYPE_NVRAM];
++					handler = get_file_buf_handler(
++							BUF_TYPE_NVRAM,
++							&ctx, &handler_owner);
+ 					if (handler)
+ 						break;
+ 					msleep(100);
+@@ -504,34 +583,43 @@ ssize_t WIFI_write(struct file *filp, const char __user *buf, size_t count, loff
+ 			} else if (!strncmp(&local[7], "DRVCFG", 6)) {
+ 				copy_size = count - 13;
+ 				buf += 13;
+-				handler = buf_handler[BUF_TYPE_DRV_CFG];
+-				ctx = buf_handler_ctx[BUF_TYPE_DRV_CFG];
++				handler = get_file_buf_handler(
++						BUF_TYPE_DRV_CFG,
++						&ctx, &handler_owner);
+ 			} else if (!strncmp(&local[7], "FWCFG", 5)) {
+ 				copy_size = count - 12;
+ 				buf += 12;
+-				handler = buf_handler[BUF_TYPE_FW_CFG];
+-				ctx = buf_handler_ctx[BUF_TYPE_FW_CFG];
++				handler = get_file_buf_handler(
++						BUF_TYPE_FW_CFG,
++						&ctx, &handler_owner);
+ 			}
+ 			if (handler && !handler(ctx, buf, (uint16_t)copy_size))
+ 				retval = count;
+ 			else
+ 				retval = -ENOTSUPP;
++			if (handler_owner)
++				module_put(handler_owner);
+ 		} else if (!strncmp(local, "RM-BUF:", 7)) {
+ 			file_buf_handler handler = NULL;
++			struct module *handler_owner = NULL;
+ 			void *ctx = NULL;
+ 
+ 			if (!strncmp(&local[7], "DRVCFG", 6)) {
+-				handler = buf_handler[BUF_TYPE_DRV_CFG];
+-				ctx = buf_handler_ctx[BUF_TYPE_DRV_CFG];
++				handler = get_file_buf_handler(
++						BUF_TYPE_DRV_CFG,
++						&ctx, &handler_owner);
+ 			} else if (!strncmp(&local[7], "FWCFG", 5)) {
+-				handler = buf_handler[BUF_TYPE_FW_CFG];
+-				ctx = buf_handler_ctx[BUF_TYPE_FW_CFG];
++				handler = get_file_buf_handler(
++						BUF_TYPE_FW_CFG,
++						&ctx, &handler_owner);
+ 			}
+ 
+ 			if (handler && !handler(ctx, NULL, 0))
+ 				retval = count;
+ 			else
+ 				retval = -ENOTSUPP;
++			if (handler_owner)
++				module_put(handler_owner);
+ 		} else if (local[0] == 'S' || local[0] == 'P' || local[0] == 'A') {
+ 			if (powered == 1 && driver_loaded == 0) {
+ 				WIFI_DBG_FUNC("In fact wifi is already turned off! reset related states.\n");
+@@ -748,6 +836,7 @@ static int WIFI_init(void)
+ #if (CFG_ANDORID_CONNINFRA_SUPPORT == 1)
+ 	wifi_pwr_on_init();
+ #endif
++	register_module_notifier(&buf_handler_module_nb);
+ 	return 0;
+ 
+ error:
+@@ -786,6 +875,8 @@ static void WIFI_exit(void)
+ 	cdev_del(&WIFI_cdev);
+ 	unregister_chrdev_region(wifi_devno, WIFI_devs);
+ 
++	unregister_module_notifier(&buf_handler_module_nb);
++
+ 	WIFI_DBG_FUNC("%s driver removed\n", WIFI_DRIVER_NAME);
+ 
+ #ifdef CONFIG_MTK_CONNSYS_DEDICATED_LOG_PATH
+diff --git a/drivers/misc/mediatek/connectivity/wlan/core/gen4m/os/linux/gl_init.c b/drivers/misc/mediatek/connectivity/wlan/core/gen4m/os/linux/gl_init.c
+index c8cf03a9eccf..af4af9959a74 100644
+--- a/drivers/misc/mediatek/connectivity/wlan/core/gen4m/os/linux/gl_init.c
++++ b/drivers/misc/mediatek/connectivity/wlan/core/gen4m/os/linux/gl_init.c
+@@ -2528,10 +2528,6 @@ static void wlanCreateWirelessDevice(void)
+ 		prWdev[u4Idx]->wiphy = prWiphy;
+ 		gprWdev[u4Idx] = prWdev[u4Idx];
+ 	}
+-#if CFG_WLAN_ASSISTANT_NVRAM
+-	register_file_buf_handler(wlanNvramBufHandler, (void *)NULL,
+-			ENUM_BUF_TYPE_NVRAM);
+-#endif
+ 	DBGLOG(INIT, INFO, "Create wireless device success\n");
+ 	return;
+ 
+@@ -5391,9 +5387,32 @@ static int initWlan(void)
+ #endif
+ 
+ 	if (ret == -EIO) {
++		/* glRegisterBus() failed, e.g. because another "wlan"
++		 * driver is already registered: this driver is built-in
++		 * and the vendor wlan_drv_gen4m.ko is being insmodded on
++		 * top of it.  wlanCreateWirelessDevice() has already
++		 * called wiphy_register(), and the registered wiphy's
++		 * ops/bands point into this module's memory, which is
++		 * freed again when this init returns: unwind it before
++		 * bailing out, otherwise cfg80211 keeps walking the
++		 * stale wiphy from its CRDA timeout and dereferences
++		 * freed memory.  Mirrors the teardown order of
++		 * exitWlan().
++		 */
+ 		kalUninitIOBuffer();
++		wlanDestroyAllWdev();
++#if WLAN_INCLUDE_PROC
++		procUninitProcFs();
++#endif
++#if WLAN_INCLUDE_SYS
++		sysUninitSysFs();
++#endif
+ 		return ret;
+ 	}
++#if CFG_WLAN_ASSISTANT_NVRAM
++	register_file_buf_handler(wlanNvramBufHandler, (void *)NULL,
++			ENUM_BUF_TYPE_NVRAM);
++#endif
+ #if (CFG_CHIP_RESET_SUPPORT)
+ 	glResetInit(prGlueInfo);
+ #endif
+@@ -5454,6 +5473,9 @@ static void exitWlan(void)
+ #endif
+ 	kalNotifierUnReg();
+ 	wlanUnregisterNetdevNotifier();
++#if CFG_WLAN_ASSISTANT_NVRAM
++	register_file_buf_handler(NULL, NULL, ENUM_BUF_TYPE_NVRAM);
++#endif
+ 
+ 	/* printk("remove %p\n", wlanRemove); */
+ #if CFG_CHIP_RESET_SUPPORT
+diff --git a/net/wireless/core.c b/net/wireless/core.c
+index 0e08629b15d1..b34b5b6d1129 100644
+--- a/net/wireless/core.c
++++ b/net/wireless/core.c
+@@ -1345,6 +1345,60 @@ static struct pernet_operations cfg80211_pernet_ops = {
+ 	.exit = cfg80211_pernet_exit,
+ };
+ 
++#ifdef CONFIG_MODULES
++/* A module can go down while still owning registered wiphys, e.g. when
++ * its init failed midway and the error path did not unwind
++ * wiphy_register().  Such leftovers stay on cfg80211_rdev_list with
++ * their ops/bands pointing into module memory that is about to be
++ * freed, so the next core path to walk the list (regulatory workers,
++ * ...) would jump into freed memory.  Sweep them out before the module
++ * image goes away.
++ */
++static int cfg80211_module_notify(struct notifier_block *nb,
++				  unsigned long val, void *data)
++{
++	struct module *mod = data;
++	struct cfg80211_registered_device *rdev;
++	bool found;
++
++	if (val != MODULE_STATE_GOING)
++		return NOTIFY_DONE;
++
++	for (;;) {
++		found = false;
++
++		rtnl_lock();
++		rcu_read_lock();
++		list_for_each_entry(rdev, &cfg80211_rdev_list, list) {
++			if (__module_address((unsigned long)rdev->ops) ==
++			    mod) {
++				found = true;
++				break;
++			}
++		}
++		rcu_read_unlock();
++		rtnl_unlock();
++
++		if (!found)
++			break;
++
++		/* wiphy_unregister() takes rtnl_lock() itself, so it
++		 * cannot be called with the list locked above.  The rdev
++		 * cannot disappear in the window: only its owning module
++		 * could unregister it, and that module is already gone.
++		 */
++		wiphy_unregister(&rdev->wiphy);
++		wiphy_free(&rdev->wiphy);
++	}
++
++	return NOTIFY_DONE;
++}
++
++static struct notifier_block cfg80211_module_nb = {
++	.notifier_call = cfg80211_module_notify,
++};
++#endif /* CONFIG_MODULES */
++
+ static int __init cfg80211_init(void)
+ {
+ 	int err;
+@@ -1377,8 +1431,18 @@ static int __init cfg80211_init(void)
+ 		goto out_fail_wq;
+ 	}
+ 
++#ifdef CONFIG_MODULES
++	err = register_module_notifier(&cfg80211_module_nb);
++	if (err)
++		goto out_fail_modnot;
++#endif
++
+ 	return 0;
+ 
++#ifdef CONFIG_MODULES
++out_fail_modnot:
++	destroy_workqueue(cfg80211_wq);
++#endif
+ out_fail_wq:
+ 	regulatory_exit();
+ out_fail_reg:
+@@ -1397,6 +1461,9 @@ subsys_initcall(cfg80211_init);
+ 
+ static void __exit cfg80211_exit(void)
+ {
++#ifdef CONFIG_MODULES
++	unregister_module_notifier(&cfg80211_module_nb);
++#endif
+ 	debugfs_remove(ieee80211_debugfs_dir);
+ 	nl80211_exit();
+ 	unregister_netdevice_notifier(&cfg80211_netdev_notifier);
+diff --git a/arch/arm64/configs/begonia_apatch_defconfig b/arch/arm64/configs/begonia_apatch_defconfig
+index ab2af2f80..7ff7b729a 100644
+--- a/arch/arm64/configs/begonia_apatch_defconfig
++++ b/arch/arm64/configs/begonia_apatch_defconfig
+@@ -222,7 +222,7 @@ CONFIG_BPF_JIT_ALWAYS_ON=y
+ CONFIG_SHMEM=y
+ CONFIG_AIO=y
+ CONFIG_ADVISE_SYSCALLS=y
+-CONFIG_BPF_UNPRIV_DEFAULT_OFF=y
++# CONFIG_BPF_UNPRIV_DEFAULT_OFF is not set
+ CONFIG_USERFAULTFD=y
+ CONFIG_MEMBARRIER=y
+ CONFIG_EMBEDDED=y
+@@ -4939,7 +4939,7 @@ CONFIG_TRACING_EVENTS_GPIO=y
+ # CONFIG_TEST_MEMINIT is not set
+ # CONFIG_TEST_STACKINIT is not set
+ # CONFIG_MEMTEST is not set
+-CONFIG_BUG_ON_DATA_CORRUPTION=y
++# CONFIG_BUG_ON_DATA_CORRUPTION is not set
+ # CONFIG_SAMPLES is not set
+ CONFIG_HAVE_ARCH_KGDB=y
+ # CONFIG_KGDB is not set
+diff --git a/arch/arm64/configs/begonia_user_defconfig b/arch/arm64/configs/begonia_user_defconfig
+index 7c2d64450..f6ec0b15d 100644
+--- a/arch/arm64/configs/begonia_user_defconfig
++++ b/arch/arm64/configs/begonia_user_defconfig
+@@ -222,7 +222,7 @@ CONFIG_BPF_JIT_ALWAYS_ON=y
+ CONFIG_SHMEM=y
+ CONFIG_AIO=y
+ CONFIG_ADVISE_SYSCALLS=y
+-CONFIG_BPF_UNPRIV_DEFAULT_OFF=y
++# CONFIG_BPF_UNPRIV_DEFAULT_OFF is not set
+ CONFIG_USERFAULTFD=y
+ CONFIG_MEMBARRIER=y
+ CONFIG_EMBEDDED=y
+@@ -4936,7 +4936,7 @@ CONFIG_TRACING_EVENTS_GPIO=y
+ # CONFIG_TEST_MEMINIT is not set
+ # CONFIG_TEST_STACKINIT is not set
+ # CONFIG_MEMTEST is not set
+-CONFIG_BUG_ON_DATA_CORRUPTION=y
++# CONFIG_BUG_ON_DATA_CORRUPTION is not set
+ # CONFIG_SAMPLES is not set
+ CONFIG_HAVE_ARCH_KGDB=y
+ # CONFIG_KGDB is not set
+diff --git a/arch/arm64/configs/miui.config b/arch/arm64/configs/miui.config
+new file mode 100644
+index 000000000..ba3ee213d
+--- /dev/null
++++ b/arch/arm64/configs/miui.config
+@@ -0,0 +1,8 @@
++# MIUI / HyperOS vendor WLAN compatibility
++#
++# These match the onyx-miui branch:
++#   - vendor wlan_drv_gen4m can half-load when BUG_ON_DATA_CORRUPTION is on;
++#   - unprivileged BPF default-off can leave system_server in a boot loop.
++# Keep them disabled for MIUI/HyperOS builds.
++# CONFIG_BPF_UNPRIV_DEFAULT_OFF is not set
++# CONFIG_BUG_ON_DATA_CORRUPTION is not set

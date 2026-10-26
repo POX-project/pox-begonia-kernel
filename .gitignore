@@ -149,3 +149,7 @@ reboot-logs/
 !.agents/
 pox-manager/
 *.apk
+
+# Variant patch sets
+!/patches/
+!/patches/**
