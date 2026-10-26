@@ -139,7 +139,8 @@ jobs:
           - **Root Support**: ${{ env.ROOT_INFO }}
           - **Version**: 1.0.0-Beta
           - **Branch**: \`${{ github.ref_name }}\`
-          - **Commit**: \`${{ env.COMMIT_SHORT }}\`
+          - **Commit**: [\`${{ env.COMMIT_SHORT }}\`](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+          - **Build**: [${{ github.workflow }}](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})
           - **Device**: Xiaomi Redmi Note 8 Pro (\`begonia\` / \`begonia_in\`)
           - **SoC**: MediaTek MT6785 / Helio G90T
           - **Linux Version**: 4.14.357 LTS
@@ -164,7 +165,7 @@ jobs:
           ---
           ### Commit Log
           EOF
-          git log -n 8 --pretty=format:"* %h - %s (%an)" >> release_notes.md
+          git log -n 8 --pretty=format:"* [%h](https://github.com/${{ github.repository }}/commit/%H) - %s (%an)" >> release_notes.md
           echo "" >> release_notes.md
 
       - name: Upload Build Artifacts
