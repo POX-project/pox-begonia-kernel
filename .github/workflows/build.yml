@@ -174,18 +174,45 @@ jobs:
           GOFILE_TOKEN: ${{ secrets.GOFILE_TOKEN }}
         run: |
           set -euo pipefail
-          args=(-F "file=@${ZIP_PATH}")
+          args=(-F "file=@${ZIP_PATH};type=application/zip")
           if [[ -n "${GOFILE_TOKEN:-}" ]]; then
             args+=(-F "token=${GOFILE_TOKEN}")
           fi
-          response="$(curl -fsSL --retry 3 --max-time 600 "${args[@]}" https://upload.gofile.io/uploadfile)"
-          link="$(printf '%s' "$response" | python3 -c 'import json,sys; print(json.load(sys.stdin)["data"]["downloadPage"])')"
-          [[ "$link" == https://* ]] || { echo "::error::Unexpected Gofile response: $response"; exit 1; }
+
+          link=""
+          for attempt in 1 2 3; do
+            echo "Gofile upload attempt ${attempt}/3 ..."
+            if response="$(curl -fsSL --retry 3 --retry-delay 5 --max-time 900 \
+                "${args[@]}" https://upload.gofile.io/uploadfile 2>&1)"; then
+              link="$(printf '%s' "$response" | python3 -c '
+          import json, sys
+          payload = json.load(sys.stdin)
+          if payload.get("status") != "ok":
+              sys.exit(1)
+          print(payload["data"]["downloadPage"])
+          ' 2>/dev/null || true)"
+            else
+              echo "::warning::Gofile request failed: ${response}"
+            fi
+            if [[ "$link" == https://* ]]; then
+              break
+            fi
+            echo "::warning::Gofile attempt ${attempt} did not return a download page."
+            response=""
+            sleep 10
+          done
+
+          if [[ "$link" != https://* ]]; then
+            echo "::error::Gofile upload failed after 3 attempts."
+            exit 1
+          fi
+
           echo "link=${link}" >> "$GITHUB_OUTPUT"
           echo "Gofile: ${link}"
 
-      # One Telegram message per build: the zip itself plus a caption carrying
-      # the Gofile link, commit, changelog and the Actions run URL.
+      # One Telegram message per build: the flashable zip itself plus a
+      # caption carrying the Gofile link, the Actions run URL and the last
+      # six commits.
       # Required secrets: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
       # Optional secret:  TELEGRAM_MESSAGE_THREAD_ID (forum topic)
       - name: Notify Telegram
@@ -193,7 +220,7 @@ jobs:
         continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: "-1004390960803"
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
           GOFILE_LINK: ${{ steps.gofile.outputs.link }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
@@ -210,15 +237,20 @@ jobs:
           python3 - <<'PY'
           import html, os, subprocess
 
+          # Telegram rejects captions longer than 1024 characters. Keep a small
+          # margin and measure the escaped HTML (entities only make us more
+          # conservative, and no tag/entity is ever cut in half).
+          MAX_CAPTION = 1024
+          SAFETY = 24
+
           def esc(value):
               return html.escape(value or "", quote=False)
 
-          def one_line(value, limit=120):
-              value = " ".join((value or "").split())
-              return value if len(value) <= limit else value[:limit - 1] + "…"
+          def one_line(value):
+              return " ".join((value or "").split())
 
-          changelog = subprocess.run(
-              ["git", "log", "-n", "8", "--pretty=format:%h %s"],
+          commits = subprocess.run(
+              ["git", "log", "-n", "6", "--pretty=format:%h\t%s"],
               capture_output=True, text=True).stdout.splitlines()
 
           lines = [
@@ -230,29 +262,77 @@ jobs:
               f"<b>Defconfig:</b> <code>{esc(os.environ.get('DEFCONFIG'))}</code>",
               f"<b>Build #:</b> {esc(os.environ.get('RUN_NUMBER'))}",
           ]
-          if os.environ.get("GOFILE_LINK"):
-              lines.append(f"<b>Gofile:</b> {esc(os.environ['GOFILE_LINK'])}")
+
+          gofile = os.environ.get("GOFILE_LINK", "").strip()
+          if gofile:
+              lines.append(f"<b>Gofile:</b> {esc(gofile)}")
+          else:
+              # The Gofile step is continue-on-error: never print a dead link,
+              # but keep the message shape predictable.
+              lines.append("<b>Gofile:</b> upload failed, use the Actions artifact")
           lines.append(f"<b>Run:</b> {esc(os.environ.get('RUN_URL'))}")
 
-          # Telegram caps captions at 1024 characters. Add changelog entries
-          # while they fit, so a long log can never cut an HTML entity or tag
-          # (which Telegram rejects as "can't parse entities").
-          caption = "\n".join(lines + ["", "<b>Changelog</b>"])
-          for entry in changelog:
-              candidate = f"{caption}\n• {esc(entry)}"
-              if len(candidate) > 1000:
-                  caption += "\n…"
-                  break
-              caption = candidate
+          heading = "\n".join(lines + ["", "<b>Last 6 commits</b>"])
+
+          # Truncate subjects instead of dropping commits: the message must
+          # always list exactly the last six (or all available, on a shallow
+          # fetch) so every build post has the same shape.
+          def entry(sha, subject):
+              rendered = f"• <code>{esc(sha)}</code>"
+              return f"{rendered} {esc(subject)}" if subject else rendered
+
+          slots = max(len(commits), 1)
+          allowance = max(48, (MAX_CAPTION - SAFETY - len(heading)) // slots)
+          entries = []
+          for line in commits:
+              sha, _, raw_subject = line.partition("\t")
+              original = one_line(raw_subject)
+              subject = original
+              # Shrink the subject until the fully rendered (and escaped)
+              # entry fits its slot.
+              while subject and len(entry(sha, subject + "…")) > allowance:
+                  subject = subject[:-1].rstrip()
+              if subject != original:
+                  subject += "…"
+              entries.append(entry(sha, subject))
+
+          caption = "\n".join([heading] + entries)
+
+          # Last-resort guard: drop whole lines only, so the HTML stays valid.
+          while len(caption) > MAX_CAPTION - 8 and "\n" in caption:
+              caption = caption.rsplit("\n", 1)[0]
 
           with open(os.environ["caption_file"], "w", encoding="utf-8") as fh:
               fh.write(caption)
           PY
 
+          echo "Caption length: $(wc -c < "$caption_file") bytes"
+
           send_args=(-F "chat_id=${TELEGRAM_CHAT_ID}" -F "parse_mode=HTML")
           if [[ -n "${TELEGRAM_MESSAGE_THREAD_ID:-}" ]]; then
             send_args+=(-F "message_thread_id=${TELEGRAM_MESSAGE_THREAD_ID}")
           fi
+
+          # Retry the Bot API call: a transient 5xx/network error should not
+          # leave a green build with no announcement.
+          send_telegram() {
+            local endpoint="$1"
+            shift
+            local response=""
+            local attempt
+            for attempt in 1 2 3; do
+              if response="$(curl -sS --max-time 900 -X POST \
+                  "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${endpoint}" \
+                  "$@" 2>&1)" && [[ "$response" == *'"ok":true'* ]]; then
+                echo "Telegram ${endpoint}: delivered"
+                return 0
+              fi
+              echo "::warning::Telegram ${endpoint} attempt ${attempt}/3 failed: ${response}"
+              sleep 15
+            done
+            echo "::error::Telegram ${endpoint} failed after 3 attempts."
+            return 1
+          }
 
           zip_bytes="$(stat -c%s "$ZIP_PATH")"
           if (( zip_bytes > 50 * 1024 * 1024 )); then
@@ -260,14 +340,11 @@ jobs:
             # still gives a one-tap download, so send the same caption as text.
             echo "::warning::Zip is ${zip_bytes} bytes (>50 MiB); sending the caption without the file attachment."
             send_args+=(-F "text=<${caption_file}" -F "disable_web_page_preview=true")
-            curl -fsS -X POST \
-              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-              "${send_args[@]}"
+            send_telegram sendMessage "${send_args[@]}"
           else
-            send_args+=(-F "document=@${ZIP_PATH}" -F "caption=<${caption_file}")
-            curl -fsS -X POST \
-              "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument" \
-              "${send_args[@]}"
+            send_args+=(-F "document=@${ZIP_PATH};type=application/zip"
+                        -F "caption=<${caption_file}")
+            send_telegram sendDocument "${send_args[@]}"
           fi
 
       - name: Notify Telegram (failure)
