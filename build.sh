@@ -12,14 +12,29 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="${BUILD_DIR:-$ROOT_DIR/build}"
 OUT_DIR="${OUT_DIR:-$BUILD_DIR/out}"
 KERDEVDEP="${KERDEVDEP:-$ROOT_DIR/kerdevdep}"
+PATCH_DIR="${PATCH_DIR:-$ROOT_DIR/patches}"
+ACTION="${1:-all}"
 
 # Kernel Branding & Versioning (Fully customizable via environment or build script)
 KERNEL_NAME="${KERNEL_NAME:-Pox}"
-KERNEL_VERSION="${KERNEL_VERSION:-1.0.0-Beta}"
+KERNEL_VERSION="${KERNEL_VERSION:-1.0}"
 DEVICE_NAME="${DEVICE_NAME:-Redmi Note 8 Pro}"
 DEVICE_CODENAME="${DEVICE_CODENAME:-begonia}"
 MAINTAINER="${MAINTAINER:-TXO R (Pox Project)}"
 DEFCONFIG="${DEFCONFIG:-}"
+
+# Bundled root packages for the APatch/FolkPatch variants. Each release asset
+# is an APK that doubles as a flashable recovery zip (KernelPatch); the
+# AnyKernel installer auto-flashes it after writing the kernel and stages the
+# manager APK for first-boot install.
+BUNDLE_ROOT="${BUNDLE_ROOT:-1}"
+APATCH_REPO="${APATCH_REPO:-bmax121/APatch}"
+FOLKPATCH_REPO="${FOLKPATCH_REPO:-LyraVoid/FolkPatch}"
+APATCH_PACKAGE="${APATCH_PACKAGE:-me.bmax.apatch}"
+FOLKPATCH_PACKAGE="${FOLKPATCH_PACKAGE:-me.yuki.folk}"
+ROOT_INSTALL_APP="${ROOT_INSTALL_APP:-1}"
+APATCH_ZIP="${APATCH_ZIP:-}"
+FOLKPATCH_ZIP="${FOLKPATCH_ZIP:-}"
 
 # Determine safe parallel jobs based on available RAM and load to protect host PC from freezing
 auto_jobs() {
@@ -40,59 +55,404 @@ DATE="$(date +%Y%m%d-%H%M)"
 
 # Git Metadata: Branch & Commit ID
 GIT_BRANCH="${GIT_BRANCH:-${GITHUB_REF_NAME:-$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "onyx")}}"
+GIT_BRANCH="${GIT_BRANCH#refs/heads/}"
+GIT_BRANCH="${GIT_BRANCH#refs/tags/}"
 COMMIT_HASH="${COMMIT_HASH:-$(git rev-parse --short=7 HEAD 2>/dev/null || echo "custom")}"
 COMMIT_DATE="$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || date +'%Y-%m-%d %H:%M')"
 COMMIT_SUBJECT="$(git log -1 --format=%s 2>/dev/null || echo "Release build")"
 
-# Version Name / Codename (Rocks theme: Granite, Obsidian, Onyx)
-if [[ -z "${VERSION_NAME:-}" ]]; then
+log()  { printf '\033[1;32m[*] %s\033[0m\n' "$*"; }
+warn() { printf '\033[1;33m[!] %s\033[0m\n' "$*"; }
+err()  { printf '\033[1;31m[-] %s\033[0m\n' "$*"; }
+
+# Read-only variant listing. This runs before any patch application or
+# toolchain bootstrap so `./build.sh patches` can inspect the tree safely.
+if [[ "$ACTION" == "variants" || "$ACTION" == "list-variants" ||
+      "$ACTION" == "patches" || "$ACTION" == "list-patches" ]]; then
+    log "Variant selection: VARIANT=<root>[,<overlay>] (e.g. VARIANT=ksu,c2)"
+    log "Root flavors: vanilla (none), apatch, folkpatch, ksu"
+    log "Overlays:     miui, c2"
+    echo
+    for patch in "$PATCH_DIR"/*.patch; do
+        [[ -f "$patch" ]] || continue
+        printf '  %-8s %8s bytes  %s\n' \
+            "$(basename "$patch" .patch)" \
+            "$(stat -c%s "$patch" 2>/dev/null || wc -c < "$patch")" \
+            "$(grep -c '^diff --git' "$patch") file(s)"
+    done
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Variant selection
+# ---------------------------------------------------------------------------
+# The repository keeps one source branch (`onyx`). Root flavors (vanilla,
+# APatch, FolkPatch, KernelSU) and media overlays (MIUI/HyperOS, Codec2) are
+# shipped as patch sets under patches/ and applied on top of that branch at
+# build time.
+#
+#   VARIANT=vanilla          stock build, no patches
+#   VARIANT=ksu              BakaSU + NoMount + SuSFS
+#   VARIANT=ksu,c2           KSU root + Codec2 overlay
+#   VARIANT=apatch,miui      APatch root (auto-flashed) + MIUI overlay
+#   VARIANT=folkpatch        FolkPatch root (same kernel, FolkPatch package)
+#
+# When VARIANT is unset the branch/tag name is used for backwards
+# compatibility, so `onyx-ksu-next` still builds the KSU edition.
+VARIANT="${VARIANT:-${ROOT_VARIANT:-}}"
+VARIANT="${VARIANT//,/ }"
+VARIANT="$(echo "$VARIANT" | xargs)"
+
+if [[ -z "$VARIANT" ]]; then
     case "$GIT_BRANCH" in
-        onyx-resukisu*|*resukisu*)
-            VERSION_NAME="Onyx-ReSukiSu"
-            BRANCH_DESC="Zero Frame-Drop Gaming & ReSukiSu Ultra Edition"
-            DEFAULT_DEFCONFIG="begonia_user_ksu_defconfig"
+        main|granite|obsidian|memory-enhanced) VARIANT="$GIT_BRANCH" ;;
+        *ksun*|*ksu-next*|*ksu*|*apatch*|*folkpatch*|*miui*|*hyperos*|*c2*|*codec2*)
+            VARIANT="$GIT_BRANCH"
             ;;
-        onyx-apatch*|*apatch*)
-            VERSION_NAME="Onyx-APatch"
-            BRANCH_DESC="Zero Frame-Drop Gaming & APatch Edition"
-            DEFAULT_DEFCONFIG="begonia_apatch_defconfig"
-            ;;
-        onyx-ksu-next*|*ksu-next*)
-            VERSION_NAME="Onyx-KSU-Next"
-            BRANCH_DESC="Zero Frame-Drop Gaming & KernelSU-Next Edition"
-            DEFAULT_DEFCONFIG="begonia_apatch_defconfig"
-            ;;
-        main|granite)
-            VERSION_NAME="Granite"
-            BRANCH_DESC="Rock-Solid Stability Edition"
-            DEFAULT_DEFCONFIG="begonia_user_defconfig"
-            ;;
-        memory-enhanced|obsidian)
-            VERSION_NAME="Obsidian"
-            BRANCH_DESC="iOS-Style Compressed Memory Edition"
-            DEFAULT_DEFCONFIG="begonia_user_defconfig"
-            ;;
-        gaming|onyx|*)
-            VERSION_NAME="Onyx"
-            BRANCH_DESC="Zero Frame-Drop Gaming Edition (Unrooted)"
-            DEFAULT_DEFCONFIG="begonia_user_defconfig"
-            ;;
+        *) VARIANT="onyx" ;;
     esac
+fi
+
+# Map a variant token to the patch file that implements it.
+variant_patch_name() {
+    case "$1" in
+        onyx|vanilla|stock|none|default|"") printf '' ;;
+        main|granite|obsidian|memory-enhanced) printf '' ;;
+        *ksun*|*ksu-next*|*kernelsu*|*reksun*|*ksu*) printf 'ksu' ;;
+        *folkpatch*)                   printf 'apatch' ;;   # same kernel side; different bundled package
+        *apatch*)                      printf 'apatch' ;;
+        *miui*|*hyperos*)              printf 'miui' ;;
+        *c2*|*codec2*)                 printf 'c2' ;;
+        *) printf '%s' "$1" ;;
+    esac
+}
+
+# Root flavor drives packaging (which manager package gets bundled and
+# auto-flashed) and is independent of the media overlays.
+parse_variant_tokens() {
+    local token
+    for token in $VARIANT; do
+        case "$token" in
+            *folkpatch*)                      printf 'folkpatch'; return ;;
+            *apatch*)                         printf 'apatch';    return ;;
+            *ksun*|*ksu*|*kernelsu*|*reksun*) printf 'ksu';       return ;;
+        esac
+    done
+    printf 'vanilla'
+}
+ROOT_FLAVOR="$(parse_variant_tokens)"
+
+
+
+apply_variant_patches() {
+    [[ "${VARIANT_PATCHED:-0}" == "1" ]] && return 0
+
+    local requested=() token name p
+    local roots=() overlays=()
+    for token in $VARIANT; do
+        name="$(variant_patch_name "$token")"
+        [[ -z "$name" ]] && continue
+        case "$name" in
+            miui|c2) overlays+=("$name") ;;
+            *)       roots+=("$name") ;;
+        esac
+    done
+    requested=("${roots[@]}" "${overlays[@]}")
+
+    # A tree left dirty by an earlier variant build must never be reused for
+    # a different variant (for example `VARIANT=ksu ./build.sh all` followed
+    # by `VARIANT=vanilla ./build.sh all` would silently ship a rooted
+    # kernel). Detect applied patch sets that are not part of this request.
+    local applied=() f n wanted
+    for f in "$PATCH_DIR"/*.patch; do
+        [[ -f "$f" ]] || continue
+        if git apply --reverse --check "$f" >/dev/null 2>&1; then
+            applied+=("$(basename "$f" .patch)")
+        fi
+    done
+    for name in "${applied[@]}"; do
+        wanted=0
+        for n in "${requested[@]}"; do
+            [[ "$n" == "$name" ]] && wanted=1
+        done
+        if (( ! wanted )); then
+            err "Patch set '$name' is still applied from a previous build."
+            err "Run './build.sh unvariant' to restore the clean onyx tree, then retry."
+            exit 1
+        fi
+    done
+
+    ((${#requested[@]})) || return 0
+
+    # Validate every requested patch before touching the tree.
+    local patch
+    for name in "${requested[@]}"; do
+        patch="$PATCH_DIR/$name.patch"
+        if [[ ! -f "$patch" ]]; then
+            err "Variant '$name' has no patch file (expected patches/$name.patch)"
+            err "Available variants: $(ls "$PATCH_DIR"/*.patch 2>/dev/null | xargs -n1 basename 2>/dev/null | sed 's/\.patch$//' | paste -sd' ' -)"
+            exit 1
+        fi
+    done
+
+    # Apply in place, skipping patches that are already applied (so repeated
+    # `./build.sh zip` runs do not fail).
+    local pending=0
+    for name in "${requested[@]}"; do
+        patch="$PATCH_DIR/$name.patch"
+        if ! git apply --reverse --check "$patch" >/dev/null 2>&1; then
+            pending=1
+        fi
+    done
+
+    if (( pending )); then
+        if ! git rev-parse --git-dir >/dev/null 2>&1; then
+            err "Variant patches require a git checkout (VARIANT=$VARIANT)"
+            exit 1
+        fi
+        # Only the files a patch touches have to be clean; unrelated local
+        # edits (or a sparse checkout) are fine.
+        local touched=() p
+        for name in "${requested[@]}"; do
+            while IFS= read -r p; do
+                touched+=("$p")
+            done < <(grep '^diff --git' "$PATCH_DIR/$name.patch" \
+                | sed -E 's|^diff --git a/||; s| b/.*$||')
+        done
+        if ! git diff --quiet -- "${touched[@]}" || ! git diff --cached --quiet -- "${touched[@]}"; then
+            err "Variant patches conflict with local changes in:"
+            git diff --name-only -- "${touched[@]}"
+            git diff --cached --name-only -- "${touched[@]}"
+            err "Commit or stash those files first, or set VARIANT_PATCHED=1 if the patches are already applied."
+            exit 1
+        fi
+        for name in "${requested[@]}"; do
+            patch="$PATCH_DIR/$name.patch"
+            if git apply --reverse --check "$patch" >/dev/null 2>&1; then
+                log "Variant patch already applied: $name"
+                APPLIED_PATCHES="${APPLIED_PATCHES:+$APPLIED_PATCHES }$name"
+                continue
+            fi
+            log "Applying variant patch: patches/$name.patch"
+            git apply --index "$patch" || {
+                err "Failed to apply patches/$name.patch - rebase it onto the current tree."
+                exit 1
+            }
+            APPLIED_PATCHES="${APPLIED_PATCHES:+$APPLIED_PATCHES }$name"
+        done
+    fi
+
+    # A ksu patch adds .gitmodules + a KernelSU gitlink; the submodule itself
+    # still has to be checked out.
+    if [[ -f "$ROOT_DIR/.gitmodules" ]]; then
+        # Sync first so switching a root submodule (for example ReSukiSU ->
+        # BakaSU) cannot reuse a stale URL from .git/config.
+        git submodule sync --recursive >/dev/null
+        git submodule update --init --recursive || {
+            err "Failed to initialise submodules added by the variant patch."
+            exit 1
+        }
+    fi
+
+    VARIANT_PATCHED=1
+    export APPLIED_PATCHES VARIANT_PATCHED
+}
+
+# Restore the clean onyx tree: reverse every applied patch set (overlays were
+# applied last), then drop the KernelSU checkout added by the ksu patch.
+unapply_variant_patches() {
+    local roots=() overlays=() f name i
+    for f in "$PATCH_DIR"/*.patch; do
+        [[ -f "$f" ]] || continue
+        if git apply --reverse --check "$f" >/dev/null 2>&1; then
+            name="$(basename "$f" .patch)"
+            case "$name" in
+                miui|c2) overlays+=("$f") ;;
+                *)       roots+=("$f") ;;
+            esac
+        fi
+    done
+
+    if ((${#roots[@]} + ${#overlays[@]} == 0)); then
+        log "No variant patches are applied."
+        return 0
+    fi
+
+    # deinit first: reversing the ksu patch deletes .gitmodules.
+    if [[ -f "$ROOT_DIR/.gitmodules" ]]; then
+        git submodule deinit -f --all >/dev/null 2>&1 || true
+    fi
+
+    # Match application order in reverse: overlays were applied after roots.
+    for ((i=${#overlays[@]}-1; i>=0; i--)); do
+        log "Reverting variant patch: ${overlays[i]#$ROOT_DIR/}"
+        git apply --reverse --index "${overlays[i]}" || {
+            err "Could not revert ${overlays[i]#$ROOT_DIR/} cleanly."
+            exit 1
+        }
+    done
+    for ((i=${#roots[@]}-1; i>=0; i--)); do
+        log "Reverting variant patch: ${roots[i]#$ROOT_DIR/}"
+        git apply --reverse --index "${roots[i]}" || {
+            err "Could not revert ${roots[i]#$ROOT_DIR/} cleanly."
+            exit 1
+        }
+    done
+
+    rm -rf "$ROOT_DIR/KernelSU" "$ROOT_DIR/.git/modules/KernelSU"
+    log "Working tree restored to the clean onyx state."
+}
+
+# `./build.sh unvariant` is a maintenance action: it only touches the working
+# tree, so run it before the toolchain bootstrap.
+if [[ "$ACTION" == "unvariant" || "$ACTION" == "unpatch" ]]; then
+    unapply_variant_patches
+    exit 0
+fi
+
+# KernelSU is kept as a pristine upstream submodule; local fixes live in
+# ksu-patches/<root>/ and are applied on top of the checkout. Paths inside
+# those patches are relative to the KernelSU submodule root.
+apply_root_patches() {
+    local dir="$ROOT_DIR/ksu-patches/$ROOT_FLAVOR"
+    [[ -d "$ROOT_DIR/KernelSU" && -d "$dir" ]] || return 0
+
+    local patch
+    shopt -s nullglob
+    for patch in "$dir"/*.patch; do
+        if git -C "$ROOT_DIR" apply --directory=KernelSU \
+                --reverse --check "$patch" >/dev/null 2>&1; then
+            log "KernelSU patch already applied: $(basename "$patch")"
+            continue
+        fi
+        log "Applying KernelSU patch: $(basename "$patch")"
+        if ! git -C "$ROOT_DIR" apply --directory=KernelSU "$patch"; then
+            err "Failed to apply ksu-patches/$ROOT_FLAVOR/$(basename "$patch")"
+            exit 1
+        fi
+    done
+    shopt -u nullglob
+}
+
+# Version Name / Codename (Rocks theme: Granite, Obsidian, Onyx)
+#
+# One resolver maps the selected variant (or branch/tag name) to an edition,
+# description and default defconfig. Root flavors and media overlays compose,
+# so `onyx-c2-ksun` reports "Onyx-C2-KSU" instead of a generic fallback.
+resolve_variant() {
+    local branch="$1"
+    local root="" root_desc="" defconfig="begonia_user_defconfig"
+    local extra_desc=""
+
+    # Root flavor. Order matters: `folkpatch` is matched before `apatch` and
+    # `sultan` before the generic APatch pattern so the right label wins.
+    case "$branch" in
+        *folkpatch*)                  root="FolkPatch"; root_desc="FolkPatch";            defconfig="begonia_apatch_defconfig" ;;
+        *apatch*)                     root="APatch";   root_desc="APatch";                  defconfig="begonia_apatch_defconfig" ;;
+        *ksun*|*ksu-next*|*kernelsu*|*reksun*|*ksu*) root="KSU"; root_desc="KernelSU-Next + BakaSU"; defconfig="bakasu_defconfig" ;;
+        *kaeru*)                      root="Kaeru";    root_desc="Kaeru Bootloader";            defconfig="begonia_user_defconfig" ;;
+    esac
+
+    # Orthogonal media overlays.
+    if [[ "$branch" == *miui* || "$branch" == *hyperos* ]]; then
+        extra_desc="${extra_desc:+$extra_desc + }MIUI/HyperOS"
+    fi
+    if [[ "$branch" == *c2* || "$branch" == *codec2* ]]; then
+        extra_desc="${extra_desc:+$extra_desc + }Codec2 Media"
+    fi
+
+    DEFAULT_DEFCONFIG="$defconfig"
+
+    if [[ "$branch" == main || "$branch" == *granite* ]]; then
+        VERSION_NAME="Granite"
+        BRANCH_DESC="Rock-Solid Stability Edition"
+        DEFAULT_DEFCONFIG="begonia_user_defconfig"
+        return
+    fi
+
+    if [[ "$branch" == *obsidian* || "$branch" == *memory-enhanced* ]]; then
+        VERSION_NAME="Obsidian"
+        BRANCH_DESC="iOS-Style Compressed Memory Edition"
+        DEFAULT_DEFCONFIG="begonia_user_defconfig"
+        return
+    fi
+
+    local edition="Onyx"
+    [[ "$branch" == *c2* || "$branch" == *codec2* ]] && edition="${edition}-C2"
+    [[ "$branch" == *miui* || "$branch" == *hyperos* ]] && edition="${edition}-MIUI"
+
+    BRANCH_DESC="Zero Frame-Drop Gaming"
+    [[ -n "$extra_desc" ]] && BRANCH_DESC="$BRANCH_DESC & $extra_desc"
+
+    if [[ -n "$root" ]]; then
+        VERSION_NAME="${edition}-${root}"
+        BRANCH_DESC="$BRANCH_DESC & $root_desc Edition"
+    else
+        VERSION_NAME="$edition"
+        BRANCH_DESC="$BRANCH_DESC Edition (Unrooted)"
+    fi
+}
+
+if [[ -z "${VERSION_NAME:-}" ]]; then
+    resolve_variant "$VARIANT"
 else
     BRANCH_DESC="${BRANCH_DESC:-Custom Edition}"
     DEFAULT_DEFCONFIG="begonia_user_defconfig"
 fi
+
+# Apply the selected variant before resolving the defconfig: the patch is what
+# adds root-specific defconfigs (begonia_apatch_defconfig, bakasu_defconfig).
+case "$ACTION" in
+    clean|distclean) ;;
+    *)
+        apply_variant_patches
+        apply_root_patches
+        ;;
+esac
+: "${APPLIED_PATCHES:=none}"
+export APPLIED_PATCHES
+log "Variant:      $VARIANT (root: $ROOT_FLAVOR, patches: $APPLIED_PATCHES)"
+
+# If the variant asked for a defconfig that does not exist in this checkout,
+# fall back to the unrooted default so `./build.sh all` still works.
+if [[ -z "${DEFCONFIG:-}" && ! -f "$ROOT_DIR/arch/arm64/configs/${DEFAULT_DEFCONFIG}" ]]; then
+    warn "Defconfig ${DEFAULT_DEFCONFIG} is not present in this checkout; falling back to begonia_user_defconfig"
+    DEFAULT_DEFCONFIG="begonia_user_defconfig"
+fi
+
 DEFCONFIG="${DEFCONFIG:-$DEFAULT_DEFCONFIG}"
 BRANCH_CODENAME="$VERSION_NAME"
 
-# Derive dynamic localversion string: name, version, edition, commit id
+# Kernel release tag: root first, then media overlays, e.g.
+# 4.14.357-Pox-Apatch-C2, 4.14.357-Pox-KSU, 4.14.357-Pox-Vanilla.
+kernel_variant_tag() {
+    local tag token
+    case "$ROOT_FLAVOR" in
+        apatch)    tag="Apatch" ;;
+        folkpatch) tag="FolkPatch" ;;
+        ksu)       tag="KSU" ;;
+        *)         tag="Vanilla" ;;
+    esac
+    for token in $VARIANT; do
+        case "$token" in
+            *miui*|*hyperos*) [[ "$tag" == *-MIUI ]] || tag="$tag-MIUI" ;;
+            *c2*|*codec2*)    [[ "$tag" == *-C2 ]]   || tag="$tag-C2" ;;
+        esac
+    done
+    printf '%s' "$tag"
+}
+
+# Derive dynamic localversion string: Pox + variant. LOCALVERSION still wins
+# when a one-off build needs a fully custom suffix.
 if [[ -n "${LOCALVERSION:-}" ]]; then
     CUSTOM_LOCALVERSION="$LOCALVERSION"
 else
-    CUSTOM_LOCALVERSION="-${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${COMMIT_HASH}"
+    CUSTOM_LOCALVERSION="-Pox"
 fi
+EXTENDED_LOCALVERSION="${EXTENDED_LOCALVERSION:-$CUSTOM_LOCALVERSION}"
+LINUX_VERSION="4.14.$(grep -m1 '^SUBLEVEL =' "$ROOT_DIR/Makefile" | awk '{print $3}')"
 
-# Package zip base name: name, version, edition, commit id, device
+# Package zip base name: name, version, edition, device
 if [[ -n "${PACKAGE_NAME:-}" ]]; then
     ZIP_BASE="$PACKAGE_NAME"
 elif [[ "$KERNEL_NAME" == *"$DEVICE_CODENAME"* ]]; then
@@ -101,11 +461,31 @@ else
     ZIP_BASE="${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${COMMIT_HASH}-${DEVICE_CODENAME}"
 fi
 
-log()  { printf '\033[1;32m[*] %s\033[0m\n' "$*"; }
-warn() { printf '\033[1;33m[!] %s\033[0m\n' "$*"; }
-err()  { printf '\033[1;31m[-] %s\033[0m\n' "$*"; }
+# Report the toolchain that is actually in kerdevdep (brand + LLVM version)
+toolchain_version() {
+    local cv bv
+    cv="$("$KERDEVDEP/clang/bin/clang" --version 2>/dev/null | head -n1 \
+        | sed -E 's/[[:space:]]*\([^)]*\)//g; s/[[:space:]]+/ /g; s/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
+    [[ -n "$cv" ]] || cv="unknown clang"
+    bv="$("$KERDEVDEP/clang/bin/aarch64-linux-gnu-ld" --version 2>/dev/null | head -n1 \
+        | grep -oE '[0-9]+(\.[0-9]+)+' | head -n1 || true)"
+    if [[ -n "$bv" ]]; then
+        printf '%s + binutils %s' "$cv" "$bv"
+    else
+        printf '%s' "$cv"
+    fi
+}
 
 # 1. Ensure kerdevdep is bootstrapped
+# A toolchain selection change (e.g. same kerdevdep, different Clang) forces
+# a fresh fetch so the build never silently reuses the previous compiler.
+TOOLCHAIN_SELECTOR="trb:${TRB_CLANG_REPO:-https://gitlab.com/voltageos/clang.git}:${TRB_CLANG_PIN:-b0fa406b3f65eae210c60dda2e91dae979e4b3a8}"
+
+if [[ -d "$KERDEVDEP/clang" ]] && [[ "$(cat "$KERDEVDEP/clang/.kerdevdep-toolchain" 2>/dev/null)" != "$TOOLCHAIN_SELECTOR" ]]; then
+    log "Toolchain selection changed - re-fetching Clang ..."
+    rm -rf "$KERDEVDEP/clang"
+fi
+
 if [[ ! -f "$KERDEVDEP/env.sh" || ! -x "$KERDEVDEP/clang/bin/clang" || ! -x "$KERDEVDEP/bin/ccache" ]]; then
     log "Bootstrapping self-contained dependencies in $KERDEVDEP ..."
     bash "$KERDEVDEP/setup_kerdevdep.sh"
@@ -114,17 +494,16 @@ fi
 # 2. Source kerdevdep environment
 # shellcheck source=/dev/null
 source "$KERDEVDEP/env.sh"
+TOOLCHAIN_VER="$(toolchain_version)"
 
 ARCH=arm64
 CC=clang
 CLANG_TRIPLE=aarch64-linux-gnu-
-CROSS_COMPILE=aarch64-linux-android-
+CROSS_COMPILE=aarch64-linux-gnu-
 AK3_DIR="$KERDEVDEP/anykernel"
 
-export KBUILD_BUILD_USER="${KBUILD_BUILD_USER:-TXO_R}"
-export KBUILD_BUILD_HOST="${KBUILD_BUILD_HOST:-${KERNEL_NAME}Kernel}"
-
-ACTION="${1:-all}"
+export KBUILD_BUILD_USER="${KBUILD_BUILD_USER:-Pox}"
+export KBUILD_BUILD_HOST="${KBUILD_BUILD_HOST:-Poxproject}"
 
 clean_build() {
     log "Cleaning build outputs in $OUT_DIR ..."
@@ -138,7 +517,28 @@ distclean_build() {
     log "Distclean complete."
 }
 
+merge_config_fragments() {
+    [[ -f "$OUT_DIR/.config" ]] || return 0
+
+    # Droidspaces-OSS: container support fragment, when the tree ships one.
+    if [[ -f "$ROOT_DIR/arch/arm64/configs/droidspaces.config" ]]; then
+        log "Merging Droidspaces config fragment..."
+        sh "$ROOT_DIR/scripts/kconfig/merge_config.sh" -m -O "$OUT_DIR" \
+            "$OUT_DIR/.config" "$ROOT_DIR/arch/arm64/configs/droidspaces.config" >/dev/null
+    fi
+
+    # MIUI/HyperOS overlay: the variant patch adds this fragment; merge it into
+    # whichever root defconfig was selected (user/bakasu/apatch).
+    if [[ -f "$ROOT_DIR/arch/arm64/configs/miui.config" ]] && \
+       [[ "$VERSION_NAME" == *MIUI* || "$VARIANT" == *miui* || "$VARIANT" == *hyperos* ]]; then
+        log "Merging MIUI/HyperOS config fragment..."
+        sh "$ROOT_DIR/scripts/kconfig/merge_config.sh" -m -O "$OUT_DIR" \
+            "$OUT_DIR/.config" "$ROOT_DIR/arch/arm64/configs/miui.config" >/dev/null
+    fi
+}
+
 prepare_config() {
+    merge_config_fragments
     local test_src="$BUILD_DIR/.tc-test.c"
     mkdir -p "$BUILD_DIR"
     printf 'int x;\n' > "$test_src"
@@ -151,7 +551,7 @@ prepare_config() {
 
     if ! "$KERDEVDEP/clang/bin/clang" --target=aarch64-linux-gnu \
         -mllvm -polly -mllvm -polly-postopts=1 -mllvm -polly-ast-use-context \
-        -mllvm -polly-detect-keep-going -mllvm -polly-vectorizer=stripmine \
+        -mllvm -polly-vectorizer=stripmine \
         -mllvm -polly-invariant-load-hoisting -c "$test_src" -o /dev/null 2>/dev/null; then
         log "Toolchain lacks patched LLVM Polly - disabling CONFIG_LLVM_POLLY"
         ./scripts/config --file "$OUT_DIR/.config" --disable LLVM_POLLY
@@ -164,7 +564,14 @@ prepare_config() {
         ./scripts/config --file "$OUT_DIR/.config" --disable INLINE_OPTIMIZATION
     fi
 
-    # Dynamically apply LOCALVERSION based on KERNEL_NAME and KERNEL_VERSION
+    # Clang 18 emits an out-of-line `strlcpy.inline` clone shared by init and
+    # non-init callers; it references .init.data variables (boot_command_line,
+    # saved_root_name, ...), which modpost reports as section mismatches. They
+    # are false positives for this tree, so keep them as warnings instead of
+    # failing the vmlinux link for every variant.
+    ./scripts/config --file "$OUT_DIR/.config" --enable SECTION_MISMATCH_WARN_ONLY
+
+    # Apply the branded LOCALVERSION (4.14.357-Pox-<variant>)
     log "Setting CONFIG_LOCALVERSION=\"$CUSTOM_LOCALVERSION\" in .config"
     ./scripts/config --file "$OUT_DIR/.config" --set-str LOCALVERSION "$CUSTOM_LOCALVERSION"
 
@@ -199,6 +606,7 @@ build_kernel() {
     log "Commit ID:    $COMMIT_HASH"
     log "Device:       $DEVICE_NAME ($DEVICE_CODENAME)"
     log "Maintainer:   $MAINTAINER"
+    log "Variant:      $VARIANT (root: $ROOT_FLAVOR, patches: $APPLIED_PATCHES)"
     log "Localversion: $CUSTOM_LOCALVERSION"
     log "Defconfig:    $DEFCONFIG"
     log "Output Dir:   $BUILD_DIR"
@@ -273,6 +681,61 @@ build_kernel() {
     log "Kernel image saved to: $BUILD_DIR/Image.gz-dtb"
 }
 
+# Resolve the manager package bundled with the current root flavor.
+root_package_spec() {
+    ROOT_LABEL=""
+    ROOT_ZIP_NAME=""
+    ROOT_APK_NAME=""
+    ROOT_PACKAGE_NAME=""
+    ROOT_ASSET=""
+
+    case "${ROOT_FLAVOR:-vanilla}" in
+        apatch)
+            ROOT_LABEL="APatch (KernelPatch)"
+            ROOT_ZIP_NAME="apatch.zip"
+            ROOT_APK_NAME="APatch.apk"
+            ROOT_PACKAGE_NAME="$APATCH_PACKAGE"
+            ;;
+        folkpatch)
+            ROOT_LABEL="FolkPatch (KernelPatch)"
+            ROOT_ZIP_NAME="folkpatch.zip"
+            ROOT_APK_NAME="FolkPatch.apk"
+            ROOT_PACKAGE_NAME="$FOLKPATCH_PACKAGE"
+            ;;
+    esac
+}
+
+# Fetch the latest release APK (which is also a flashable recovery zip) for a
+# KernelPatch-based root solution.
+fetch_root_release() {
+    local repo="$1" dest="$2" label="$3"
+    local api="https://api.github.com/repos/${repo}/releases/latest"
+    local url=""
+
+    if ! command -v curl >/dev/null 2>&1; then
+        warn "curl not available; cannot fetch ${label} release."
+        return 1
+    fi
+
+    url="$(curl -fsSL "$api" 2>/dev/null \
+        | grep -oE '"browser_download_url":[[:space:]]*"[^"]+\.apk"' \
+        | head -n1 \
+        | sed -E 's/.*"(https[^"]+)".*/\1/')"
+
+    if [[ -z "$url" ]]; then
+        warn "Could not resolve a ${label} APK from ${repo}."
+        return 1
+    fi
+
+    ROOT_ASSET="$(basename "$url")"
+    log "Fetching latest ${label} release: $ROOT_ASSET"
+    if ! curl -fL --retry 3 --connect-timeout 20 -o "$dest" "$url"; then
+        warn "Failed to download ${label} APK."
+        return 1
+    fi
+    return 0
+}
+
 package_zip() {
     if [[ "${SKIP_PACKAGE:-0}" == "1" ]]; then
         log "Skipping zip packaging."
@@ -295,20 +758,49 @@ package_zip() {
     cp -r "$AK3_DIR/." "$stage/"
     cp "$image" "$stage/Image.gz-dtb"
 
+    # Bundle the manager package for APatch/FolkPatch. Its release artifact is
+    # an APK that is also a flashable recovery zip; stage it with .zip suffix.
+    root_package_spec
+    ROOT_BUNDLED=0
+    if [[ -n "$ROOT_ZIP_NAME" && "$BUNDLE_ROOT" == "1" ]]; then
+        local root_zip="$stage/$ROOT_ZIP_NAME"
+        local root_source=""
+        case "$ROOT_FLAVOR" in
+            apatch)    root_source="$APATCH_ZIP" ;;
+            folkpatch) root_source="$FOLKPATCH_ZIP" ;;
+        esac
+        if [[ -n "$root_source" && -f "$root_source" ]]; then
+            cp -f "$root_source" "$root_zip"
+            ROOT_ASSET="$(basename "$root_source")"
+            log "Bundled local ${ROOT_LABEL} package: $ROOT_ASSET"
+            ROOT_BUNDLED=1
+        else
+            local root_repo="$APATCH_REPO"
+            [[ "$ROOT_FLAVOR" == "folkpatch" ]] && root_repo="$FOLKPATCH_REPO"
+            if fetch_root_release "$root_repo" "$root_zip" "$ROOT_LABEL"; then
+                log "Bundled ${ROOT_LABEL} as ${ROOT_ZIP_NAME} ($(du -h "$root_zip" | cut -f1))"
+                ROOT_BUNDLED=1
+            else
+                rm -f "$root_zip"
+                warn "Proceeding without ${ROOT_LABEL} auto-flash step."
+            fi
+        fi
+    fi
+
     local commit_hash commit_date commit_subject kver toolchain_ver git_branch
     commit_hash="$(git rev-parse --short HEAD 2>/dev/null || echo "custom")"
     commit_date="$(git log -1 --format=%cd --date=format:'%Y-%m-%d %H:%M' 2>/dev/null || date +'%Y-%m-%d %H:%M')"
     commit_subject="$(git log -1 --format=%s 2>/dev/null || echo "Release build")"
     git_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "gaming")"
     kver="4.14.$(grep -m1 '^SUBLEVEL =' "$ROOT_DIR/Makefile" | awk '{print $3}')"
-    toolchain_ver="Clang 11.0.1 + GCC 9.3"
+    toolchain_ver="$TOOLCHAIN_VER"
 
     local kernel_name_upper version_name_upper
     kernel_name_upper="$(echo "$KERNEL_NAME" | tr '[:lower:]' '[:upper:]')"
     version_name_upper="$(echo "$VERSION_NAME" | tr '[:lower:]' '[:upper:]')"
     local full_title="${KERNEL_NAME} Kernel ${KERNEL_VERSION} [${VERSION_NAME}]"
     local kver="4.14.$(grep -m1 '^SUBLEVEL =' "$ROOT_DIR/Makefile" | awk '{print $3}')"
-    local toolchain_ver="Clang 11.0.1 + GCC 9.3"
+    local toolchain_ver="$TOOLCHAIN_VER"
 
     # Generate dynamic changelog ui_print statements for TWRP
     local changelog_ui=""
@@ -326,12 +818,14 @@ package_zip() {
         echo " Version: $KERNEL_VERSION"
         echo " Version Name: $VERSION_NAME ($BRANCH_DESC)"
         echo " Branch: $GIT_BRANCH"
+        echo " Variant: $VARIANT (patches: $APPLIED_PATCHES)"
         echo " Commit ID: $COMMIT_HASH"
         echo " Maintainer: $MAINTAINER"
         echo " Motto: We aim for stability, not for anything else."
         echo " Linux: v$kver | Date: $COMMIT_DATE"
         echo " Toolchain: $toolchain_ver"
         echo " Defconfig: $DEFCONFIG (APatch ready)"
+        echo " Root Auto-Flash: ${ROOT_LABEL:-none} ${ROOT_ASSET:-disabled}"
         echo " Memory: iOS-Style On-Demand Multi-Stream Compressed ZRAM"
         echo " Gaming: Zero Frame-Drop Gaming Mode Controller"
         echo "========================================================"
@@ -741,10 +1235,31 @@ on boot
 RC_EOF
     chmod 644 \$RAMDISK/init.battery_guard.rc
 
+    # 4. One-shot first-boot installer for the bundled root manager APK.
+    if [ -f "\$AKHOME/pox_root_install.sh" ]; then
+        cp -f "\$AKHOME/pox_root_install.sh" "\$RAMDISK/pox_root_install.sh";
+        chmod 755 "\$RAMDISK/pox_root_install.sh";
+        cat << 'RC_EOF' > \$RAMDISK/init.pox_root.rc
+# Pox Kernel - one-shot root manager app installer
+service pox_root_install /system/bin/sh /pox_root_install.sh
+    class late_start
+    user root
+    group root
+    seclabel u:r:init:s0
+    oneshot
+    disabled
+
+on property:sys.boot_completed=1
+    start pox_root_install
+RC_EOF
+        chmod 644 \$RAMDISK/init.pox_root.rc;
+    fi
+
     if [ -f "\$RAMDISK/init.rc" ]; then
         insert_line init.rc "init.memory_enhanced.rc" after "import /init.environ.rc" "import /init.memory_enhanced.rc";
         insert_line init.rc "init.gaming.rc" after "import /init.memory_enhanced.rc" "import /init.gaming.rc";
         insert_line init.rc "init.battery_guard.rc" after "import /init.gaming.rc" "import /init.battery_guard.rc";
+        [ -f "\$RAMDISK/init.pox_root.rc" ] && insert_line init.rc "init.pox_root.rc" after "import /init.battery_guard.rc" "import /init.pox_root.rc";
     fi
 fi
 
@@ -776,6 +1291,66 @@ ui_print "     - FPSGO Ultra-Rescue + Mali-G76 MC4 Touch Boost: enabled";
 ui_print "     - Universal USB OTG: DACs, controllers, serial & ethernet active";
 write_boot;
 
+## Auto-flash the bundled ${ROOT_LABEL:-root package} after the kernel is written.
+## The release APK is itself a flashable recovery zip (KernelPatch). Mirror its
+## update-binary flow: extract its bundled busybox and assets, then run the root
+## installer against the freshly written boot image.
+if [ -n "${ROOT_ZIP_NAME}" ]; then
+ROOT_SRC="";
+for root_pkg in "\$AKHOME/${ROOT_ZIP_NAME}" "${ROOT_ZIP_NAME}"; do
+    [ -f "\$root_pkg" ] && { ROOT_SRC="\$root_pkg"; break; };
+done;
+if [ -n "\$ROOT_SRC" ]; then
+    ui_print " ";
+    ui_print " ============================================";
+    ui_print "   Flashing bundled ${ROOT_LABEL:-root package}";
+    ui_print " ============================================";
+    sync;
+    ROOT_INSTALL=/dev/tmp/install;
+    rm -rf "\$ROOT_INSTALL";
+    mkdir -p "\$ROOT_INSTALL";
+    # BusyBox picks its applet from argv[0]. The extracted binary must be named
+    # "busybox" (as in the APK's own update-binary); a name like "pox_busybox"
+    # makes it fail with "applet not found" and the installer never runs.
+    ROOT_BB=/dev/tmp/busybox;
+    if unzip -o "\$ROOT_SRC" "lib/arm64-v8a/libbusybox.so" -d /dev/tmp >/dev/null 2>&1; then
+        mv -f /dev/tmp/lib/arm64-v8a/libbusybox.so "\$ROOT_BB" 2>/dev/null;
+        chmod 755 "\$ROOT_BB" 2>/dev/null;
+        rm -rf /dev/tmp/lib;
+    fi;
+    if [ -x "\$ROOT_BB" ]; then
+        "\$ROOT_BB" unzip -o "\$ROOT_SRC" "assets/*" "lib/*" -x "lib/*/libbusybox.so" -d "\$ROOT_INSTALL" >/dev/null 2>&1;
+    else
+        unzip -o "\$ROOT_SRC" "assets/*" "lib/*" -x "lib/*/libbusybox.so" -d "\$ROOT_INSTALL" >/dev/null 2>&1;
+    fi;
+    if [ -f "\$ROOT_INSTALL/assets/InstallAP.sh" ]; then
+        chmod -R 755 "\$ROOT_INSTALL/assets" "\$ROOT_INSTALL/lib" 2>/dev/null;
+        if [ -x "\$ROOT_BB" ]; then
+            ( cd "\$ROOT_INSTALL" && ASH_STANDALONE=1 "\$ROOT_BB" sh assets/InstallAP.sh 3 "\$OUTFD" "\$ROOT_SRC" );
+        else
+            ( cd "\$ROOT_INSTALL" && sh assets/InstallAP.sh 3 "\$OUTFD" "\$ROOT_SRC" );
+        fi;
+        if [ -f "\$ROOT_INSTALL/new-boot.img" ]; then
+            ui_print " [*] ${ROOT_LABEL:-root package} patched the boot image.";
+        else
+            ui_print " [!] ${ROOT_LABEL:-root package} did not produce a patched boot image.";
+        fi;
+    else
+        ui_print " [!] ${ROOT_LABEL:-root package} installer not found; skipping root step.";
+    fi;
+    if [ "${ROOT_INSTALL_APP}" = "1" ]; then
+        for dest in /data/system /data/local/tmp /sdcard; do
+            [ -d "\$dest" ] || continue;
+            cp -f "\$ROOT_SRC" "\$dest/${ROOT_APK_NAME}" 2>/dev/null \
+                && chmod 0644 "\$dest/${ROOT_APK_NAME}" 2>/dev/null;
+        done;
+        ui_print " [*] Staged ${ROOT_LABEL:-root} manager APK for first-boot install.";
+    fi;
+else
+    ui_print " [i] No bundled root package; skipping root auto-flash step.";
+fi;
+ui_print " ";
+fi;
 ui_print " [*] [4/4] Cleaning up temporary installer files...";
 ui_print " ";
 ui_print " ============================================";
@@ -788,6 +1363,50 @@ ui_print " ";
 ## end install
 AK_EOF
 
+    # First-boot installer for the bundled manager APK. anykernel.sh copies
+    # this into the ramdisk; init.pox_root.rc runs it once after boot_completed.
+    if [[ "$ROOT_BUNDLED" == "1" && "$ROOT_INSTALL_APP" == "1" ]]; then
+        cat << 'FP_SH_EOF' > "$stage/pox_root_install.sh"
+#!/system/bin/sh
+# Pox Kernel - install the bundled root manager app (first boot, once).
+PKG=@ROOT_PACKAGE@
+LOG=/data/local/tmp/pox_root_install.log
+
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG" 2>/dev/null; }
+
+APK=""
+for c in /data/system/@ROOT_APK@ /data/local/tmp/@ROOT_APK@ /sdcard/@ROOT_APK@; do
+    [ -f "$c" ] && { APK="$c"; break; }
+done
+[ -n "$APK" ] || exit 0
+
+i=0
+while [ "$i" -lt 90 ]; do
+    cmd package list packages >/dev/null 2>&1 && break
+    sleep 2
+    i=$((i + 1))
+done
+sleep 15
+
+if cmd package list packages 2>/dev/null | grep -q "$PKG"; then
+    log "already installed: $PKG"
+    exit 0
+fi
+
+ok=0
+pm install -r -g "$APK" >> "$LOG" 2>&1 && ok=1
+if [ "$ok" = 0 ]; then cmd package install -r -g "$APK" >> "$LOG" 2>&1 && ok=1; fi
+if [ "$ok" = 0 ] && [ -x /system/bin/su ]; then
+    su -c "pm install -r -g $APK" >> "$LOG" 2>&1 && ok=1
+fi
+
+log "install result ok=$ok pkg=$PKG apk=$APK"
+exit 0
+FP_SH_EOF
+        sed -i "s/@ROOT_PACKAGE@/${ROOT_PACKAGE_NAME}/g; s/@ROOT_APK@/${ROOT_APK_NAME}/g" "$stage/pox_root_install.sh"
+        chmod 755 "$stage/pox_root_install.sh"
+    fi
+
     local zip_file="$BUILD_DIR/${ZIP_BASE}.zip"
     log "Packaging AnyKernel3 flashable zip: $zip_file"
     (cd "$stage" && zip -r9 "$zip_file" . -x '*.git*' -x '.github*')
@@ -799,6 +1418,8 @@ AK_EOF
     ln -sf "$(basename "$zip_file")" "$BUILD_DIR/latest.zip"
     ln -sf "$(basename "$zip_file")" "$BUILD_DIR/${COMMIT_HASH}.zip"
 
+    write_build_metadata "$zip_file"
+
     log "================================================="
     log "BUILD SUCCEEDED!"
     log "Package ZIP:   $zip_file"
@@ -806,7 +1427,49 @@ AK_EOF
     log "Latest Link:   $BUILD_DIR/latest.zip"
     log "Device Link:   $BUILD_DIR/${KERNEL_NAME}-${KERNEL_VERSION}-${VERSION_NAME}-${DEVICE_CODENAME}.zip"
     log "Kernel Image:  $BUILD_DIR/Image.gz-dtb"
+    log "Metadata:      $BUILD_DIR/build-info.env"
     log "================================================="
+}
+
+# Emit a sourceable env file describing the artifact exactly, so CI and
+# releases never have to re-derive names from the branch.
+write_build_metadata() {
+    local zip_file="$1"
+    local zip_name zip_size zip_sha256
+    zip_name="$(basename "$zip_file")"
+    zip_size="$(stat -c%s "$zip_file" 2>/dev/null || wc -c < "$zip_file")"
+    zip_sha256="$(sha256sum "$zip_file" | awk '{print $1}')"
+
+    {
+        printf '# Generated by build.sh - %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        printf 'KERNEL_NAME=%q\n'           "$KERNEL_NAME"
+        printf 'KERNEL_VERSION=%q\n'        "$KERNEL_VERSION"
+        printf 'VERSION_NAME=%q\n'          "$VERSION_NAME"
+        printf 'BRANCH_DESC=%q\n'           "$BRANCH_DESC"
+        printf 'VARIANT=%q\n'               "$VARIANT"
+        printf 'ROOT_FLAVOR=%q\n'           "$ROOT_FLAVOR"
+        printf 'ROOT_ASSET=%q\n'            "${ROOT_ASSET:-none}"
+        printf 'APPLIED_PATCHES=%q\n'       "$APPLIED_PATCHES"
+        printf 'GIT_BRANCH=%q\n'            "$GIT_BRANCH"
+        printf 'COMMIT_HASH=%q\n'           "$COMMIT_HASH"
+        printf 'COMMIT_DATE=%q\n'           "$COMMIT_DATE"
+        printf 'COMMIT_SUBJECT=%q\n'        "$COMMIT_SUBJECT"
+        printf 'DEFCONFIG=%q\n'             "$DEFCONFIG"
+        printf 'DEVICE_NAME=%q\n'           "$DEVICE_NAME"
+        printf 'DEVICE_CODENAME=%q\n'       "$DEVICE_CODENAME"
+        printf 'MAINTAINER=%q\n'            "$MAINTAINER"
+        printf 'LINUX_VERSION=%q\n'         "$LINUX_VERSION"
+        printf 'LOCALVERSION=%q\n'          "$LINUX_VERSION$CUSTOM_LOCALVERSION"
+        printf 'LOCALVERSION_EXTENDED=%q\n' "$LINUX_VERSION$EXTENDED_LOCALVERSION"
+        printf 'TOOLCHAIN=%q\n'             "$TOOLCHAIN_VER"
+        printf 'BUILD_DATE=%q\n'            "$DATE"
+        printf 'ZIP_PATH=%q\n'              "$zip_file"
+        printf 'ZIP_NAME=%q\n'              "$zip_name"
+        printf 'ZIP_SIZE_BYTES=%q\n'        "$zip_size"
+        printf 'ZIP_SHA256=%q\n'            "$zip_sha256"
+    } > "$BUILD_DIR/build-info.env"
+
+    log "Build metadata written to: $BUILD_DIR/build-info.env"
 }
 
 install_device() {
@@ -846,6 +1509,12 @@ install_device() {
 }
 
 case "$ACTION" in
+    variants|list-variants|patches|list-patches)
+        # Handled before patch application at the top of the script.
+        ;;
+    unvariant|unpatch)
+        unapply_variant_patches
+        ;;
     clean)
         clean_build
         ;;
@@ -875,7 +1544,10 @@ case "$ACTION" in
         ;;
     *)
         err "Unknown action: $ACTION"
-        echo "Usage: $0 [all|kernel|zip|install|build-install|menuconfig|clean|distclean]"
+        echo "Usage: $0 [all|kernel|zip|install|build-install|menuconfig|patches|unvariant|clean|distclean]"
+        echo "       VARIANT=ksu,c2 $0 all    # root flavor + media overlay"
+        echo "       $0 patches               # list available patch sets"
+        echo "       $0 unvariant             # restore the clean onyx tree"
         exit 1
         ;;
 esac

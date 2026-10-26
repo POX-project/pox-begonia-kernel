@@ -9,11 +9,11 @@ index 000000000..df486fca7
 +	url = https://github.com/Baka-SU/BakaSU.git
 diff --git a/KernelSU b/KernelSU
 new file mode 160000
-index 000000000..39faf94a2
+index 000000000..d5e9e025b
 --- /dev/null
 +++ b/KernelSU
 @@ -0,0 +1 @@
-+Subproject commit 39faf94a2d4a40d48093398bafcde649916edbc1
++Subproject commit d5e9e025b8b49155f8014684d64c91742b465f65
 diff --git a/arch/arm64/configs/bakasu_defconfig b/arch/arm64/configs/bakasu_defconfig
 new file mode 100644
 index 000000000..692a81252
@@ -5279,7 +5279,7 @@ index 000000000..692a81252
 +# CONFIG_STRING_SELFTEST is not set
 +CONFIG_HWCONF_MANAGER=y
 +
-+# BakaSU main 39faf94 (4.14 SUSFS inline hook mode)
++# BakaSU main d5e9e025 (4.14 SUSFS inline hook mode)
 +CONFIG_KSU=y
 +# CONFIG_KSU_DEBUG is not set
 +CONFIG_KSU_TOOLKIT_SUPPORT=y
@@ -11370,7 +11370,7 @@ diff --git a/kernel/reboot.c b/kernel/reboot.c
 index eea91461e..beb41f2bf 100644
 --- a/kernel/reboot.c
 +++ b/kernel/reboot.c
-@@ -17,6 +17,15 @@
+@@ -17,6 +17,17 @@
  #include <linux/syscore_ops.h>
  #include <linux/uaccess.h>
  
@@ -11379,6 +11379,8 @@ index eea91461e..beb41f2bf 100644
 +#endif
 +
 +#ifdef CONFIG_KSU
++/* Must match KSU_INSTALL_MAGIC1 in uapi/supercall.h. */
++#define KSU_INSTALL_MAGIC1 0xDEADBEEF
 +extern int ksu_handle_sys_reboot(int magic1, int magic2, unsigned int cmd,
 +				void __user **arg);
 +#endif
@@ -11386,14 +11388,20 @@ index eea91461e..beb41f2bf 100644
  /*
   * this indicates whether you can reboot with ctrl-alt-del: the default is yes
   */
-@@ -291,6 +300,12 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
+@@ -291,6 +302,18 @@ SYSCALL_DEFINE4(reboot, int, magic1, int, magic2, unsigned int, cmd,
  	char buffer[256];
  	int ret = 0;
  
 +#ifdef CONFIG_KSU
-+	ret = ksu_handle_sys_reboot(magic1, magic2, cmd, &arg);
-+	if (ret != -EINVAL)
-+		return ret;
++	/*
++	 * Only consume KernelSU supercalls; every other reboot must fall
++	 * through to the real syscall or the device powers off instead of
++	 * restarting.
++	 */
++	if (magic1 == KSU_INSTALL_MAGIC1) {
++		ksu_handle_sys_reboot(magic1, magic2, cmd, &arg);
++		return 0;
++	}
 +#endif
 +
  	/* We only trust the superuser with rebooting the system. */
@@ -11591,63 +11599,6 @@ index 66c1fd251..1cfbbec7d 100644
  	if (error)
  		goto out;
  
-diff --git a/ksu-patches/ksu/0001-add-ksunext-manager-sign.patch b/ksu-patches/ksu/0001-add-ksunext-manager-sign.patch
-new file mode 100644
-index 000000000..6e1865fd8
---- /dev/null
-+++ b/ksu-patches/ksu/0001-add-ksunext-manager-sign.patch
-@@ -0,0 +1,27 @@
-+diff --git a/kernel/manager/apk_sign.c b/kernel/manager/apk_sign.c
-+index eba496d5..f8fec53e 100644
-+--- a/kernel/manager/apk_sign.c
-++++ b/kernel/manager/apk_sign.c
-+@@ -36,6 +36,7 @@ static apk_sign_key_t apk_sign_keys[] = {
-+ #ifdef CONFIG_KSU_MULTI_MANAGER_SUPPORT
-+     { EXPECTED_SIZE_OFFICIAL, EXPECTED_HASH_OFFICIAL }, // tiann/KernelSU
-+     { EXPECTED_SIZE_KOWX712, EXPECTED_HASH_KOWX712 }, // KOWX712/KernelSU
-++    { EXPECTED_SIZE_KSUNEXT, EXPECTED_HASH_KSUNEXT }, // KernelSU-Next/KernelSU-Next
-+ #ifdef EXPECTED_SIZE
-+     { EXPECTED_SIZE, EXPECTED_HASH }, // Custom
-+ #endif
-+diff --git a/kernel/manager/manager_sign.h b/kernel/manager/manager_sign.h
-+index a940135d..35d1597b 100644
-+--- a/kernel/manager/manager_sign.h
-++++ b/kernel/manager/manager_sign.h
-+@@ -13,6 +13,10 @@
-+ #define EXPECTED_SIZE_KOWX712 0x375
-+ #define EXPECTED_HASH_KOWX712 "484fcba6e6c43b1fb09700633bf2fb4758f13cb0b2f4457b80d075084b26c588"
-+ 
-++// KernelSU-Next/KernelSU-Next (v3.4.2)
-++#define EXPECTED_SIZE_KSUNEXT 0x3e6
-++#define EXPECTED_HASH_KSUNEXT "79e590113c4c4c0c222978e413a5faa801666957b1212a328e46c00c69821bf7"
-++
-+ typedef struct {
-+     unsigned size;
-+     const char *sha256;
-diff --git a/ksu-patches/ksu/0002-allow-susfs-build-on-nongki.patch b/ksu-patches/ksu/0002-allow-susfs-build-on-nongki.patch
-new file mode 100644
-index 000000000..97e0bf950
---- /dev/null
-+++ b/ksu-patches/ksu/0002-allow-susfs-build-on-nongki.patch
-@@ -0,0 +1,18 @@
-+diff --git a/kernel/tools/susfs_compat.mk b/kernel/tools/susfs_compat.mk
-+index 9a70255d..87f31a85 100644
-+--- a/kernel/tools/susfs_compat.mk
-++++ b/kernel/tools/susfs_compat.mk
-+@@ -15,6 +15,7 @@ $(info -- $(REPO_NAME)/compat: ksu_install_su_fd direct call found)
-+ ccflags-y += -DKSU_COMPAT_HAS_SUSFS_INSTALL_SU_FD_DIRECT_CALL
-+ endif
-+ 
-+-$(info -- $(REPO_NAME): susfs has NOT update with latest KernelSU source)
-+-$(info -- $(REPO_NAME): Please wait simonpunk update)
-+-$(error Please wait susfs update.)
-+\ No newline at end of file
-++# POX: upstream BakaSU main suspends the SUSFS build here with an unconditional
-++# $(error), pending simonpunk syncing SUSFS with main's selinux_hide rework.
-++# The BakaSU<->SUSFS kernel interface is unchanged for non-GKI 4.14 (SUSFS falls
-++# back to the auto selinux_hide hook), so the build is allowed to proceed.
-+\ No newline at end of file
-+
 diff --git a/security/selinux/avc.c b/security/selinux/avc.c
 index 61418c6e2..d7c8f0ad1 100644
 --- a/security/selinux/avc.c

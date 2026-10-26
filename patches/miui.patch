@@ -395,7 +395,7 @@ new file mode 100644
 index 000000000..ba3ee213d
 --- /dev/null
 +++ b/arch/arm64/configs/miui.config
-@@ -0,0 +1,8 @@
+@@ -0,0 +1,13 @@
 +# MIUI / HyperOS vendor WLAN compatibility
 +#
 +# These match the onyx-miui branch:
@@ -404,3 +404,8 @@ index 000000000..ba3ee213d
 +# Keep them disabled for MIUI/HyperOS builds.
 +# CONFIG_BPF_UNPRIV_DEFAULT_OFF is not set
 +# CONFIG_BUG_ON_DATA_CORRUPTION is not set
++
++# Report the OEM configuration through /proc/config.gz. MIUI/HyperOS
++# userspace compares it with the stock configuration and warns when it
++# differs, so keep the customized build configuration hidden.
++CONFIG_IKCONFIG_STOCK_DEFCONFIG=y

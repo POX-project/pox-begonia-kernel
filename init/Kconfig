@@ -1400,6 +1400,21 @@ config PRINTK_NMI
 	depends on PRINTK
 	depends on HAVE_NMI
 
+config SULTAN_DEBLOAT
+	bool "Apply Sultan's patches to drop kernel debugging and tracking"
+	default n
+	help
+	  Apply Sultan's patches to drop standard kernel debugging and tracking
+	  features, which trims the fat off the kernel and speeds up execution.
+
+config SULTAN_NO_LOGS
+	bool "Sultan's log stripping: silence non-critical kernel logging"
+	depends on SULTAN_DEBLOAT
+	default n
+	help
+	  Silence all non-critical printk logs to eliminate console locks,
+	  string formatting jitter, and driver log spam.
+
 config BUG
 	bool "BUG() support" if EXPERT
 	default y
