@@ -112,7 +112,7 @@ jobs:
           path: |
             kerdevdep/clang
             kerdevdep/anykernel
-          key: kerdevdep-trb-clang-v1
+          key: kerdevdep-trb-clang-b0fa406b
 
       - name: Build kernel
         run: |
