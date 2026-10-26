@@ -341,3 +341,25 @@ added to `c2.patch`. This is a large change — see the commit history for conte
 ## TODO
 
 - **Version bump to 2.0**: When the user says "were gonna release this", change `KERNEL_VERSION` in `build.sh` from `1.0` to `2.0` and update any version references in `README.md` and workflow.
+
+---
+
+## 9. Recent Changes (Oct 26 2026)
+
+- **Manager CI fixed** (`pox-kernel-manager`): repaired the broken Telegram-share
+  commit (`0bcbcdb`) on branch `fix/ci-telegram-share` (`6e8df8f`), then
+  fast-forwarded `main`. Fixes: truncated `DashboardScreen.kt`, bogus imports
+  (`TexturePaint`, `LocalContextAware`), `info.model`/`info.sdk` field mismatches,
+  missing `R.drawable.bg_pox_default` (now a sunset gradient), `FLAG_ACTIVITY_NEW_TASK`
+  and `take(8)` in `TelegramShare`. Verified green on `main` (run `40373776051`).
+- **Kernel Telegram single message**: workflow now sends one message containing the
+  last 6 commits (subjects truncated to fit 1024 chars), Gofile link, Actions run
+  link and the flashable zip. Secrets: `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`.
+  Verified (run `40372291536`).
+- **Kernel compiler**: pinned TRB Clang 18 (`voltageos/clang` @ `b0fa406b`),
+  cache key `kerdevdep-trb-clang-b0fa406b`, restored `CROSS_COMPILE=aarch64-linux-gnu-`,
+  dropped GCC 4.9.
+- **Fingerprint**: reverted the `29d95a258` probe workaround in
+  `drivers/input/fingerprint/goodix_5658/gf_spi_tee.c` (commit `3ded321bf`) so
+  chip-ID failure tears down cleanly instead of leaving a dead `/dev/goodix_fp`.
+  Further diagnosis blocked on device logs (dmesg/logcat, `/dev/goodix_fp` presence).
