@@ -23,6 +23,7 @@
 #include <linux/jiffies.h>
 #include <linux/sched/loadavg.h>
 #include <linux/slab.h>
+#include <linux/cpufreq.h>
 
 #include "gaming_mode.h"
 
@@ -80,6 +81,35 @@ static int kp_auto_mode = 1;
 static int pox_health_calibration_mode = 1;
 static int pox_opp_voltage_guard_enabled = 1;
 static unsigned long pox_health_brownout_preventions;
+
+/* Real-time Closed-Loop Silicon & Battery Calibration Data */
+static int pox_battery_esr_mohm = 150;          /* Ohmic ESR at 25C, 50% SoC in mOhm */
+static int pox_opp_sag_ceiling_khz = 0;         /* User/calibrated maximum Big OPP cap in kHz (0 = max) */
+static int pox_active_opp_ceiling_khz = 0;      /* Dynamic real-time enforced cap */
+static int pox_thermal_gradient_mc_s = 1000;    /* Thermal rise rate dT/dt in mC/sec */
+static int pox_last_voc_mv = 4100;              /* Open-circuit voltage estimate in mV */
+static int pox_last_vload_mv = 4000;            /* Voltage under load */
+static int pox_last_sag_mv = 100;               /* Measured/predicted voltage sag */
+static int pox_brownout_margin_mv = 600;        /* Terminal voltage safety margin above 3400mV */
+
+static int pox_cpufreq_policy_notifier(struct notifier_block *nb,
+				       unsigned long val, void *data)
+{
+	struct cpufreq_policy *policy = data;
+	int ceiling = pox_active_opp_ceiling_khz;
+
+	if (val != CPUFREQ_ADJUST || !policy)
+		return 0;
+
+	if (ceiling > 0 && policy->cpu >= 6) {
+		cpufreq_verify_within_limits(policy, policy->cpuinfo.min_freq, ceiling);
+	}
+	return 0;
+}
+
+static struct notifier_block pox_cpufreq_policy_nb = {
+	.notifier_call = pox_cpufreq_policy_notifier,
+};
 
 /* BORE Scheduler Runtime Interface
  * Variables live in kernel/sched/fair.c where the CFS wakeup-preemption
@@ -287,25 +317,71 @@ static void pox_health_calibration_sync(void)
 {
 	extern int battery_get_bat_temperature(void);
 	extern int battery_get_uisoc(void);
+	extern int battery_get_bat_voltage(void);
+	extern int battery_get_bat_current(void);
 	int btemp = battery_get_bat_temperature();
 	int soc = battery_get_uisoc();
+	int vbat = battery_get_bat_voltage();
+	int ibat = battery_get_bat_current() / 10; /* in mA */
+	int iload = (ibat < 0) ? -ibat : ibat;
+	int temp_c = btemp / 10;
+	int temp_penalty, soc_deficit, soc_penalty, eff_esr, v_pred;
 
-	if (!pox_opp_voltage_guard_enabled || pox_health_calibration_mode == 0)
-		return;
+	if (vbat > 2500 && vbat < 5000)
+		pox_last_vload_mv = vbat;
 
-	/* Dynamic compensation:
-	 * If battery is degraded, low (<=20%), mode is Longevity (3), or high temp (>=45C):
-	 * clamp Cortex-A76 big core peak rescue OPP to safe level 2 (1.8GHz)
-	 * to prevent high-current VBUS/battery internal resistance collapse & PMIC UVLO trips,
-	 * while accelerating Little A55 schedutil up-ramp to 250us to guarantee 0 UI thread freezes!
-	 */
-	if (soc <= 20 || pox_health_calibration_mode == 3 || btemp >= 450) {
-		fbt_cpu_set_rescue_opp_c(2);
-		schedutil_set_up_rate_limit_us(0, 250);
-	} else if (gaming_mode_state > 0) {
-		fbt_cpu_set_rescue_opp_c(0);
-		schedutil_set_up_rate_limit_us(0, 500);
+	if (iload < 250 && vbat > 3000) {
+		if (vbat > pox_last_voc_mv)
+			pox_last_voc_mv = vbat;
+		else
+			pox_last_voc_mv = (pox_last_voc_mv * 7 + vbat) / 8;
 	}
+
+	temp_penalty = (temp_c < 25) ? ((25 - temp_c) * 18) : 0;
+	soc_deficit = (soc < 100) ? (100 - soc) : 0;
+	soc_penalty = (soc_deficit * soc_deficit * soc_deficit) / 2200;
+	eff_esr = (pox_battery_esr_mohm * (1000 + temp_penalty + soc_penalty)) / 1000;
+	if (eff_esr < 25) eff_esr = 25;
+	if (eff_esr > 1500) eff_esr = 1500;
+
+	pox_last_sag_mv = pox_last_voc_mv - pox_last_vload_mv;
+	if (pox_last_sag_mv < 0) pox_last_sag_mv = 0;
+	pox_brownout_margin_mv = pox_last_vload_mv - 3400;
+
+	if (!pox_opp_voltage_guard_enabled || pox_health_calibration_mode == 0) {
+		pox_active_opp_ceiling_khz = pox_opp_sag_ceiling_khz;
+		return;
+	}
+
+	/* Predict terminal voltage under sudden 1800mA Cortex-A76 boost step */
+	v_pred = pox_last_voc_mv - (((iload + 1800) * eff_esr) / 1000);
+
+	/* Closed-loop dynamic OPP ceiling & rescue protection */
+	if (vbat < 3480 || v_pred < 3450 || soc <= 15 || pox_health_calibration_mode == 3 || btemp >= 450) {
+		fbt_cpu_set_rescue_opp_c(2); /* Safe OPP level 2 (1.8GHz rescue) */
+		schedutil_set_up_rate_limit_us(0, 250); /* Fast Little A55 UI guarantee */
+		pox_active_opp_ceiling_khz = (pox_opp_sag_ceiling_khz > 0 && pox_opp_sag_ceiling_khz < 1784000) ?
+					     pox_opp_sag_ceiling_khz : 1784000;
+		pox_health_brownout_preventions++;
+	} else if (vbat < 3580 || v_pred < 3550 || soc <= 25) {
+		fbt_cpu_set_rescue_opp_c(1);
+		pox_active_opp_ceiling_khz = (pox_opp_sag_ceiling_khz > 0 && pox_opp_sag_ceiling_khz < 1989000) ?
+					     pox_opp_sag_ceiling_khz : 1989000;
+	} else {
+		if (gaming_mode_state > 0)
+			fbt_cpu_set_rescue_opp_c(0);
+		pox_active_opp_ceiling_khz = pox_opp_sag_ceiling_khz;
+	}
+
+	/* Thermal gradient dynamic rate limit scaling */
+	if (pox_thermal_gradient_mc_s >= 1800)
+		schedutil_set_up_rate_limit_us(6, 4000);
+	else if (pox_thermal_gradient_mc_s >= 1200)
+		schedutil_set_up_rate_limit_us(6, 1500);
+	else if (gaming_mode_state > 0)
+		schedutil_set_up_rate_limit_us(6, 200);
+
+	cpufreq_update_policy(6);
 }
 
 int gaming_mode_set(int mode)
@@ -2072,21 +2148,37 @@ static int health_status_proc_show(struct seq_file *m, void *v)
 {
 	extern int battery_get_bat_temperature(void);
 	extern int battery_get_uisoc(void);
+	extern int battery_get_bat_voltage(void);
 	int btemp = battery_get_bat_temperature();
 	int soc = battery_get_uisoc();
+	int vbat = battery_get_bat_voltage();
 	int mode = pox_health_calibration_get();
 	int guard = pox_opp_voltage_guard_get();
+	int temp_c = btemp / 10;
+	int temp_penalty = (temp_c < 25) ? ((25 - temp_c) * 18) : 0;
+	int soc_deficit = (soc < 100) ? (100 - soc) : 0;
+	int soc_penalty = (soc_deficit * soc_deficit * soc_deficit) / 2200;
+	int eff_esr = (pox_battery_esr_mohm * (1000 + temp_penalty + soc_penalty)) / 1000;
 
 	pox_health_calibration_sync();
-	seq_printf(m, "health_mode=%d\n", mode);
-	seq_printf(m, "opp_voltage_guard=%d\n", guard);
-	seq_printf(m, "battery_temp_decic=%d\n", btemp);
-	seq_printf(m, "battery_soc=%d\n", soc);
-	seq_printf(m, "brownout_preventions=%lu\n", pox_health_brownout_preventions);
+
+	seq_printf(m, "calibration_mode=%d\n", mode);
+	seq_printf(m, "voltage_guard_enabled=%d\n", guard);
+	seq_printf(m, "battery_voc_mv=%d\n", pox_last_voc_mv);
+	seq_printf(m, "battery_vload_mv=%d\n", (vbat > 2500 && vbat < 5000) ? vbat : pox_last_vload_mv);
+	seq_printf(m, "battery_voltage_sag_mv=%d\n", pox_last_sag_mv);
+	seq_printf(m, "battery_esr_mohm=%d\n", pox_battery_esr_mohm);
+	seq_printf(m, "battery_esr_effective_mohm=%d\n", eff_esr);
+	seq_printf(m, "brownout_safety_margin_mv=%d\n", pox_brownout_margin_mv);
+	seq_printf(m, "thermal_rise_rate_mc_s=%d\n", pox_thermal_gradient_mc_s);
+	seq_printf(m, "active_opp_ceiling_khz=%d\n", pox_active_opp_ceiling_khz ? pox_active_opp_ceiling_khz : 2050000);
+	seq_printf(m, "schedutil_up_rate_us=%d\n", (pox_thermal_gradient_mc_s >= 1800) ? 4000 : (pox_thermal_gradient_mc_s >= 1200 ? 1500 : 200));
+	seq_printf(m, "schedutil_down_rate_us=20000\n");
+	seq_printf(m, "brownout_preventions_count=%lu\n", pox_health_brownout_preventions);
 	seq_printf(m, "thermal_derates=%lu\n", pox_pwr_thermal_derates);
 	seq_printf(m, "battery_derates=%lu\n", pox_pwr_battery_derates);
 	seq_printf(m, "anti_freeze_watchdog=armed\n");
-	seq_printf(m, "status=%s\n", (btemp < 450 && soc > 15) ? "OPTIMAL_PERFORMANCE" : "GUARD_PROTECTED");
+	seq_printf(m, "status=%s\n", (vbat >= 3550 && soc > 20) ? "OPTIMAL_PERFORMANCE" : "GUARD_PROTECTED");
 	return 0;
 }
 
@@ -2098,6 +2190,228 @@ static int health_status_proc_open(struct inode *inode, struct file *file)
 static const struct file_operations health_status_proc_fops = {
 	.open = health_status_proc_open,
 	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+int pox_battery_esr_get(void)
+{
+	return pox_battery_esr_mohm;
+}
+EXPORT_SYMBOL(pox_battery_esr_get);
+
+int pox_battery_esr_set(int mohm)
+{
+	if (mohm < 20 || mohm > 1500)
+		return -EINVAL;
+	pox_battery_esr_mohm = mohm;
+	pox_health_calibration_sync();
+	pr_info("Battery Ohmic ESR calibrated to: %d mOhm\n", mohm);
+	return 0;
+}
+EXPORT_SYMBOL(pox_battery_esr_set);
+
+static ssize_t battery_esr_sysfs_show(struct kobject *kobj,
+				      struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", pox_battery_esr_get());
+}
+
+static ssize_t battery_esr_sysfs_store(struct kobject *kobj,
+				       struct kobj_attribute *attr,
+				       const char *buf, size_t count)
+{
+	int val = 0;
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+	pox_battery_esr_set(val);
+	return count;
+}
+
+static struct kobj_attribute battery_esr_kobj_attr =
+	__ATTR(battery_esr_mohm, 0644, battery_esr_sysfs_show, battery_esr_sysfs_store);
+
+static int battery_esr_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_battery_esr_get());
+	return 0;
+}
+
+static int battery_esr_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, battery_esr_proc_show, NULL);
+}
+
+static ssize_t battery_esr_proc_write(struct file *file, const char __user *buffer,
+				      size_t count, loff_t *pos)
+{
+	char kbuf[32];
+	int val;
+	if (count >= sizeof(kbuf))
+		return -EINVAL;
+	if (copy_from_user(kbuf, buffer, count))
+		return -EFAULT;
+	kbuf[count] = '\0';
+	if (kstrtoint(strim(kbuf), 10, &val) < 0)
+		return -EINVAL;
+	pox_battery_esr_set(val);
+	return count;
+}
+
+static const struct file_operations battery_esr_proc_fops = {
+	.open = battery_esr_proc_open,
+	.read = seq_read,
+	.write = battery_esr_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+int pox_opp_sag_ceiling_get(void)
+{
+	return pox_opp_sag_ceiling_khz;
+}
+EXPORT_SYMBOL(pox_opp_sag_ceiling_get);
+
+int pox_opp_sag_ceiling_set(int khz)
+{
+	if (khz < 0 || (khz > 0 && khz < 1100000) || khz > 2200000)
+		return -EINVAL;
+	pox_opp_sag_ceiling_khz = khz;
+	pox_health_calibration_sync();
+	pr_info("OPP Sag Big-Cluster Frequency Ceiling set to: %d kHz\n", khz);
+	return 0;
+}
+EXPORT_SYMBOL(pox_opp_sag_ceiling_set);
+
+static ssize_t opp_sag_ceiling_sysfs_show(struct kobject *kobj,
+					  struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", pox_opp_sag_ceiling_get());
+}
+
+static ssize_t opp_sag_ceiling_sysfs_store(struct kobject *kobj,
+					   struct kobj_attribute *attr,
+					   const char *buf, size_t count)
+{
+	int val = 0;
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+	pox_opp_sag_ceiling_set(val);
+	return count;
+}
+
+static struct kobj_attribute opp_sag_ceiling_kobj_attr =
+	__ATTR(opp_sag_ceiling, 0644, opp_sag_ceiling_sysfs_show, opp_sag_ceiling_sysfs_store);
+
+static int opp_sag_ceiling_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_opp_sag_ceiling_get());
+	return 0;
+}
+
+static int opp_sag_ceiling_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, opp_sag_ceiling_proc_show, NULL);
+}
+
+static ssize_t opp_sag_ceiling_proc_write(struct file *file, const char __user *buffer,
+					  size_t count, loff_t *pos)
+{
+	char kbuf[32];
+	int val;
+	if (count >= sizeof(kbuf))
+		return -EINVAL;
+	if (copy_from_user(kbuf, buffer, count))
+		return -EFAULT;
+	kbuf[count] = '\0';
+	if (kstrtoint(strim(kbuf), 10, &val) < 0)
+		return -EINVAL;
+	pox_opp_sag_ceiling_set(val);
+	return count;
+}
+
+static const struct file_operations opp_sag_ceiling_proc_fops = {
+	.open = opp_sag_ceiling_proc_open,
+	.read = seq_read,
+	.write = opp_sag_ceiling_proc_write,
+	.llseek = seq_lseek,
+	.release = single_release,
+};
+
+int pox_thermal_gradient_get(void)
+{
+	return pox_thermal_gradient_mc_s;
+}
+EXPORT_SYMBOL(pox_thermal_gradient_get);
+
+int pox_thermal_gradient_set(int mc_s)
+{
+	if (mc_s < 100 || mc_s > 10000)
+		return -EINVAL;
+	pox_thermal_gradient_mc_s = mc_s;
+	pox_health_calibration_sync();
+	pr_info("Silicon Thermal Gradient set to: %d mC/s\n", mc_s);
+	return 0;
+}
+EXPORT_SYMBOL(pox_thermal_gradient_set);
+
+static ssize_t thermal_gradient_sysfs_show(struct kobject *kobj,
+					   struct kobj_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%d\n", pox_thermal_gradient_get());
+}
+
+static ssize_t thermal_gradient_sysfs_store(struct kobject *kobj,
+					    struct kobj_attribute *attr,
+					    const char *buf, size_t count)
+{
+	int val = 0;
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+	if (kstrtoint(buf, 10, &val) < 0)
+		return -EINVAL;
+	pox_thermal_gradient_set(val);
+	return count;
+}
+
+static struct kobj_attribute thermal_gradient_kobj_attr =
+	__ATTR(thermal_gradient, 0644, thermal_gradient_sysfs_show, thermal_gradient_sysfs_store);
+
+static int thermal_gradient_proc_show(struct seq_file *m, void *v)
+{
+	seq_printf(m, "%d\n", pox_thermal_gradient_get());
+	return 0;
+}
+
+static int thermal_gradient_proc_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, thermal_gradient_proc_show, NULL);
+}
+
+static ssize_t thermal_gradient_proc_write(struct file *file, const char __user *buffer,
+					   size_t count, loff_t *pos)
+{
+	char kbuf[32];
+	int val;
+	if (count >= sizeof(kbuf))
+		return -EINVAL;
+	if (copy_from_user(kbuf, buffer, count))
+		return -EFAULT;
+	kbuf[count] = '\0';
+	if (kstrtoint(strim(kbuf), 10, &val) < 0)
+		return -EINVAL;
+	pox_thermal_gradient_set(val);
+	return count;
+}
+
+static const struct file_operations thermal_gradient_proc_fops = {
+	.open = thermal_gradient_proc_open,
+	.read = seq_read,
+	.write = thermal_gradient_proc_write,
 	.llseek = seq_lseek,
 	.release = single_release,
 };
@@ -3209,6 +3523,12 @@ static void pox_config_apply_line(const char *key, const char *val_str)
 		pox_health_calibration_set(val);
 	else if (strcmp(key, "opp_voltage_guard") == 0)
 		pox_opp_voltage_guard_set(val);
+	else if (strcmp(key, "battery_esr_mohm") == 0 || strcmp(key, "battery_esr") == 0)
+		pox_battery_esr_set(val);
+	else if (strcmp(key, "opp_sag_ceiling") == 0)
+		pox_opp_sag_ceiling_set(val);
+	else if (strcmp(key, "thermal_gradient") == 0)
+		pox_thermal_gradient_set(val);
 	else if (strcmp(key, "hbm_mode") == 0)
 		hbm_mode_set(val);
 	else if (strcmp(key, "torch_brightness") == 0)
@@ -3302,6 +3622,9 @@ static int pox_config_proc_show(struct seq_file *m, void *v)
 		   pox_custom_kp.rescue_opp);
 	seq_printf(m, "health_calibration=%d\n", pox_health_calibration_get());
 	seq_printf(m, "opp_voltage_guard=%d\n", pox_opp_voltage_guard_get());
+	seq_printf(m, "battery_esr_mohm=%d\n", pox_battery_esr_get());
+	seq_printf(m, "opp_sag_ceiling=%d\n", pox_opp_sag_ceiling_get());
+	seq_printf(m, "thermal_gradient=%d\n", pox_thermal_gradient_get());
 	seq_printf(m, "hbm_mode=%d\n", hbm_mode_get());
 	seq_printf(m, "torch_brightness=%d\n", torch_brightness_get());
 	seq_printf(m, "color_mode=%d\n", get_ios_color_mode());
@@ -3378,6 +3701,9 @@ static ssize_t pox_config_sysfs_show(struct kobject *kobj,
 			 "kprofiles_custom=%d %d %d %d %d %d %d %d %d %d\n"
 			 "health_calibration=%d\n"
 			 "opp_voltage_guard=%d\n"
+			 "battery_esr_mohm=%d\n"
+			 "opp_sag_ceiling=%d\n"
+			 "thermal_gradient=%d\n"
 			 "hbm_mode=%d\n"
 			 "torch_brightness=%d\n"
 			 "color_mode=%d\n"
@@ -3416,6 +3742,9 @@ static ssize_t pox_config_sysfs_show(struct kobject *kobj,
 			 pox_custom_kp.rescue_opp,
 			 pox_health_calibration_get(),
 			 pox_opp_voltage_guard_get(),
+			 pox_battery_esr_get(),
+			 pox_opp_sag_ceiling_get(),
+			 pox_thermal_gradient_get(),
 			 hbm_mode_get(),
 			 torch_brightness_get(),
 			 get_ios_color_mode(),
@@ -3607,6 +3936,18 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/health_status\n");
 
+	entry = proc_create("battery_esr_mohm", 0644, parent, &battery_esr_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/battery_esr_mohm\n");
+
+	entry = proc_create("opp_sag_ceiling", 0644, parent, &opp_sag_ceiling_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/opp_sag_ceiling\n");
+
+	entry = proc_create("thermal_gradient", 0644, parent, &thermal_gradient_proc_fops);
+	if (!entry)
+		pr_warn("Failed to create /proc/perfmgr/thermal_gradient\n");
+
 	entry = proc_create("sched_bore", 0644, parent, &sched_bore_proc_fops);
 	if (!entry)
 		pr_warn("Failed to create /proc/perfmgr/sched_bore\n");
@@ -3695,6 +4036,24 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 	else
 		pr_info("/sys/kernel/opp_voltage_guard created successfully\n");
 
+	ret = sysfs_create_file(kernel_kobj, &battery_esr_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/battery_esr_mohm (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/battery_esr_mohm created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &opp_sag_ceiling_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/opp_sag_ceiling (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/opp_sag_ceiling created successfully\n");
+
+	ret = sysfs_create_file(kernel_kobj, &thermal_gradient_kobj_attr.attr);
+	if (ret)
+		pr_warn("Failed to create /sys/kernel/thermal_gradient (ret=%d)\n", ret);
+	else
+		pr_info("/sys/kernel/thermal_gradient created successfully\n");
+
 	ret = sysfs_create_file(kernel_kobj, &sched_bore_kobj_attr.attr);
 	if (ret)
 		pr_warn("Failed to create /sys/kernel/sched_bore (ret=%d)\n", ret);
@@ -3749,6 +4108,9 @@ int init_gaming_mode(struct proc_dir_entry *parent)
 
 	/* Onyx Gaming Edition: Engage Zero Frame-Drop gaming profile by default */
 	gaming_mode_set(GAMING_MODE_ENABLED);
+
+	/* Register CPUFreq policy notifier for Big cluster voltage droop limits */
+	cpufreq_register_notifier(&pox_cpufreq_policy_nb, CPUFREQ_POLICY_NOTIFIER);
 
 	pr_info("Gaming Mode & True Tone Display Subsystem initialized successfully (Onyx Active, True Tone D65 Default).\n");
 	return 0;
