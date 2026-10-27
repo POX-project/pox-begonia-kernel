@@ -150,7 +150,10 @@ static bool check_start_dual_charging_status(struct charger_manager *info)
 	     mtk_pdc_check_charger(info)) &&
 	    info->battery_temp < 480) {
 		extern int battery_get_bat_voltage(void);
+		extern int pox_charge_watt_get(void);
 		if (battery_get_bat_voltage() < 3500)
+			return false;
+		if (pox_charge_watt_get() <= 10)
 			return false;
 		return true;
 	}
@@ -703,9 +706,21 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 	}
 
 done:
-	if (info->data.parallel_vbus) {
+	if (info->data.parallel_vbus && check_start_dual_charging_status(info) && chg2_chip_enabled) {
 		pdata->input_current_limit = pdata->input_current_limit / 2;
 		pdata2->input_current_limit = pdata2->input_current_limit / 2;
+	} else if (pox_fast_charge_get() && info->chr_type != STANDARD_HOST && info->chr_type != CHARGING_HOST) {
+		/*
+		 * When dual charging is not active (single charger or <=10W target),
+		 * master charger (chg1) must draw the full target input current,
+		 * and provide the combined battery charging current.
+		 */
+		int a1, a2, i1, i2;
+		pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
+		pdata->input_current_limit = a1;
+		pdata->charging_current_limit = min(3200000, i1 + i2);
+		pdata2->input_current_limit = 0;
+		pdata2->charging_current_limit = 0;
 	}
 
 	pr_debug("force:%d %d thermal:(%d %d,%d %d)(%d %d %d)setting:(%d %d)(%d %d)",

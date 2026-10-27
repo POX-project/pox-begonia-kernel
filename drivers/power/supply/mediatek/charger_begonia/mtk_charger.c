@@ -3536,8 +3536,10 @@ EXPORT_SYMBOL(pox_battery_bypass_get);
 void pox_battery_bypass_set(int enable)
 {
 	g_battery_bypass_mode = enable ? 1 : 0;
-	if (pinfo)
+	if (pinfo) {
+		_mtk_charger_change_current_setting(pinfo);
 		_wake_up_charger(pinfo);
+	}
 }
 EXPORT_SYMBOL(pox_battery_bypass_set);
 
@@ -3557,8 +3559,10 @@ void pox_battery_limit_set(int limit)
 	g_battery_charge_limit = limit;
 	if (g_battery_bypass_reason == 2 && (limit >= 100 || battery_get_uisoc() < limit))
 		g_battery_bypass_reason = 0;
-	if (pinfo)
+	if (pinfo) {
+		_mtk_charger_change_current_setting(pinfo);
 		_wake_up_charger(pinfo);
+	}
 }
 EXPORT_SYMBOL(pox_battery_limit_set);
 
@@ -3579,7 +3583,7 @@ EXPORT_SYMBOL(pox_battery_status_get);
 static int g_battery_fast_charge = 1;
 static int g_battery_charge_watt = 18;
 static int g_battery_pd_min_watt = 5;
-static int g_battery_pd_max_watt = 90;
+static int g_battery_pd_max_watt = 18;
 
 int pox_fast_charge_get(void)
 {
@@ -3597,10 +3601,12 @@ void pox_fast_charge_set(int enable)
 			g_battery_charge_watt = 18;
 	} else {
 		g_battery_fast_charge = 1;
-		g_battery_charge_watt = clamp(enable, 5, 120);
+		g_battery_charge_watt = clamp(enable, 5, 18);
 	}
-	if (pinfo)
+	if (pinfo) {
+		_mtk_charger_change_current_setting(pinfo);
 		_wake_up_charger(pinfo);
+	}
 }
 EXPORT_SYMBOL(pox_fast_charge_set);
 
@@ -3616,10 +3622,12 @@ void pox_charge_watt_set(int watt)
 		g_battery_fast_charge = 0;
 	} else {
 		g_battery_fast_charge = 1;
-		g_battery_charge_watt = clamp(watt, 5, 120);
+		g_battery_charge_watt = clamp(watt, 5, 18);
 	}
-	if (pinfo)
+	if (pinfo) {
+		_mtk_charger_change_current_setting(pinfo);
 		_wake_up_charger(pinfo);
+	}
 }
 EXPORT_SYMBOL(pox_charge_watt_set);
 
@@ -3631,11 +3639,13 @@ EXPORT_SYMBOL(pox_pd_min_watt_get);
 
 void pox_pd_min_watt_set(int watt)
 {
-	g_battery_pd_min_watt = clamp(watt, 5, 100);
+	g_battery_pd_min_watt = clamp(watt, 5, 18);
 	if (g_battery_pd_max_watt < g_battery_pd_min_watt)
 		g_battery_pd_max_watt = g_battery_pd_min_watt;
-	if (pinfo)
+	if (pinfo) {
+		_mtk_charger_change_current_setting(pinfo);
 		_wake_up_charger(pinfo);
+	}
 }
 EXPORT_SYMBOL(pox_pd_min_watt_set);
 
@@ -3647,11 +3657,13 @@ EXPORT_SYMBOL(pox_pd_max_watt_get);
 
 void pox_pd_max_watt_set(int watt)
 {
-	g_battery_pd_max_watt = clamp(watt, 5, 100);
+	g_battery_pd_max_watt = clamp(watt, 5, 18);
 	if (g_battery_pd_min_watt > g_battery_pd_max_watt)
 		g_battery_pd_min_watt = g_battery_pd_max_watt;
-	if (pinfo)
+	if (pinfo) {
+		_mtk_charger_change_current_setting(pinfo);
 		_wake_up_charger(pinfo);
+	}
 }
 EXPORT_SYMBOL(pox_pd_max_watt_set);
 
@@ -3664,6 +3676,10 @@ void pox_get_target_currents(int watt, int vbus_mv, int vbat_mv,
 
 	if (watt <= 0)
 		watt = 18;
+	if (watt > 18)
+		watt = 18;
+	if (watt < 5)
+		watt = 5;
 	if (vbus_mv < 4000)
 		vbus_mv = 5000;
 	if (vbat_mv < 3400)
@@ -3679,19 +3695,19 @@ void pox_get_target_currents(int watt, int vbus_mv, int vbat_mv,
 	/* Battery charging current: (W * 0.90) / Vbat (in uA) */
 	total_ichg = (int)(((u64)watt * 900000000ULL) / (u32)vbat_mv);
 
-	/* Clamp total battery current safely between 500mA and 4.5A */
+	/* Clamp total battery current safely between 500mA and 4.2A */
 	if (total_ichg < 500000)
 		total_ichg = 500000;
-	if (total_ichg > 4500000)
-		total_ichg = 4500000;
+	if (total_ichg > 4200000)
+		total_ichg = 4200000;
 
 	/* Distribute charging current between master (chg1) and slave (chg2) */
 	if (total_ichg <= 2000000) {
 		*p_ichg1 = total_ichg;
 		*p_ichg2 = 0;
 	} else {
-		*p_ichg1 = min(2600000, total_ichg / 2 + 50000);
-		*p_ichg2 = min(2400000, total_ichg - *p_ichg1);
+		*p_ichg1 = min(2400000, total_ichg / 2 + 50000);
+		*p_ichg2 = min(2200000, total_ichg - *p_ichg1);
 	}
 
 	/*
@@ -3701,7 +3717,7 @@ void pox_get_target_currents(int watt, int vbus_mv, int vbat_mv,
 	 * total_aicr / 2.
 	 *
 	 * Set both p_aicr1 and p_aicr2 to total_aicr.
-	 * When parallel_vbus is halved at line 698 of mtk_dual_switch_charging.c:
+	 * When parallel_vbus is halved at line 708 of mtk_dual_switch_charging.c:
 	 * chg1 gets total_aicr / 2, chg2 gets total_aicr / 2.
 	 * Sum drawn from adapter: (total_aicr/2) + (total_aicr/2) = total_aicr.
 	 * For 18W @ 9V: total_aicr = 2000000 uA.
