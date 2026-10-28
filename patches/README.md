@@ -19,6 +19,12 @@ the bundled manager package and runs its installer against the new boot image
 install. Set `BUNDLE_ROOT=0` to disable, or `APATCH_ZIP=/path/app.apk` /
 `FOLKPATCH_ZIP=/path/app.apk` to bundle a pinned local build instead of latest.
 
+The manager APK is downloaded from the root project's public **latest release**
+page (`FolkPatch` / `APatch`), so no GitHub token or Actions secret is needed.
+If the release page cannot be resolved, `build.sh` falls back to the public
+REST API, and CI emits a warning annotation instead of shipping a zip without
+the manager package.
+
 ## Overlays
 
 | Overlay | Patch | Adds |

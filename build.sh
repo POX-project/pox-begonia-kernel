@@ -727,11 +727,55 @@ root_package_spec() {
     esac
 }
 
+# Resolve the manager APK straight from the public "latest release" page.
+# `/releases/latest` redirects to `/releases/tag/<tag>` and the expanded asset
+# fragment lists the download links. Neither is subject to the api.github.com
+# rate limit, so no Actions/workflow token is involved.
+release_apk_url_html() {
+    local repo="$1" final tag page url
+    final="$(curl -fsSL -o /dev/null -w '%{url_effective}' \
+        --retry 2 --retry-delay 2 --connect-timeout 20 \
+        "https://github.com/${repo}/releases/latest" 2>/dev/null)" || return 1
+    [[ "$final" == */releases/tag/* ]] || return 1
+    tag="${final##*/releases/tag/}"
+    page="$(curl -fsSL --retry 2 --retry-delay 2 --connect-timeout 20 \
+        "https://github.com/${repo}/releases/expanded_assets/${tag}" 2>/dev/null)" || return 1
+    url="$(printf '%s\n' "$page" \
+        | grep -oE 'href="[^"]*/releases/download/[^"]+\.apk"' \
+        | head -n1 \
+        | sed -E 's/^href="([^"]+)".*/\1/')"
+    [[ -n "$url" ]] || return 1
+    case "$url" in
+        http*) printf '%s' "$url" ;;
+        /*)    printf 'https://github.com%s' "$url" ;;
+        *)     printf 'https://github.com/%s' "$url" ;;
+    esac
+}
+
+# Fallback for when the release page markup changes: ask the public REST API.
+GH_API_RETRIES="${GH_API_RETRIES:-3}"
+release_apk_url_api() {
+    local repo="$1" body attempt url
+    for ((attempt = 1; attempt <= GH_API_RETRIES; attempt++)); do
+        body="$(curl -fsSL \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2022-11-28' \
+            --retry 2 --retry-delay 2 --connect-timeout 20 \
+            "https://api.github.com/repos/${repo}/releases/latest" 2>/dev/null)" || body=""
+        url="$(printf '%s\n' "$body" \
+            | grep -oE '"browser_download_url":[[:space:]]*"[^"]+\.apk"' \
+            | head -n1 \
+            | sed -E 's/.*"(https[^"]+)".*/\1/')"
+        [[ -n "$url" ]] && { printf '%s' "$url"; return 0; }
+        sleep "$attempt"
+    done
+    return 1
+}
+
 # Fetch the latest release APK (which is also a flashable recovery zip) for a
 # KernelPatch-based root solution.
 fetch_root_release() {
     local repo="$1" dest="$2" label="$3"
-    local api="https://api.github.com/repos/${repo}/releases/latest"
     local url=""
 
     if ! command -v curl >/dev/null 2>&1; then
@@ -739,19 +783,22 @@ fetch_root_release() {
         return 1
     fi
 
-    url="$(curl -fsSL "$api" 2>/dev/null \
-        | grep -oE '"browser_download_url":[[:space:]]*"[^"]+\.apk"' \
-        | head -n1 \
-        | sed -E 's/.*"(https[^"]+)".*/\1/')"
+    url="$(release_apk_url_html "$repo" 2>/dev/null || true)"
+    if [[ -z "$url" ]]; then
+        warn "Release page lookup for ${label} failed; trying the GitHub API."
+        url="$(release_apk_url_api "$repo" 2>/dev/null || true)"
+    fi
 
     if [[ -z "$url" ]]; then
         warn "Could not resolve a ${label} APK from ${repo}."
         return 1
     fi
 
-    ROOT_ASSET="$(basename "$url")"
+    ROOT_ASSET="$(basename "${url%%\?*}")"
     log "Fetching latest ${label} release: $ROOT_ASSET"
-    if ! curl -fL --retry 3 --connect-timeout 20 -o "$dest" "$url"; then
+    # Release assets are public; fetch them directly without extra headers.
+    if ! curl -fL --retry 3 --retry-delay 2 \
+            --connect-timeout 20 -o "$dest" "$url"; then
         warn "Failed to download ${label} APK."
         return 1
     fi
@@ -805,6 +852,9 @@ package_zip() {
             else
                 rm -f "$root_zip"
                 warn "Proceeding without ${ROOT_LABEL} auto-flash step."
+                if [[ "${GITHUB_ACTIONS:-}" == "true" ]]; then
+                    echo "::warning title=Root auto-flash skipped::Could not download the ${ROOT_LABEL} APK for '${ROOT_FLAVOR}' from its latest release; the flashable zip will not patch boot. Check network access to github.com."
+                fi
             fi
         fi
     fi
