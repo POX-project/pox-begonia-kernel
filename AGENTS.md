@@ -18,7 +18,7 @@ per-variant branches, no merge conflicts when upstream updates land.
 |---|---|---|---|
 | `vanilla` | none | none | (none) |
 | `apatch` | APatch | none | `apatch.patch` |
-| `folkpatch` | FolkPatch | none | `apatch.patch` + `folkpatch.patch` (shared kernel side + FolkPatch packaging profile) |
+| `folkpatch` | FolkPatch | none | `folkpatch.patch` (self-contained: KernelPatch kernel side + `root/folkpatch.env`) |
 | `ksu` | BakaSU | none | `ksu.patch` |
 | `miui` | (any root) | MIUI/HyperOS | `miui.patch` |
 | `c2` | (any root) | Codec2 | `c2.patch` |
@@ -41,7 +41,7 @@ CI: **Actions → Build & Release → Run workflow**, pick root + overlay.
 
 ## 2. What Each Patch Does
 
-### 2.1 `patches/apatch.patch` (used by `apatch`; shared kernel side for `folkpatch`)
+### 2.1 `patches/apatch.patch` (used by `apatch`)
 
 **Kernel side:**
 - Adds `begonia_apatch_defconfig` (APatch-enabled defconfig)
@@ -56,12 +56,14 @@ CI: **Actions → Build & Release → Run workflow**, pick root + overlay.
 - Stages manager APK for first-boot install via `pox_root_install.sh` / `init.pox_root.rc`
 - Set `BUNDLE_ROOT=0` to disable; `APATCH_ZIP`/`FOLKPATCH_ZIP` to pin a local APK
 
-### 2.1.1 `patches/folkpatch.patch` (applied on top of `apatch.patch` for `folkpatch`)
+### 2.1.1 `patches/folkpatch.patch` (standalone, used by `folkpatch`)
 
-Packaging only — the kernel side is shared with APatch. Adds `root/folkpatch.env`
-(repo `LyraVoid/FolkPatch`, `folkpatch.zip`, `FolkPatch.apk`, manager package
-`me.yuki.folk`). No kernel source is touched, so the patch is a single new file
-and stays valid across kernel updates.
+Self-contained: the same KernelPatch kernel side as `apatch.patch` plus
+`root/folkpatch.env` (repo `LyraVoid/FolkPatch`, `folkpatch.zip`,
+`FolkPatch.apk`, manager package `me.yuki.folk`). `VARIANT=folkpatch` applies
+only this patch, so `APPLIED_PATCHES` reports `folkpatch` — it does **not**
+stack on `apatch.patch`. Regenerate it from `apatch.patch` when the shared
+kernel side changes (keep the same hunks, swap the `root/*.env` entry).
 
 ### 2.2 `patches/ksu.patch` (used by `ksu`)
 

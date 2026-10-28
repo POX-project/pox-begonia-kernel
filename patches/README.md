@@ -10,7 +10,7 @@ when upstream updates land.
 | --- | --- | --- |
 | `vanilla` | none (onyx base) | none |
 | `apatch` | `apatch.patch` (APatch defconfig + NoMount v2.2.0 + `root/apatch.env`) | latest APatch APK bundled, auto-flashed during kernel flash |
-| `folkpatch` | `apatch.patch` + `folkpatch.patch` (shared kernel side + `root/folkpatch.env`) | latest FolkPatch APK bundled, auto-flashed during kernel flash |
+| `folkpatch` | `folkpatch.patch` (self-contained: KernelPatch kernel side + `root/folkpatch.env`) | latest FolkPatch APK bundled, auto-flashed during kernel flash |
 | `ksu` | `ksu.patch` (BakaSU submodule + NoMount v2.2.0 + SuSFS + BakaSU/KSU-Next manager signs) | manager installed separately (BakaSU or KSU-Next) |
 
 Each root patch adds a packaging profile at `root/<flavor>.env` (repo, zip/APK

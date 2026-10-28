@@ -120,9 +120,9 @@ variant_patch_name() {
         onyx|vanilla|stock|none|default|"") printf '' ;;
         main|granite|obsidian|memory-enhanced) printf '' ;;
         *ksun*|*ksu-next*|*kernelsu*|*reksun*|*ksu*) printf 'ksu' ;;
-        # FolkPatch shares the APatch kernel side but ships its own root
-        # packaging profile, so the folkpatch patch is applied on top.
-        *folkpatch*)                   printf 'apatch folkpatch' ;;
+        # FolkPatch is a standalone patch: same KernelPatch kernel side plus
+        # its own root packaging profile. It does not stack on apatch.patch.
+        *folkpatch*)                   printf 'folkpatch' ;;
         *apatch*)                      printf 'apatch' ;;
         *miui*|*hyperos*)              printf 'miui' ;;
         *c2*|*codec2*)                 printf 'c2' ;;
