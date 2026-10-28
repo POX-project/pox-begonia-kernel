@@ -2920,3 +2920,18 @@ index 000000000..c850611ff
 +#define rcu_guard() rcu_read_lock(); int __attribute__((cleanup(__nm_rcu_unlock), unused)) __UNIQUE_ID(rcug)
 +
 +#endif /* _LINUX_NOMOUNT_H */
+
+diff --git a/root/apatch.env b/root/apatch.env
+new file mode 100644
+index 000000000000..59ccb6fb2041
+--- /dev/null
++++ b/root/apatch.env
+@@ -0,0 +1,8 @@
++# Root packaging profile for APatch (KernelPatch).
++# Added by patches/apatch.patch; build.sh sources it after applying patches.
++ROOT_LABEL="APatch (KernelPatch)"
++ROOT_ZIP_NAME="apatch.zip"
++ROOT_APK_NAME="APatch.apk"
++ROOT_PACKAGE_NAME="${APATCH_PACKAGE:-me.bmax.apatch}"
++ROOT_REPO="${APATCH_REPO:-bmax121/APatch}"
++ROOT_PINNED_ZIP="${APATCH_ZIP:-}"

@@ -1,0 +1,14 @@
+diff --git a/root/folkpatch.env b/root/folkpatch.env
+new file mode 100644
+index 000000000000..adbe52efd453
+--- /dev/null
++++ b/root/folkpatch.env
+@@ -0,0 +1,8 @@
++# Root packaging profile for FolkPatch (KernelPatch).
++# Added by patches/folkpatch.patch; build.sh sources it after applying patches.
++ROOT_LABEL="FolkPatch (KernelPatch)"
++ROOT_ZIP_NAME="folkpatch.zip"
++ROOT_APK_NAME="FolkPatch.apk"
++ROOT_PACKAGE_NAME="${FOLKPATCH_PACKAGE:-me.yuki.folk}"
++ROOT_REPO="${FOLKPATCH_REPO:-LyraVoid/FolkPatch}"
++ROOT_PINNED_ZIP="${FOLKPATCH_ZIP:-}"

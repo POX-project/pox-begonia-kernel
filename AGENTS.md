@@ -18,7 +18,7 @@ per-variant branches, no merge conflicts when upstream updates land.
 |---|---|---|---|
 | `vanilla` | none | none | (none) |
 | `apatch` | APatch | none | `apatch.patch` |
-| `folkpatch` | FolkPatch | none | `apatch.patch` (same kernel side, different bundled APK) |
+| `folkpatch` | FolkPatch | none | `apatch.patch` + `folkpatch.patch` (shared kernel side + FolkPatch packaging profile) |
 | `ksu` | BakaSU | none | `ksu.patch` |
 | `miui` | (any root) | MIUI/HyperOS | `miui.patch` |
 | `c2` | (any root) | Codec2 | `c2.patch` |
@@ -41,7 +41,7 @@ CI: **Actions → Build & Release → Run workflow**, pick root + overlay.
 
 ## 2. What Each Patch Does
 
-### 2.1 `patches/apatch.patch` (used by `apatch` and `folkpatch`)
+### 2.1 `patches/apatch.patch` (used by `apatch`; shared kernel side for `folkpatch`)
 
 **Kernel side:**
 - Adds `begonia_apatch_defconfig` (APatch-enabled defconfig)
@@ -49,11 +49,19 @@ CI: **Actions → Build & Release → Run workflow**, pick root + overlay.
 - Adds `fs/nomount/*` (NoMount v2.2.0) for path redirection
 - KernelPatch/APatch kernel hooks (KALLSYMS, etc.)
 
-**Packaging (build.sh):**
-- Bundles latest APatch APK (or FolkPatch APK for `folkpatch`) into the zip
+**Packaging:**
+- Adds `root/apatch.env`, the APatch packaging profile
+- `build.sh` sources `root/<root flavor>.env` generically and bundles the APK named there
 - Auto-flashes the manager during kernel flash via `InstallAP.sh`
 - Stages manager APK for first-boot install via `pox_root_install.sh` / `init.pox_root.rc`
 - Set `BUNDLE_ROOT=0` to disable; `APATCH_ZIP`/`FOLKPATCH_ZIP` to pin a local APK
+
+### 2.1.1 `patches/folkpatch.patch` (applied on top of `apatch.patch` for `folkpatch`)
+
+Packaging only — the kernel side is shared with APatch. Adds `root/folkpatch.env`
+(repo `LyraVoid/FolkPatch`, `folkpatch.zip`, `FolkPatch.apk`, manager package
+`me.yuki.folk`). No kernel source is touched, so the patch is a single new file
+and stays valid across kernel updates.
 
 ### 2.2 `patches/ksu.patch` (used by `ksu`)
 

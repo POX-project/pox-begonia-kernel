@@ -9,15 +9,18 @@ when upstream updates land.
 | Variant | Kernel side | Manager / flashing |
 | --- | --- | --- |
 | `vanilla` | none (onyx base) | none |
-| `apatch` | `apatch.patch` (APatch defconfig + NoMount v2.2.0) | latest APatch APK bundled, auto-flashed during kernel flash |
-| `folkpatch` | `apatch.patch` (same KernelPatch-based kernel side) | latest FolkPatch APK bundled, auto-flashed during kernel flash |
+| `apatch` | `apatch.patch` (APatch defconfig + NoMount v2.2.0 + `root/apatch.env`) | latest APatch APK bundled, auto-flashed during kernel flash |
+| `folkpatch` | `apatch.patch` + `folkpatch.patch` (shared kernel side + `root/folkpatch.env`) | latest FolkPatch APK bundled, auto-flashed during kernel flash |
 | `ksu` | `ksu.patch` (BakaSU submodule + NoMount v2.2.0 + SuSFS + BakaSU/KSU-Next manager signs) | manager installed separately (BakaSU or KSU-Next) |
 
-`apatch` and `folkpatch` produce a zip that, after writing the kernel, extracts
-the bundled manager package and runs its installer against the new boot image
-(KernelPatch `InstallAP.sh`), then stages the manager APK for first-boot
-install. Set `BUNDLE_ROOT=0` to disable, or `APATCH_ZIP=/path/app.apk` /
-`FOLKPATCH_ZIP=/path/app.apk` to bundle a pinned local build instead of latest.
+Each root patch adds a packaging profile at `root/<flavor>.env` (repo, zip/APK
+names, manager package). `build.sh` sources it generically, so the flavor
+definition lives in the patch, not in the build script. The resulting zip,
+after writing the kernel, extracts the bundled manager package and runs its
+installer against the new boot image (KernelPatch `InstallAP.sh`), then stages
+the manager APK for first-boot install. Set `BUNDLE_ROOT=0` to disable, or
+`APATCH_ZIP=/path/app.apk` / `FOLKPATCH_ZIP=/path/app.apk` to bundle a pinned
+local build instead of latest.
 
 The manager APK is downloaded from the root project's public **latest release**
 page (`FolkPatch` / `APatch`), so no GitHub token or Actions secret is needed.

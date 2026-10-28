@@ -28,18 +28,13 @@ DEVICE_CODENAME="${DEVICE_CODENAME:-begonia}"
 MAINTAINER="${MAINTAINER:-TXO R (Pox Project)}"
 DEFCONFIG="${DEFCONFIG:-}"
 
-# Bundled root packages for the APatch/FolkPatch variants. Each release asset
-# is an APK that doubles as a flashable recovery zip (KernelPatch); the
-# AnyKernel installer auto-flashes it after writing the kernel and stages the
-# manager APK for first-boot install.
+# Bundled root packages for KernelPatch-based variants. Each release asset is
+# an APK that doubles as a flashable recovery zip; the AnyKernel installer
+# auto-flashes it after writing the kernel and stages the manager APK for
+# first-boot install. The per-flavor definition (repo, zip/APK names, package)
+# lives in root/<flavor>.env, which the variant patch adds to the tree.
 BUNDLE_ROOT="${BUNDLE_ROOT:-1}"
-APATCH_REPO="${APATCH_REPO:-bmax121/APatch}"
-FOLKPATCH_REPO="${FOLKPATCH_REPO:-LyraVoid/FolkPatch}"
-APATCH_PACKAGE="${APATCH_PACKAGE:-me.bmax.apatch}"
-FOLKPATCH_PACKAGE="${FOLKPATCH_PACKAGE:-me.yuki.folk}"
 ROOT_INSTALL_APP="${ROOT_INSTALL_APP:-1}"
-APATCH_ZIP="${APATCH_ZIP:-}"
-FOLKPATCH_ZIP="${FOLKPATCH_ZIP:-}"
 
 # Determine safe parallel jobs based on available RAM and load to protect host PC from freezing
 auto_jobs() {
@@ -125,7 +120,9 @@ variant_patch_name() {
         onyx|vanilla|stock|none|default|"") printf '' ;;
         main|granite|obsidian|memory-enhanced) printf '' ;;
         *ksun*|*ksu-next*|*kernelsu*|*reksun*|*ksu*) printf 'ksu' ;;
-        *folkpatch*)                   printf 'apatch' ;;   # same kernel side; different bundled package
+        # FolkPatch shares the APatch kernel side but ships its own root
+        # packaging profile, so the folkpatch patch is applied on top.
+        *folkpatch*)                   printf 'apatch folkpatch' ;;
         *apatch*)                      printf 'apatch' ;;
         *miui*|*hyperos*)              printf 'miui' ;;
         *c2*|*codec2*)                 printf 'c2' ;;
@@ -156,15 +153,18 @@ apply_variant_patches() {
     local requested=() token name p seen=" "
     local roots=()
     for token in $VARIANT; do
-        name="$(variant_patch_name "$token")"
-        [[ -z "$name" ]] && continue
-        # Repeated tokens are ignored so a patch is never applied twice.
-        [[ "$seen" == *" $name "* ]] && continue
-        seen="$seen$name "
-        case "$name" in
-            miui|c2) ;;   # overlays are appended in canonical order below
-            *)       roots+=("$name") ;;
-        esac
+        # A token may map to more than one patch (folkpatch = shared kernel
+        # side + its own root packaging profile).
+        for name in $(variant_patch_name "$token"); do
+            [[ -z "$name" ]] && continue
+            # Repeated tokens are ignored so a patch is never applied twice.
+            [[ "$seen" == *" $name "* ]] && continue
+            seen="$seen$name "
+            case "$name" in
+                miui|c2) ;;   # overlays are appended in canonical order below
+                *)       roots+=("$name") ;;
+            esac
+        done
     done
     # Overlays compose: `VARIANT=ksu,miui,c2` applies both patch sets. They are
     # always applied in OVERLAY_ORDER so any token order builds the same tree
@@ -704,27 +704,25 @@ build_kernel() {
 }
 
 # Resolve the manager package bundled with the current root flavor.
+# Load the packaging profile added by the variant patch:
+#   root/<flavor>.env
+# It defines ROOT_LABEL, ROOT_ZIP_NAME, ROOT_APK_NAME, ROOT_PACKAGE_NAME,
+# ROOT_REPO and ROOT_PINNED_ZIP. Flavors without a profile (vanilla, ksu)
+# bundle no manager package.
 root_package_spec() {
     ROOT_LABEL=""
     ROOT_ZIP_NAME=""
     ROOT_APK_NAME=""
     ROOT_PACKAGE_NAME=""
     ROOT_ASSET=""
+    ROOT_REPO=""
+    ROOT_PINNED_ZIP=""
 
-    case "${ROOT_FLAVOR:-vanilla}" in
-        apatch)
-            ROOT_LABEL="APatch (KernelPatch)"
-            ROOT_ZIP_NAME="apatch.zip"
-            ROOT_APK_NAME="APatch.apk"
-            ROOT_PACKAGE_NAME="$APATCH_PACKAGE"
-            ;;
-        folkpatch)
-            ROOT_LABEL="FolkPatch (KernelPatch)"
-            ROOT_ZIP_NAME="folkpatch.zip"
-            ROOT_APK_NAME="FolkPatch.apk"
-            ROOT_PACKAGE_NAME="$FOLKPATCH_PACKAGE"
-            ;;
-    esac
+    local profile="$ROOT_DIR/root/${ROOT_FLAVOR:-vanilla}.env"
+    if [[ -f "$profile" ]]; then
+        # shellcheck source=/dev/null
+        source "$profile"
+    fi
 }
 
 # Resolve the manager APK straight from the public "latest release" page.
@@ -827,26 +825,23 @@ package_zip() {
     cp -r "$AK3_DIR/." "$stage/"
     cp "$image" "$stage/Image.gz-dtb"
 
-    # Bundle the manager package for APatch/FolkPatch. Its release artifact is
-    # an APK that is also a flashable recovery zip; stage it with .zip suffix.
+    # Bundle the manager package described by root/<flavor>.env. Its release
+    # artifact is an APK that is also a flashable recovery zip; stage it with
+    # a .zip suffix.
     root_package_spec
     ROOT_BUNDLED=0
     if [[ -n "$ROOT_ZIP_NAME" && "$BUNDLE_ROOT" == "1" ]]; then
         local root_zip="$stage/$ROOT_ZIP_NAME"
-        local root_source=""
-        case "$ROOT_FLAVOR" in
-            apatch)    root_source="$APATCH_ZIP" ;;
-            folkpatch) root_source="$FOLKPATCH_ZIP" ;;
-        esac
+        local root_source="$ROOT_PINNED_ZIP"
         if [[ -n "$root_source" && -f "$root_source" ]]; then
             cp -f "$root_source" "$root_zip"
             ROOT_ASSET="$(basename "$root_source")"
             log "Bundled local ${ROOT_LABEL} package: $ROOT_ASSET"
             ROOT_BUNDLED=1
         else
-            local root_repo="$APATCH_REPO"
-            [[ "$ROOT_FLAVOR" == "folkpatch" ]] && root_repo="$FOLKPATCH_REPO"
-            if fetch_root_release "$root_repo" "$root_zip" "$ROOT_LABEL"; then
+            if [[ -z "$ROOT_REPO" ]]; then
+                warn "${ROOT_FLAVOR} has no root packaging profile; skipping manager bundle."
+            elif fetch_root_release "$ROOT_REPO" "$root_zip" "$ROOT_LABEL"; then
                 log "Bundled ${ROOT_LABEL} as ${ROOT_ZIP_NAME} ($(du -h "$root_zip" | cut -f1))"
                 ROOT_BUNDLED=1
             else
