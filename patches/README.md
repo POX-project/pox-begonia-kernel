@@ -26,8 +26,10 @@ install. Set `BUNDLE_ROOT=0` to disable, or `APATCH_ZIP=/path/app.apk` /
 | `miui` | `miui.patch` | WLAN/network hardening + `miui.config` fragment (MIUI/HyperOS) |
 | `c2` | `c2.patch` | MTK VDEC/VENC + VCU Codec2 media stack |
 
-`miui` and `c2` rewrite overlapping vendor media code and are mutually
-exclusive.
+Overlays are independent patch sets (WLAN/config vs vcodec) and **compose**:
+`VARIANT=ksu,miui,c2` applies both. They are always applied in the fixed order
+`miui` then `c2` regardless of how they were listed, and `./build.sh unvariant`
+reverts them in the reverse order.
 
 ## Selecting a variant
 
@@ -39,6 +41,7 @@ VARIANT=vanilla ./build.sh all
 VARIANT=apatch ./build.sh all
 VARIANT=folkpatch,miui ./build.sh all
 VARIANT=ksu,c2 ./build.sh all
+VARIANT=ksu,miui,c2 ./build.sh all      # both overlays
 ./build.sh unvariant                  # restore the clean onyx tree
 ```
 
@@ -47,8 +50,8 @@ applied but was not requested (for example `ksu` followed by `vanilla`), and
 `unvariant` reverses the applied sets (overlays first) so the tree can be
 reused safely.
 
-GitHub Actions: **Build & Release → Run workflow**, pick a root and at most one
-overlay. `VARIANT` also falls back to the branch/tag name, so `onyx-ksu-next`
+GitHub Actions: **Build & Release → Run workflow**, pick a root and either or
+both overlays. `VARIANT` also falls back to the branch/tag name, so `onyx-ksu-next`
 still builds the KSU edition. Successful builds are mirrored to Gofile and
 posted to Telegram as one message (zip + Gofile link + commit + changelog +
 Actions run URL) when the `TELEGRAM_BOT_TOKEN` / `TELEGRAM_CHAT_ID` secrets are

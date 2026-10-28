@@ -14,12 +14,12 @@ on:
           - folkpatch
           - ksu
       miui:
-        description: 'Add MIUI/HyperOS overlay (mutually exclusive with Codec2)'
+        description: 'Add MIUI/HyperOS overlay (combinable with Codec2)'
         required: false
         default: false
         type: boolean
       c2:
-        description: 'Add Codec2 media overlay (mutually exclusive with MIUI)'
+        description: 'Add Codec2 media overlay (combinable with MIUI)'
         required: false
         default: false
         type: boolean
@@ -34,7 +34,8 @@ permissions:
 
 concurrency:
   # Overlay choices are part of the key so `ksu` and `ksu,c2` can build in
-  # parallel instead of cancelling each other.
+  # parallel instead of cancelling each other. Combined overlays
+  # (`ksu,miui,c2`) get their own key too.
   group: build-${{ github.ref }}-${{ github.event.inputs.root || 'push' }}-${{ github.event.inputs.miui || '0' }}-${{ github.event.inputs.c2 || '0' }}
   cancel-in-progress: true
 
@@ -68,10 +69,9 @@ jobs:
             ROOT="${{ inputs.root }}"
             MIUI="${{ inputs.miui }}"
             C2="${{ inputs.c2 }}"
-            if [[ "$MIUI" == "true" && "$C2" == "true" ]]; then
-              echo "::error::MIUI and Codec2 overlays rewrite the same vendor media code - enable at most one"
-              exit 1
-            fi
+            # MIUI and Codec2 are independent patch sets (WLAN/config vs
+            # vcodec DVFS) and may be combined; build.sh applies them in a
+            # fixed overlay order.
             VARIANT="$ROOT"
             [[ "$MIUI" == "true" ]] && VARIANT="$VARIANT,miui"
             [[ "$C2" == "true" ]] && VARIANT="$VARIANT,c2"

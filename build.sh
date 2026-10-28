@@ -13,6 +13,11 @@ BUILD_DIR="${BUILD_DIR:-$ROOT_DIR/build}"
 OUT_DIR="${OUT_DIR:-$BUILD_DIR/out}"
 KERDEVDEP="${KERDEVDEP:-$ROOT_DIR/kerdevdep}"
 PATCH_DIR="${PATCH_DIR:-$ROOT_DIR/patches}"
+
+# Media overlays are independent patch sets and may be requested together
+# (`VARIANT=ksu,miui,c2`). They are applied in this fixed order and reverted in
+# the reverse order, independent of the order the user listed them in.
+OVERLAY_ORDER="miui c2"
 ACTION="${1:-all}"
 
 # Kernel Branding & Versioning (Fully customizable via environment or build script)
@@ -71,7 +76,7 @@ if [[ "$ACTION" == "variants" || "$ACTION" == "list-variants" ||
       "$ACTION" == "patches" || "$ACTION" == "list-patches" ]]; then
     log "Variant selection: VARIANT=<root>[,<overlay>] (e.g. VARIANT=ksu,c2)"
     log "Root flavors: vanilla (none), apatch, folkpatch, ksu"
-    log "Overlays:     miui, c2"
+    log "Overlays:     miui, c2 (combinable: VARIANT=ksu,miui,c2)"
     echo
     for patch in "$PATCH_DIR"/*.patch; do
         [[ -f "$patch" ]] || continue
@@ -95,6 +100,7 @@ fi
 #   VARIANT=ksu              BakaSU + NoMount + SuSFS
 #   VARIANT=ksu,c2           KSU root + Codec2 overlay
 #   VARIANT=apatch,miui      APatch root (auto-flashed) + MIUI overlay
+#   VARIANT=ksu,miui,c2      KSU root + MIUI and Codec2 overlays together
 #   VARIANT=folkpatch        FolkPatch root (same kernel, FolkPatch package)
 #
 # When VARIANT is unset the branch/tag name is used for backwards
@@ -147,17 +153,26 @@ ROOT_FLAVOR="$(parse_variant_tokens)"
 apply_variant_patches() {
     [[ "${VARIANT_PATCHED:-0}" == "1" ]] && return 0
 
-    local requested=() token name p
-    local roots=() overlays=()
+    local requested=() token name p seen=" "
+    local roots=()
     for token in $VARIANT; do
         name="$(variant_patch_name "$token")"
         [[ -z "$name" ]] && continue
+        # Repeated tokens are ignored so a patch is never applied twice.
+        [[ "$seen" == *" $name "* ]] && continue
+        seen="$seen$name "
         case "$name" in
-            miui|c2) overlays+=("$name") ;;
+            miui|c2) ;;   # overlays are appended in canonical order below
             *)       roots+=("$name") ;;
         esac
     done
-    requested=("${roots[@]}" "${overlays[@]}")
+    # Overlays compose: `VARIANT=ksu,miui,c2` applies both patch sets. They are
+    # always applied in OVERLAY_ORDER so any token order builds the same tree
+    # and `unvariant` can reverse them deterministically.
+    requested=("${roots[@]}")
+    for name in $OVERLAY_ORDER; do
+        [[ "$seen" == *" $name "* ]] && requested+=("$name")
+    done
 
     # A tree left dirty by an earlier variant build must never be reused for
     # a different variant (for example `VARIANT=ksu ./build.sh all` followed
@@ -261,16 +276,21 @@ apply_variant_patches() {
 # Restore the clean onyx tree: reverse every applied patch set (overlays were
 # applied last), then drop the KernelSU checkout added by the ksu patch.
 unapply_variant_patches() {
-    local roots=() overlays=() f name i
+    local roots=() overlays=() f name i o
     for f in "$PATCH_DIR"/*.patch; do
         [[ -f "$f" ]] || continue
         if git apply --reverse --check "$f" >/dev/null 2>&1; then
             name="$(basename "$f" .patch)"
             case "$name" in
-                miui|c2) overlays+=("$f") ;;
+                miui|c2) ;;   # collected in OVERLAY_ORDER below
                 *)       roots+=("$f") ;;
             esac
         fi
+    done
+    for o in $OVERLAY_ORDER; do
+        f="$PATCH_DIR/$o.patch"
+        [[ -f "$f" ]] || continue
+        git apply --reverse --check "$f" >/dev/null 2>&1 && overlays+=("$f")
     done
 
     if ((${#roots[@]} + ${#overlays[@]} == 0)); then

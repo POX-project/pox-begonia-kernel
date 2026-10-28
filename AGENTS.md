@@ -24,7 +24,8 @@ per-variant branches, no merge conflicts when upstream updates land.
 | `c2` | (any root) | Codec2 | `c2.patch` |
 
 Combine with commas: `VARIANT=ksu,c2`, `VARIANT=apatch,miui`. `miui` and `c2`
-are mutually exclusive (overlapping media code).
+compose — `VARIANT=ksu,miui,c2` applies both overlays (always in the fixed order
+`miui` then `c2`, reverted in reverse by `unvariant`).
 
 Build locally:
 ```bash
@@ -70,7 +71,7 @@ CI: **Actions → Build & Release → Run workflow**, pick root + overlay.
 - BakaSU manager installed separately (not bundled); `ksu-patches/ksu/` applied via
   `git apply --directory=KernelSU`
 
-### 2.3 `patches/miui.patch` (overlay, mutually exclusive with `c2`)
+### 2.3 `patches/miui.patch` (overlay, combinable with `c2`)
 
 **Kernel side:**
 - WLAN driver hardening (`wmt_cdev_wifi.c`, `gl_init.c`): module reference counting
@@ -85,7 +86,7 @@ CI: **Actions → Build & Release → Run workflow**, pick root + overlay.
     stock OEM config (hides customized config from MIUI/HyperOS userspace, preventing
     the "internal problem with your device" warning)
 
-### 2.4 `patches/c2.patch` (overlay, mutually exclusive with `miui`)
+### 2.4 `patches/c2.patch` (overlay, combinable with `miui`)
 
 **Kernel side (Saikrishna1504 Codec2 port):**
 - `begonia_c2_defconfig` (Codec2-enabled defconfig)
@@ -307,7 +308,10 @@ added to `c2.patch`. This is a large change — see the commit history for conte
 - Keep patches scoped to their variant. Shared fixes belong on `onyx`.
 - Defconfigs added by a patch must match the resolver.
 - Root patches are applied before overlays.
-- `miui` and `c2` are mutually exclusive (overlapping media code).
+- `miui` and `c2` are independent overlays and may be combined
+  (`VARIANT=ksu,miui,c2`). They touch disjoint files (WLAN/config vs vcodec) and
+  are applied in a fixed order (`OVERLAY_ORDER` in `build.sh`) so token order
+  does not matter.
 - Regenerate patches after any base change:
   ```bash
   git apply --check patches/<name>.patch
@@ -363,3 +367,18 @@ added to `c2.patch`. This is a large change — see the commit history for conte
   `drivers/input/fingerprint/goodix_5658/gf_spi_tee.c` (commit `3ded321bf`) so
   chip-ID failure tears down cleanly instead of leaving a dead `/dev/goodix_fp`.
   Further diagnosis blocked on device logs (dmesg/logcat, `/dev/goodix_fp` presence).
+
+---
+
+## 10. Recent Changes (Oct 28 2026)
+
+- **Overlays compose**: `miui` and `c2` are no longer mutually exclusive. They
+  touch disjoint files (WLAN/config vs `mt6785` vcodec DVFS), so
+  `VARIANT=ksu,miui,c2` is valid. `build.sh` applies overlays in `OVERLAY_ORDER`
+  (`miui` then `c2`) regardless of token order, ignores duplicate tokens, and
+  `unvariant` reverts in the reverse order. The workflow no longer hard-fails
+  when both overlay inputs are checked.
+- **c2 MMQoS is overlay-only**: the idle `PM_QOS_DEFAULT_VALUE` release in
+  `mtk_vcodec_dec_pm.c` / `mtk_vcodec_enc_pm.c` lives in `patches/c2.patch`, not
+  in the `onyx` base. Never apply it directly on base — that makes `c2.patch`
+  unappliable and breaks every `VARIANT=c2` build.
