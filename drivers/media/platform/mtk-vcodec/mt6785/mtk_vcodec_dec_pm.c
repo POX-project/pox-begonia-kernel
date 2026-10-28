@@ -284,7 +284,10 @@ void mtk_prepare_vdec_dvfs(void)
 void mtk_unprepare_vdec_dvfs(void)
 {
 #ifdef DEC_DVFS
-	pm_qos_update_request(&vdec_qos_req_f, PM_QOS_DEFAULT_VALUE);
+	int freq_idx = 0;
+
+	freq_idx = (vdec_freq_step_size == 0) ? 0 : (vdec_freq_step_size - 1);
+	pm_qos_update_request(&vdec_qos_req_f, vdec_freq_steps[freq_idx]);
 	pm_qos_remove_request(&vdec_qos_req_f);
 	free_hist(&vdec_hists, 0);
 	/* TODO: jobs error handle */
@@ -378,13 +381,9 @@ void mtk_vdec_dvfs_end(struct mtk_vcodec_ctx *ctx)
 	} else if (vdec_hists != NULL && vdec_freq_step_size > 1) {
 		freq_idx = (vdec_freq_step_size > 2) ? 1 : 0; /* Active session floor */
 	} else {
-		freq_idx = -1; /* Session idle: release the MMQoS request */
+		freq_idx = (vdec_freq_step_size == 0) ? 0 : (vdec_freq_step_size - 1);
 	}
-
-	if (freq_idx < 0)
-		pm_qos_update_request(&vdec_qos_req_f, PM_QOS_DEFAULT_VALUE);
-	else
-		pm_qos_update_request(&vdec_qos_req_f, vdec_freq_steps[freq_idx]);
+	pm_qos_update_request(&vdec_qos_req_f, vdec_freq_steps[freq_idx]);
 	mutex_unlock(&ctx->dev->dec_dvfs_mutex);
 #endif
 }
