@@ -33,7 +33,11 @@ the manager package.
 | Overlay | Patch | Adds |
 | --- | --- | --- |
 | `miui` | `miui.patch` | WLAN/network hardening + `miui.config` fragment (MIUI/HyperOS) |
-| `c2` | `c2.patch` | MTK VDEC/VENC + VCU Codec2 media stack |
+| `c2` | `c2.patch` | MTK VDEC/VENC + VCU Codec2 media stack (full VCU + V4L2 port) |
+
+`c2` is the only set that carries the MT6785 VCU + V4L2 vcodec port. Without
+it the build uses the legacy vendor vcodec driver, which is what the
+OMX-based MIUI/HyperOS vendor stack expects.
 
 Overlays are independent patch sets (WLAN/config vs vcodec) and **compose**:
 `VARIANT=ksu,miui,c2` applies both. They are always applied in the fixed order
