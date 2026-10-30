@@ -22,7 +22,7 @@ ACTION="${1:-all}"
 
 # Kernel Branding & Versioning (Fully customizable via environment or build script)
 KERNEL_NAME="${KERNEL_NAME:-Pox}"
-KERNEL_VERSION="${KERNEL_VERSION:-1.0}"
+KERNEL_VERSION="${KERNEL_VERSION:-2.0}"
 DEVICE_NAME="${DEVICE_NAME:-Redmi Note 8 Pro}"
 DEVICE_CODENAME="${DEVICE_CODENAME:-begonia}"
 MAINTAINER="${MAINTAINER:-TXO R (Pox Project)}"
