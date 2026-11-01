@@ -3,94 +3,109 @@ name: Build & Release
 on:
   workflow_dispatch:
     inputs:
-      root:
-        description: 'Root flavor (patches in patches/)'
+      target:
+        description: 'Build target (or "all" for all 16 variants)'
         required: true
-        default: vanilla
+        default: 'all'
         type: choice
         options:
+          - all
           - vanilla
           - apatch
           - folkpatch
-          - ksu
-      miui:
-        description: 'Add MIUI/HyperOS overlay (combinable with Codec2)'
-        required: false
-        default: false
-        type: boolean
-      c2:
-        description: 'Add Codec2 media overlay (combinable with MIUI)'
-        required: false
-        default: false
-        type: boolean
+          - bakasu
       release:
-        description: 'Publish the flashable zip as a release asset'
+        description: 'Publish flashable zips to GitHub Release'
         required: false
-        default: false
+        default: true
         type: boolean
+      release_tag:
+        description: 'Release tag to attach assets to'
+        required: false
+        default: 'v2.0.0'
+        type: string
 
 permissions:
   contents: write
 
-concurrency:
-  # Overlay choices are part of the key so `ksu` and `ksu,c2` can build in
-  # parallel instead of cancelling each other. Combined overlays
-  # (`ksu,miui,c2`) get their own key too.
-  group: build-${{ github.ref }}-${{ github.event.inputs.root || 'push' }}-${{ github.event.inputs.miui || '0' }}-${{ github.event.inputs.c2 || '0' }}
-  cancel-in-progress: true
-
 jobs:
-  build:
-    name: Build begonia kernel
+  matrix-prep:
+    name: Generate Matrix
     runs-on: ubuntu-24.04
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - name: Compute combinations
+        id: gen
+        run: |
+          TARGET="${{ github.event.inputs.target || 'all' }}"
+          python3 - <<'PY'
+          import json, os
+          target = os.environ.get("TARGET", "all")
+          all_roots = ["vanilla", "apatch", "folkpatch", "bakasu"]
+          if target == "all":
+              roots = all_roots
+          elif target in all_roots:
+              roots = [target]
+          else:
+              roots = ["vanilla"]
+
+          items = []
+          for r in roots:
+              items.append({"root": r, "miui": False, "c2": False, "id": r})
+              items.append({"root": r, "miui": True,  "c2": False, "id": f"{r}-miui"})
+              items.append({"root": r, "miui": False, "c2": True,  "id": f"{r}-c2"})
+              items.append({"root": r, "miui": True,  "c2": True,  "id": f"{r}-c2-miui"})
+
+          out = json.dumps(items)
+          print(f"matrix={out}")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"matrix={out}\n")
+          PY
+        env:
+          TARGET: ${{ github.event.inputs.target || 'all' }}
+
+  build:
+    name: ${{ matrix.id }}
+    needs: matrix-prep
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJson(needs.matrix-prep.outputs.matrix) }}
     env:
       KERNEL_NAME: Pox
       TC_ROOT: ${{ github.workspace }}/toolchains
       OUT_DIR: out
-      # TheRagingBeast (TRB) Clang 18.0.0, pinned by kerdevdep/setup_kerdevdep.sh
       TRB_CLANG_VER: TheRagingBeast TRB Clang 18.0.0 (17092023)
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          # Only build.sh's changelog (git log -n 15) needs history. Fetching
-          # all 750k+ commits made checkout the longest step on every run.
           fetch-depth: 50
-          # Variant patches add the KernelSU gitlink; build.sh initialises it
-          # after applying them.
           submodules: false
 
       - name: Resolve variant
         id: variant
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            ROOT="${{ inputs.root }}"
-            MIUI="${{ inputs.miui }}"
-            C2="${{ inputs.c2 }}"
-            # MIUI and Codec2 are independent patch sets (WLAN/config vs
-            # vcodec DVFS) and may be combined; build.sh applies them in a
-            # fixed overlay order.
-            VARIANT="$ROOT"
-            [[ "$MIUI" == "true" ]] && VARIANT="$VARIANT,miui"
-            [[ "$C2" == "true" ]] && VARIANT="$VARIANT,c2"
-            LABEL="$VARIANT"
-          else
-            # Pushes/tags leave VARIANT unset: build.sh derives the edition from
-            # the ref name (onyx, onyx-ksu-next, onyx-miui, v1.0-c2, ...).
-            VARIANT=""
-            LABEL="${GITHUB_REF_NAME}"
-          fi
+          ROOT="${{ matrix.root }}"
+          MIUI="${{ matrix.miui }}"
+          C2="${{ matrix.c2 }}"
 
-          # Cache keys reject commas (VARIANT is comma-separated) and other
-          # punctuation, so derive a safe key from the human-readable label.
+          VARIANT="$ROOT"
+          [[ "$MIUI" == "true" ]] && VARIANT="$VARIANT,miui"
+          [[ "$C2" == "true" ]] && VARIANT="$VARIANT,c2"
+          LABEL="$VARIANT"
+
           KEY="$(printf '%s' "$LABEL" | tr -c 'A-Za-z0-9._-' '-' | sed 's/-\{2,\}/-/g; s/^-//; s/-$//')"
 
           echo "VARIANT=$VARIANT" >> "$GITHUB_ENV"
           echo "variant=${LABEL}" >> "$GITHUB_OUTPUT"
           echo "key=${KEY:-auto}" >> "$GITHUB_OUTPUT"
-          echo "Building variant: ${LABEL:-auto}"
+          echo "Building variant: ${LABEL}"
 
       - name: Install dependencies
         run: |
@@ -121,7 +136,6 @@ jobs:
           chmod +x build.sh
           ./build.sh all
 
-          # build.sh is the single source of truth for artifact identity.
           source build/build-info.env
           {
             echo "VARIANT=$VARIANT"
@@ -162,10 +176,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      # Mirror the flashable zip to Gofile so the Telegram post (and anyone
-      # without a GitHub account) can download it without an artifact login.
-      # Guest uploads need no credentials; set GOFILE_TOKEN to file uploads
-      # under a persistent account instead of a throwaway guest folder.
       - name: Upload flashable zip to Gofile
         id: gofile
         if: github.event_name != 'pull_request'
@@ -178,233 +188,28 @@ jobs:
           if [[ -n "${GOFILE_TOKEN:-}" ]]; then
             args+=(-F "token=${GOFILE_TOKEN}")
           fi
-
+          server="$(curl -fsSL https://api.gofile.io/servers | jq -r '.data.servers[0].name // empty')"
+          [[ -n "$server" ]] || server="store1"
           link=""
           for attempt in 1 2 3; do
-            echo "Gofile upload attempt ${attempt}/3 ..."
-            if response="$(curl -fsSL --retry 3 --retry-delay 5 --max-time 900 \
-                "${args[@]}" https://upload.gofile.io/uploadfile 2>&1)"; then
-              link="$(printf '%s' "$response" | python3 -c '
-          import json, sys
-          payload = json.load(sys.stdin)
-          if payload.get("status") != "ok":
-              sys.exit(1)
-          print(payload["data"]["downloadPage"])
-          ' 2>/dev/null || true)"
-            else
-              echo "::warning::Gofile request failed: ${response}"
-            fi
-            if [[ "$link" == https://* ]]; then
-              break
-            fi
+            response="$(curl -fsSL --retry 2 "https://${server}.gofile.io/contents/uploadfile" "${args[@]}" || true)"
+            link="$(printf '%s' "$response" | jq -r '.data.downloadPage // empty')"
+            [[ "$link" == https://* ]] && break
             echo "::warning::Gofile attempt ${attempt} did not return a download page."
-            response=""
             sleep 10
           done
-
-          if [[ "$link" != https://* ]]; then
-            echo "::error::Gofile upload failed after 3 attempts."
-            exit 1
-          fi
-
           echo "link=${link}" >> "$GITHUB_OUTPUT"
           echo "Gofile: ${link}"
 
-      # One Telegram message per build: the flashable zip itself plus a
-      # caption carrying the Gofile link, the Actions run URL and the last
-      # six commits.
-      # Required secrets: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
-      # Optional secret:  TELEGRAM_MESSAGE_THREAD_ID (forum topic)
-      - name: Notify Telegram
-        if: github.event_name != 'pull_request'
-        continue-on-error: true
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
-          GOFILE_LINK: ${{ steps.gofile.outputs.link }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          RUN_NUMBER: ${{ github.run_number }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
-            echo "::warning::TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID are not set; skipping Telegram notification."
-            exit 0
-          fi
-
-          caption_file="$RUNNER_TEMP/telegram-caption.html"
-          export caption_file
-          python3 - <<'PY'
-          import html, os, subprocess
-
-          # Telegram rejects captions longer than 1024 characters. Keep a small
-          # margin and measure the escaped HTML (entities only make us more
-          # conservative, and no tag/entity is ever cut in half).
-          MAX_CAPTION = 1024
-          SAFETY = 24
-
-          def esc(value):
-              return html.escape(value or "", quote=False)
-
-          def one_line(value):
-              return " ".join((value or "").split())
-
-          commits = subprocess.run(
-              ["git", "log", "-n", "6", "--pretty=format:%h\t%s"],
-              capture_output=True, text=True).stdout.splitlines()
-
-          lines = [
-              f"<b>Pox Kernel {esc(os.environ.get('VERSION_NAME'))}</b>",
-              f"<b>Commit:</b> <code>{esc(os.environ.get('COMMIT_HASH'))}</code> "
-              f"{esc(one_line(os.environ.get('COMMIT_SUBJECT')))}",
-              f"<b>Variant:</b> {esc(os.environ.get('VARIANT'))} "
-              f"(root: {esc(os.environ.get('ROOT_FLAVOR'))})",
-              f"<b>Defconfig:</b> <code>{esc(os.environ.get('DEFCONFIG'))}</code>",
-              f"<b>Build #:</b> {esc(os.environ.get('RUN_NUMBER'))}",
-          ]
-
-          gofile = os.environ.get("GOFILE_LINK", "").strip()
-          if gofile:
-              lines.append(f"<b>Gofile:</b> {esc(gofile)}")
-          else:
-              # The Gofile step is continue-on-error: never print a dead link,
-              # but keep the message shape predictable.
-              lines.append("<b>Gofile:</b> upload failed, use the Actions artifact")
-          lines.append(f"<b>Run:</b> {esc(os.environ.get('RUN_URL'))}")
-
-          heading = "\n".join(lines + ["", "<b>Last 6 commits</b>"])
-
-          # Truncate subjects instead of dropping commits: the message must
-          # always list exactly the last six (or all available, on a shallow
-          # fetch) so every build post has the same shape.
-          def entry(sha, subject):
-              rendered = f"• <code>{esc(sha)}</code>"
-              return f"{rendered} {esc(subject)}" if subject else rendered
-
-          slots = max(len(commits), 1)
-          allowance = max(48, (MAX_CAPTION - SAFETY - len(heading)) // slots)
-          entries = []
-          for line in commits:
-              sha, _, raw_subject = line.partition("\t")
-              original = one_line(raw_subject)
-              subject = original
-              # Shrink the subject until the fully rendered (and escaped)
-              # entry fits its slot.
-              while subject and len(entry(sha, subject + "…")) > allowance:
-                  subject = subject[:-1].rstrip()
-              if subject != original:
-                  subject += "…"
-              entries.append(entry(sha, subject))
-
-          caption = "\n".join([heading] + entries)
-
-          # Last-resort guard: drop whole lines only, so the HTML stays valid.
-          while len(caption) > MAX_CAPTION - 8 and "\n" in caption:
-              caption = caption.rsplit("\n", 1)[0]
-
-          with open(os.environ["caption_file"], "w", encoding="utf-8") as fh:
-              fh.write(caption)
-          PY
-
-          echo "Caption length: $(wc -c < "$caption_file") bytes"
-
-          send_args=(-F "chat_id=${TELEGRAM_CHAT_ID}" -F "parse_mode=HTML")
-          if [[ -n "${TELEGRAM_MESSAGE_THREAD_ID:-}" ]]; then
-            send_args+=(-F "message_thread_id=${TELEGRAM_MESSAGE_THREAD_ID}")
-          fi
-
-          # Retry the Bot API call: a transient 5xx/network error should not
-          # leave a green build with no announcement.
-          send_telegram() {
-            local endpoint="$1"
-            shift
-            local response=""
-            local attempt
-            for attempt in 1 2 3; do
-              if response="$(curl -sS --max-time 900 -X POST \
-                  "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${endpoint}" \
-                  "$@" 2>&1)" && [[ "$response" == *'"ok":true'* ]]; then
-                echo "Telegram ${endpoint}: delivered"
-                return 0
-              fi
-              echo "::warning::Telegram ${endpoint} attempt ${attempt}/3 failed: ${response}"
-              sleep 15
-            done
-            echo "::error::Telegram ${endpoint} failed after 3 attempts."
-            return 1
-          }
-
-          zip_bytes="$(stat -c%s "$ZIP_PATH")"
-          if (( zip_bytes > 50 * 1024 * 1024 )); then
-            # Bot API cannot upload documents above 50 MiB. The Gofile mirror
-            # still gives a one-tap download, so send the same caption as text.
-            echo "::warning::Zip is ${zip_bytes} bytes (>50 MiB); sending the caption without the file attachment."
-            send_args+=(-F "text=<${caption_file}" -F "disable_web_page_preview=true")
-            send_telegram sendMessage "${send_args[@]}"
-          else
-            send_args+=(-F "document=@${ZIP_PATH};type=application/zip"
-                        -F "caption=<${caption_file}")
-            send_telegram sendDocument "${send_args[@]}"
-          fi
-
-      - name: Notify Telegram (failure)
-        if: failure() && github.event_name != 'pull_request'
-        continue-on-error: true
-        env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          RUN_NUMBER: ${{ github.run_number }}
-          COMMIT_HASH: ${{ steps.vars.outputs.commit_hash }}
-        run: |
-          set -euo pipefail
-          if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
-            echo "::warning::Telegram secrets not set; skipping failure notification."
-            exit 0
-          fi
-          curl -fsS -X POST             "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage"             -F "chat_id=${TELEGRAM_CHAT_ID}"             -F "parse_mode=HTML"             -F "text=<b>❌ Pox Kernel build FAILED</b>%0A<b>Build #:</b> ${RUN_NUMBER}%0A<b>Commit:</b> <code>${COMMIT_HASH}</code>%0A<b>Run:</b> ${RUN_URL}"
-
-      - name: Publish release
-        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.release == 'true'
+      - name: Publish to GitHub Release
+        if: github.event.inputs.release == 'true' || startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GOFILE_LINK: ${{ steps.gofile.outputs.link }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            # One release per build (commit), so variants/commits never bundle
-            # multiple zips onto a single "latest-*" tag.
-            TAG="${VERSION_NAME}-${COMMIT_HASH}"
-          else
-            TAG="${GITHUB_REF_NAME}"
+          RELEASE_TAG="${{ github.event.inputs.release_tag || 'v2.0.0' }}"
+          if [[ "${{ github.event_name }}" == "push" && startsWith(github.ref, 'refs/tags/v') ]]; then
+            RELEASE_TAG="${GITHUB_REF_NAME}"
           fi
-
-          TITLE="Pox Kernel ${LINUX_VERSION} [${VERSION_NAME}] (${COMMIT_HASH})"
-          NOTES="$(printf '%s\n' \
-            "**${VERSION_NAME}** - ${BRANCH_DESC}" \
-            "" \
-            "- Variant: \`${VARIANT}\` (root: ${ROOT_FLAVOR}, patches: ${APPLIED_PATCHES})" \
-            "- Root package: \`${ROOT_ASSET}\`" \
-            "- Defconfig: \`${DEFCONFIG}\`" \
-            "- uname -r: \`${LOCALVERSION}\`" \
-            "- Commit: \`${COMMIT_HASH}\`" \
-            "- SHA256: \`${ZIP_SHA256}\`" \
-            "" \
-            "Flash \`${ZIP_NAME}\` in TWRP/OrangeFox (boot partition).")"
-
-          # The downloads site links to this mirror so visitors without repo
-          # access can still fetch the zip.
-          if [[ -n "${GOFILE_LINK:-}" ]]; then
-            NOTES+=$'\n'"- Mirror: ${GOFILE_LINK}"
-          fi
-
-          # Always publish a fresh release for this build instead of
-          # accumulating assets on a pre-existing tag. Drop any stale
-          # release/tag for this exact tag first, then create anew.
-          if gh release view "$TAG" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete "$TAG" -R "$GITHUB_REPOSITORY" --yes >/dev/null 2>&1 || true
-            git push origin ":refs/tags/$TAG" >/dev/null 2>&1 || true
-          fi
-          gh release create "$TAG" -R "$GITHUB_REPOSITORY" --title "$TITLE" --notes "$NOTES"
-          gh release upload "$TAG" "$ZIP_PATH" build/Image.gz-dtb \
-            -R "$GITHUB_REPOSITORY"
+          sha256sum "$ZIP_PATH" > "${ZIP_PATH}.sha256"
+          gh release upload "$RELEASE_TAG" "$ZIP_PATH" "${ZIP_PATH}.sha256" --clobber -R "$GITHUB_REPOSITORY"
