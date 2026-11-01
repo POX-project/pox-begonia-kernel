@@ -19,7 +19,7 @@
 - [ ] No `.rodata` writes: All variables modified by vendor HALs/procfs remain writable.
 - [ ] Complies with USB electrical limits (PC USB SDP current limited to 500mA).
 - [ ] Kernel version string does NOT exceed the 64-character `UTS_RELEASE` limit.
-- [ ] Strict branch architecture maintained (`CONFIG_SULTAN_DEBLOAT` only on Sultan branches).
+- [ ] Sultan debloat architecture maintained across all targets (`CONFIG_SULTAN_DEBLOAT=y` and `CONFIG_SULTAN_NO_LOGS=y`).
 - [ ] No dead code, scratch scripts, or debug printk spam committed.
 
 ### Git & Commit Hygiene

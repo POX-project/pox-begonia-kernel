@@ -108,11 +108,13 @@ kernel side changes (keep the same hunks, swap the `root/*.env` entry).
 - UAPI headers: `mtk_vcu_controls.h`, `v4l2-controls.h`, `videodev2.h`
 - `drivers/media/v4l2-core/v4l2-ctrls.c` — registers MTK V4L2 controls
 
-### 2.5 `patches/sultan.patch` — REMOVED
+### 2.5 `patches/sultan.patch` — MERGED INTO ONYX BASE
 
-Sultan debloat architecture has been merged into the `onyx` base. `CONFIG_SULTAN_DEBLOAT`
-and `CONFIG_SULTAN_NO_LOGS` are now in `init/Kconfig` and available to all variants.
-No separate `sultan` variant exists anymore.
+Sultan debloat architecture has been merged universally into the `onyx` base.
+`CONFIG_SULTAN_DEBLOAT` and `CONFIG_SULTAN_NO_LOGS` default to `y` in `init/Kconfig`,
+are enabled in `arch/arm64/configs/begonia_user_defconfig`, and are enforced in `build.sh`
+`prepare_config()` across ALL targets (vanilla, apatch, folkpatch, ksu, miui, c2).
+No separate `sultan` variant exists because all editions now run Sultan debloat.
 
 ---
 

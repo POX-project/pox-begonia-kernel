@@ -593,6 +593,17 @@ prepare_config() {
     # failing the vmlinux link for every variant.
     ./scripts/config --file "$OUT_DIR/.config" --enable SECTION_MISMATCH_WARN_ONLY
 
+    # Apply Sultan debloat architecture universally across all targets
+    log "Applying Sultan debloat and zero-logging jitter configuration"
+    ./scripts/config --file "$OUT_DIR/.config" \
+        --enable SULTAN_DEBLOAT \
+        --enable SULTAN_NO_LOGS \
+        --set-val CONSOLE_LOGLEVEL_DEFAULT 1 \
+        --set-val MESSAGE_LOGLEVEL_DEFAULT 1 \
+        --disable SCHED_DEBUG \
+        --disable TOUCHSCREEN_NVT_DEBUG_FS \
+        --disable KTRACE
+
     # Apply the branded LOCALVERSION (4.14.357-Pox-<variant>)
     log "Setting CONFIG_LOCALVERSION=\"$CUSTOM_LOCALVERSION\" in .config"
     ./scripts/config --file "$OUT_DIR/.config" --set-str LOCALVERSION "$CUSTOM_LOCALVERSION"
@@ -658,6 +669,14 @@ build_kernel() {
     else
         log "Reusing existing .config in $OUT_DIR"
         ./scripts/config --file "$OUT_DIR/.config" --set-str LOCALVERSION "$CUSTOM_LOCALVERSION"
+        ./scripts/config --file "$OUT_DIR/.config" \
+            --enable SULTAN_DEBLOAT \
+            --enable SULTAN_NO_LOGS \
+            --set-val CONSOLE_LOGLEVEL_DEFAULT 1 \
+            --set-val MESSAGE_LOGLEVEL_DEFAULT 1 \
+            --disable SCHED_DEBUG \
+            --disable TOUCHSCREEN_NVT_DEBUG_FS \
+            --disable KTRACE
         # shellcheck disable=SC2086
         make O="$OUT_DIR" ARCH="$ARCH" CC="$bcc" \
             CLANG_TRIPLE="$CLANG_TRIPLE" CROSS_COMPILE="$CROSS_COMPILE" \

@@ -87,7 +87,7 @@ The 2.0 release upgrades Pox Kernel into a modern downstream distribution:
 * **Universal Filesystem Engine**: Integrated EROFS, modernized F2FS with rapid garbage collection, Btrfs with ZSTD compression and subvolumes, native NTFS (read/write), exFAT, and FAT32.
 * **18W Fast Charging + Safe 500mA PC USB**: Full Pump Express 2.0 (PE+ 2.0) 3.0A/18W fast charging on AC wall adapters with strict 500mA PC USB SDP enforcement to protect host motherboards and maintain rock-solid ADB connectivity.
 * **HAL Panic Immunization**: Fully resolved Xiaomi Power HAL EL1 Data Abort crash by ensuring `sysctl_sched_migration_cost` remains writable in userspace.
-* **Sultan Debloat Architecture**: Optional zero-telemetry, zero-logging-jitter editions on dedicated `onyx-sultan*` branches.
+* **Universal Sultan Debloat Architecture**: Zero-telemetry, zero-logging-jitter (`CONFIG_SULTAN_DEBLOAT=y`, `CONFIG_SULTAN_NO_LOGS=y`) integrated universally across all targets on the unified `onyx` source branch.
 * **Enforced Linux 64-Char UTS_RELEASE**: Dynamically clamped localversion strings in `build.sh` preventing string overflow build failures.
 * **Anti-Spaghetti Repository Governance**: Strict [`AGENTS.md`](AGENTS.md) rules enforcing zero-mutation during builds, atomic Conventional Commits, and clean PR quality gates.
 
@@ -118,13 +118,14 @@ Pox Kernel is structured into modular **Rock Editions**, enabling users to pick 
                                          ┌────────────────────────────────┴────────────────────────────────┐
                                          ▼                                                                 ▼
                                   ┌──────────────┐                                                  ┌──────────────┐
-                                  │  ONYX ROOT   │                                                  │ ONYX SULTAN  │
-                                  │   FLAVORS    │                                                  │   DEBLOAT    │
+                                  │ SULTAN BASE  │                                                  │ BUILD-TIME   │
+                                  │ (Universal)  │                                                  │   PATCHES    │
                                   └──────┬───────┘                                                  └──────┬───────┘
                                          │                                                                 │
-                                         ├─ onyx (Clean Unrooted)                                          ├─ onyx-sultan (Debloated Clean)
-                                         ├─ onyx-apatch (APatch Ready)                                     ├─ onyx-sultan-apatch (Debloat + APatch)
-                                         └─ onyx-ksu-next (KernelSU-Next)                                  └─ onyx-sultan-ksu-next (Debloat + KSU)
+                                         ├─ CONFIG_SULTAN_DEBLOAT=y                                        ├─ VARIANT=vanilla (Clean Base)
+                                         ├─ CONFIG_SULTAN_NO_LOGS=y                                        ├─ VARIANT=apatch (APatch + NoMount)
+                                         ├─ Zero-logging jitter (loglevel 1)                               ├─ VARIANT=folkpatch (KernelPatch)
+                                         └─ Low scheduler migration latency                                └─ VARIANT=ksu,miui,c2 (BakaSU + Overlays)
 ```
 
 ---
@@ -152,9 +153,9 @@ Pox Kernel is structured into modular **Rock Editions**, enabling users to pick 
 * **500μs Schedutil Governor Frequency Ramp**: Reduced scheduler clock ramp intervals from 2000μs down to 500μs with 20ms anti-jitter hold-down.
 
 ### 4. Sultan Debloat Architecture (`CONFIG_SULTAN_DEBLOAT=y`)
-* **Strict Branch Isolation**: Exclusively active on `onyx-sultan*` branches to ensure pure, unadulterated stock behavior on standard `onyx*`.
-* **Zero Overhead Logging**: Eliminates unnecessary console lock acquisition and string formatting overhead for non-critical kernel logs (`vprintk_emit` filter).
-* **Stripped Vendor Spyware & Tracing**: Strips heavy diagnostic hooks, AEE exception recorders, and redundant debug overhead, unlocking higher FPS consistency and superior battery longevity.
+* **Universal Single-Source Architecture**: Enabled by default across all targets built from the `onyx` branch (`CONFIG_SULTAN_DEBLOAT=y`, `CONFIG_SULTAN_NO_LOGS=y`), guaranteeing debloat benefits across vanilla, APatch, FolkPatch, and KSU builds.
+* **Zero Overhead Logging**: Lowers default console log levels (`CONFIG_CONSOLE_LOGLEVEL_DEFAULT=1`, `CONFIG_MESSAGE_LOGLEVEL_DEFAULT=1`) and compiles away noisy `nm_info` mount logging to eliminate console locks, string formatting jitter, and log chatter.
+* **Stripped Vendor Diagnostics & Tracing**: Disables redundant tracking overhead (`TOUCHSCREEN_NVT_DEBUG_FS`, `KTRACE`, `SCHED_DEBUG`), unlocking higher FPS consistency and superior battery longevity while safely preserving required MediaTek firmware logging regions.
 
 ### 5. Hardware Crash & Stability Immunizations
 * **Xiaomi Power HAL `sysctl_sched_migration_cost` Data Abort Fix**: Removed `const_debug` qualifier from `sysctl_sched_migration_cost` in `fair.c` and `sched.h`. Prevents fatal **EL1 Data Abort** kernel panics when Xiaomi's power HAL (`NodeLooperThread`) writes to procfs.
@@ -176,19 +177,19 @@ Pox Kernel is structured into modular **Rock Editions**, enabling users to pick 
 
 ---
 
-## Branch Architecture Matrix
+## Target & Variant Matrix (`onyx` Single Source)
 
-| Branch | Edition | Sultan Debloat | Root Subsystem | Description |
+`onyx` is the single source branch with Sultan debloat and zero-logging jitter enabled universally. Root flavors and media overlays are modular patch sets under `patches/` applied at build time:
+
+| Target (`VARIANT`) | Edition | Sultan Debloat | Root Subsystem | Description |
 |:---|:---|:---:|:---:|:---|
-| **`onyx`** | Onyx | ❌ | Clean (Unrooted) | Clean gaming kernel, zero root hooks, pure Play Integrity ready |
-| **`onyx-apatch`** | Onyx-APatch | ❌ | APatch / KernelPatch | Onyx Gaming + Full KALLSYMS symbol table for APatch |
-| **`onyx-ksu-next`** | Onyx-KSU-Next | ❌ | KernelSU-Next v3.3.0 | Onyx Gaming + Native KernelSU-Next driver & NoMount VFS |
-| **`onyx-sultan`** | Onyx-Sultan | ✅ | Clean (Unrooted) | Sultan debloat + Onyx Gaming, pure unrooted edition |
-| **`onyx-sultan-apatch`** | Onyx-Sultan-APatch | ✅ | APatch / KernelPatch | Sultan debloat + Onyx Gaming + APatch root support |
-| **`onyx-sultan-ksu-next`** | Onyx-Sultan-KSU-Next | ✅ | KernelSU-Next v3.3.0 | Sultan debloat + Onyx Gaming + KernelSU-Next v3.3.0 |
-| **`main` / `granite`** | Granite | ❌ | APatch Ready | Long-term stability branch with hardware safety fixes |
-| **`obsidian`** | Obsidian | ❌ | APatch Ready | Granite + iOS compressed memory tuning |
-| **`onyx-kaeru`** | Onyx-Kaeru | ❌ | APatch / Kaeru | Merged DTB support for Kaeru custom bootloader |
+| **`vanilla`** | Onyx (Vanilla) | ✅ | Clean (Unrooted) | Base Onyx Gaming + Sultan debloat, pure unrooted Play Integrity ready |
+| **`apatch`** | Onyx-APatch | ✅ | APatch / KernelPatch | Sultan debloat + APatch symbol exposure + NoMount v2.2.0 + bundled installer |
+| **`folkpatch`** | Onyx-FolkPatch | ✅ | FolkPatch / KernelPatch | Sultan debloat + FolkPatch symbol exposure + NoMount v2.2.0 + bundled installer |
+| **`ksu`** | Onyx-KSU | ✅ | BakaSU (KernelSU) | Sultan debloat + BakaSU v1.0.9 + SuSFS + NoMount v2.2.0 |
+| **`miui`** (overlay) | Onyx-MIUI | ✅ | As selected | Sultan debloat + MIUI/HyperOS network hardening and config fragment |
+| **`c2`** (overlay) | Onyx-C2 | ✅ | As selected | Sultan debloat + MTK VCU & V4L2 vcodec Codec2 media port |
+| **`ksu,miui,c2`** | Onyx-KSU-MIUI-C2 | ✅ | BakaSU (KernelSU) | Full multi-overlay composition with BakaSU root and Codec2 media stack |
 
 ---
 
@@ -243,17 +244,15 @@ Pox Kernel includes a completely self-contained build environment:
 git clone https://github.com/POX-project/pox-begonia-kernel.git
 cd pox-begonia-kernel
 
-# Checkout the desired branch
-git checkout onyx-sultan-apatch
+# Onyx is the single branch containing everything
+git checkout onyx
 
-# Compile kernel Image.gz-dtb
-./build.sh kernel
-
-# Package the AnyKernel3 flashable zip
-./build.sh zip
-
-# Compile and package in one step
-./build.sh
+# Build any target using the patches system (Sultan debloat included by default on all):
+VARIANT=vanilla ./build.sh all
+VARIANT=apatch ./build.sh all
+VARIANT=folkpatch,miui ./build.sh all
+VARIANT=ksu,c2 ./build.sh all
+VARIANT=ksu,miui,c2 ./build.sh all
 ```
 
 ---
@@ -265,7 +264,7 @@ To maintain absolute code quality and prevent regressions, all AI agents and con
 1. **Zero-Mutation Rule**: NEVER edit or stage files while a build, test, or flashing command is actively running.
 2. **Anti-Spaghetti Code**: Clean, minimal diffs; standard Linux kernel coding conventions (8-space tabs); no `.rodata` writes on sysctl handlers; standard 500mA PC USB SDP limits.
 3. **Anti-Spaghetti Commits**: Strict Conventional Commits (`<type>(<scope>): <summary>`), atomic bisectable changes, with comprehensive technical explanation in the commit body.
-4. **Strict Branch Isolation**: Never leak `CONFIG_SULTAN_DEBLOAT` into regular `onyx*` branches. Maintain pure boundaries between root flavors.
+4. **Sultan Debloat & Modular Variant Baseline**: `CONFIG_SULTAN_DEBLOAT=y` and `CONFIG_SULTAN_NO_LOGS=y` are universally enabled across all targets on `onyx`. Keep variant patch sets strictly modular and clean-applying in `patches/`.
 
 ---
 

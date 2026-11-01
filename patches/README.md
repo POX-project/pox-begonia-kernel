@@ -1,8 +1,9 @@
 # Patch Sets (`patches/`)
 
-`onyx` is the single source branch. Root flavors and media overlays are patch
-sets applied **at build time** — no per-variant branches, no merge conflicts
-when upstream updates land.
+`onyx` is the single source branch with Sultan debloat and zero-logging jitter
+(`CONFIG_SULTAN_DEBLOAT=y`, `CONFIG_SULTAN_NO_LOGS=y`) applied universally as the base
+across ALL targets. Root flavors and media overlays are patch sets applied **at build time**
+— no per-variant branches, no merge conflicts when upstream updates land.
 
 ## Roots
 
