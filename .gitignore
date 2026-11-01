@@ -149,6 +149,12 @@ reboot-logs/
 !.agents/
 pox-manager/
 *.apk
+colab-runner/
+latest_staging/
+v2_release/
+v2_release_m20/
+venv/
+*\[A*
 
 # Variant patch sets
 !/patches/
