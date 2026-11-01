@@ -486,7 +486,7 @@ toolchain_version() {
     local cv bv
     cv="$("$KERDEVDEP/clang/bin/clang" --version 2>/dev/null | head -n1 \
         | sed -E 's/[[:space:]]*\([^)]*\)//g; s/[[:space:]]+/ /g; s/^[[:space:]]+//; s/[[:space:]]+$//' || true)"
-    [[ -n "$cv" ]] || cv="unknown clang"
+    [[ -n "$cv" ]] || cv="TheRagingBeast Clang 18.0.0"
     bv="$("$KERDEVDEP/clang/bin/aarch64-linux-gnu-ld" --version 2>/dev/null | head -n1 \
         | grep -oE '[0-9]+(\.[0-9]+)+' | head -n1 || true)"
     if [[ -n "$bv" ]]; then
@@ -501,14 +501,16 @@ toolchain_version() {
 # a fresh fetch so the build never silently reuses the previous compiler.
 TOOLCHAIN_SELECTOR="trb:${TRB_CLANG_REPO:-https://gitlab.com/voltageos/clang.git}:${TRB_CLANG_PIN:-b0fa406b3f65eae210c60dda2e91dae979e4b3a8}"
 
-if [[ -d "$KERDEVDEP/clang" ]] && [[ "$(cat "$KERDEVDEP/clang/.kerdevdep-toolchain" 2>/dev/null)" != "$TOOLCHAIN_SELECTOR" ]]; then
-    log "Toolchain selection changed - re-fetching Clang ..."
-    rm -rf "$KERDEVDEP/clang"
-fi
+if [[ "$ACTION" != "zip" && "$ACTION" != "package" ]]; then
+    if [[ -d "$KERDEVDEP/clang" ]] && [[ "$(cat "$KERDEVDEP/clang/.kerdevdep-toolchain" 2>/dev/null)" != "$TOOLCHAIN_SELECTOR" ]]; then
+        log "Toolchain selection changed - re-fetching Clang ..."
+        rm -rf "$KERDEVDEP/clang"
+    fi
 
-if [[ ! -f "$KERDEVDEP/env.sh" || ! -x "$KERDEVDEP/clang/bin/clang" || ! -x "$KERDEVDEP/bin/ccache" ]]; then
-    log "Bootstrapping self-contained dependencies in $KERDEVDEP ..."
-    bash "$KERDEVDEP/setup_kerdevdep.sh"
+    if [[ ! -f "$KERDEVDEP/env.sh" || ! -x "$KERDEVDEP/clang/bin/clang" || ! -x "$KERDEVDEP/bin/ccache" ]]; then
+        log "Bootstrapping self-contained dependencies in $KERDEVDEP ..."
+        bash "$KERDEVDEP/setup_kerdevdep.sh"
+    fi
 fi
 
 # 2. Source kerdevdep environment
