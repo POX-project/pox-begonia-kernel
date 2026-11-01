@@ -119,7 +119,7 @@ variant_patch_name() {
     case "$1" in
         onyx|vanilla|stock|none|default|"") printf '' ;;
         main|granite|obsidian|memory-enhanced) printf '' ;;
-        *ksun*|*ksu-next*|*kernelsu*|*reksun*|*ksu*) printf 'ksu' ;;
+        *ksun*|*ksu-next*|*kernelsu*|*reksun*|*ksu*|*bakasu*) printf 'ksu' ;;
         # FolkPatch is a standalone patch: same KernelPatch kernel side plus
         # its own root packaging profile. It does not stack on apatch.patch.
         *folkpatch*)                   printf 'folkpatch' ;;
@@ -138,7 +138,7 @@ parse_variant_tokens() {
         case "$token" in
             *folkpatch*)                      printf 'folkpatch'; return ;;
             *apatch*)                         printf 'apatch';    return ;;
-            *ksun*|*ksu*|*kernelsu*|*reksun*) printf 'ksu';       return ;;
+            *ksun*|*ksu*|*kernelsu*|*reksun*|*bakasu*) printf 'ksu';       return ;;
         esac
     done
     printf 'vanilla'
@@ -259,7 +259,7 @@ apply_variant_patches() {
 
     # A ksu patch adds .gitmodules + a KernelSU gitlink; the submodule itself
     # still has to be checked out.
-    if [[ -f "$ROOT_DIR/.gitmodules" ]]; then
+    if [[ -f "$ROOT_DIR/.gitmodules" && "$ACTION" != "zip" && "$ACTION" != "package" ]]; then
         # Sync first so switching a root submodule (for example ReSukiSU ->
         # BakaSU) cannot reuse a stale URL from .git/config.
         git submodule sync --recursive >/dev/null
@@ -299,7 +299,7 @@ unapply_variant_patches() {
     fi
 
     # deinit first: reversing the ksu patch deletes .gitmodules.
-    if [[ -f "$ROOT_DIR/.gitmodules" ]]; then
+    if [[ -f "$ROOT_DIR/.gitmodules" && "$ACTION" != "zip" && "$ACTION" != "package" ]]; then
         git submodule deinit -f --all >/dev/null 2>&1 || true
     fi
 
@@ -369,7 +369,7 @@ resolve_variant() {
     case "$branch" in
         *folkpatch*)                  root="FolkPatch"; root_desc="FolkPatch";            defconfig="begonia_apatch_defconfig" ;;
         *apatch*)                     root="APatch";   root_desc="APatch";                  defconfig="begonia_apatch_defconfig" ;;
-        *ksun*|*ksu-next*|*kernelsu*|*reksun*|*ksu*) root="KSU"; root_desc="KernelSU-Next + BakaSU"; defconfig="bakasu_defconfig" ;;
+        *ksun*|*ksu-next*|*kernelsu*|*reksun*|*ksu*|*bakasu*) root="BakaSU"; root_desc="BakaSU"; defconfig="bakasu_defconfig" ;;
         *kaeru*)                      root="Kaeru";    root_desc="Kaeru Bootloader";            defconfig="begonia_user_defconfig" ;;
     esac
 
@@ -450,7 +450,7 @@ kernel_variant_tag() {
     case "$ROOT_FLAVOR" in
         apatch)    tag="Apatch" ;;
         folkpatch) tag="FolkPatch" ;;
-        ksu)       tag="KSU" ;;
+        ksu)       tag="BakaSU" ;;
         *)         tag="Vanilla" ;;
     esac
     for token in $VARIANT; do
