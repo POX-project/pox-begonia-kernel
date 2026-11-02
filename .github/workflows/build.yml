@@ -3,21 +3,36 @@ name: Build & Release
 on:
   workflow_dispatch:
     inputs:
-      target:
-        description: 'Build target (or "all" for all 16 variants)'
+      root:
+        description: 'Root flavor (patches in patches/)'
         required: true
-        default: 'all'
+        default: 'vanilla'
         type: choice
         options:
-          - all
           - vanilla
           - apatch
           - folkpatch
-          - bakasu
-      release:
-        description: 'Publish flashable zips to GitHub Release'
+          - ksu
+          - all
+      miui:
+        description: 'Add MIUI/HyperOS overlay (combinable with Codec2)'
         required: false
-        default: true
+        default: false
+        type: boolean
+      c2:
+        description: 'Add Codec2 media overlay (combinable with MIUI)'
+        required: false
+        default: false
+        type: boolean
+      target:
+        description: 'Alternative target selector (optional)'
+        required: false
+        default: ''
+        type: string
+      release:
+        description: 'Publish flashable zip(s) to GitHub Release'
+        required: false
+        default: false
         type: boolean
       release_tag:
         description: 'Release tag to attach assets to'
@@ -28,6 +43,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: build-${{ github.ref }}-${{ github.event.inputs.root || github.event.inputs.target || 'dispatch' }}-${{ github.event.inputs.miui || '0' }}-${{ github.event.inputs.c2 || '0' }}
+  cancel-in-progress: true
+
 jobs:
   matrix-prep:
     name: Generate Matrix
@@ -37,33 +56,57 @@ jobs:
     steps:
       - name: Compute combinations
         id: gen
+        env:
+          INPUT_ROOT: ${{ inputs.root }}
+          INPUT_MIUI: ${{ inputs.miui }}
+          INPUT_C2: ${{ inputs.c2 }}
+          INPUT_TARGET: ${{ inputs.target }}
         run: |
-          TARGET="${{ github.event.inputs.target || 'all' }}"
-          python3 - <<'PY'
+          python3 -c '
           import json, os
-          target = os.environ.get("TARGET", "all")
-          all_roots = ["vanilla", "apatch", "folkpatch", "bakasu"]
-          if target == "all":
-              roots = all_roots
-          elif target in all_roots:
-              roots = [target]
-          else:
-              roots = ["vanilla"]
 
-          items = []
-          for r in roots:
-              items.append({"root": r, "miui": False, "c2": False, "id": r})
-              items.append({"root": r, "miui": True,  "c2": False, "id": f"{r}-miui"})
-              items.append({"root": r, "miui": False, "c2": True,  "id": f"{r}-c2"})
-              items.append({"root": r, "miui": True,  "c2": True,  "id": f"{r}-c2-miui"})
+          target = os.environ.get("INPUT_TARGET", "").strip().lower()
+          root = os.environ.get("INPUT_ROOT", "").strip().lower()
+          raw_miui = os.environ.get("INPUT_MIUI", "false").strip().lower()
+          raw_c2 = os.environ.get("INPUT_C2", "false").strip().lower()
+
+          miui = raw_miui in ("true", "1", "yes")
+          c2 = raw_c2 in ("true", "1", "yes")
+
+          all_roots = ["vanilla", "apatch", "folkpatch", "ksu"]
+
+          if not root and target:
+              root = target
+
+          if not root:
+              root = "vanilla"
+
+          if root in ("bakasu", "ksun", "ksu-next"):
+              root = "ksu"
+
+          if root == "all":
+              items = []
+              for r in all_roots:
+                  items.append({"root": r, "miui": False, "c2": False, "id": r})
+                  items.append({"root": r, "miui": True,  "c2": False, "id": f"{r}-miui"})
+                  items.append({"root": r, "miui": False, "c2": True,  "id": f"{r}-c2"})
+                  items.append({"root": r, "miui": True,  "c2": True,  "id": f"{r}-c2-miui"})
+          else:
+              if root not in all_roots:
+                  root = "vanilla"
+              parts = [root]
+              if c2:
+                  parts.append("c2")
+              if miui:
+                  parts.append("miui")
+              job_id = "-".join(parts)
+              items = [{"root": root, "miui": miui, "c2": c2, "id": job_id}]
 
           out = json.dumps(items)
           print(f"matrix={out}")
           with open(os.environ["GITHUB_OUTPUT"], "a") as f:
               f.write(f"matrix={out}\n")
-          PY
-        env:
-          TARGET: ${{ github.event.inputs.target || 'all' }}
+          '
 
   build:
     name: ${{ matrix.id }}
@@ -201,6 +244,156 @@ jobs:
           echo "link=${link}" >> "$GITHUB_OUTPUT"
           echo "Gofile: ${link}"
 
+      # One Telegram message per build: the flashable zip itself plus a
+      # caption carrying the Gofile link, the Actions run URL and the last
+      # six commits.
+      # Required secrets: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID
+      # Optional secret:  TELEGRAM_MESSAGE_THREAD_ID (forum topic)
+      - name: Notify Telegram
+        if: github.event_name != 'pull_request'
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || '-1004390960803' }}
+          TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
+          GOFILE_LINK: ${{ steps.gofile.outputs.link }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
+            echo "::warning::TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID are not set; skipping Telegram notification."
+            exit 0
+          fi
+
+          caption_file="$RUNNER_TEMP/telegram-caption.html"
+          export caption_file
+          python3 - <<'PY'
+          import html, os, subprocess
+
+          # Telegram caps captions at 1024 characters. Reserve headroom for
+          # the wrapper markup and the trailing ellipsis (escapes are
+          # conservative, and no tag/entity is ever cut in half).
+          MAX_CAPTION = 1024
+          SAFETY = 24
+
+          def esc(value):
+              return html.escape(value or "", quote=False)
+
+          def one_line(value):
+              return " ".join((value or "").split())
+
+          commits = subprocess.run(
+              ["git", "log", "-n", "6", "--pretty=format:%h\t%s"],
+              capture_output=True, text=True).stdout.splitlines()
+
+          lines = [
+              f"<b>Pox Kernel {esc(os.environ.get('VERSION_NAME'))}</b>",
+              f"<b>Commit:</b> <code>{esc(os.environ.get('COMMIT_HASH'))}</code> "
+              f"{esc(one_line(os.environ.get('COMMIT_SUBJECT')))}",
+              f"<b>Variant:</b> {esc(os.environ.get('VARIANT'))} "
+              f"(root: {esc(os.environ.get('ROOT_FLAVOR'))})",
+              f"<b>Defconfig:</b> <code>{esc(os.environ.get('DEFCONFIG'))}</code>",
+              f"<b>Build #:</b> {esc(os.environ.get('RUN_NUMBER'))}",
+          ]
+
+          gofile = os.environ.get("GOFILE_LINK", "").strip()
+          if gofile:
+              lines.append(f"<b>Gofile:</b> {esc(gofile)}")
+          else:
+              lines.append("<b>Gofile:</b> upload failed, use the Actions artifact")
+          lines.append(f"<b>Run:</b> {esc(os.environ.get('RUN_URL'))}")
+
+          heading = "\n".join(lines + ["", "<b>Last 6 commits</b>"])
+
+          def entry(sha, subject):
+              rendered = f"• <code>{esc(sha)}</code>"
+              return f"{rendered} {esc(subject)}" if subject else rendered
+
+          slots = max(len(commits), 1)
+          allowance = max(48, (MAX_CAPTION - SAFETY - len(heading)) // slots)
+          entries = []
+          for line in commits:
+              sha, _, raw_subject = line.partition("\t")
+              original = one_line(raw_subject)
+              subject = original
+              while subject and len(entry(sha, subject + "…")) > allowance:
+                  subject = subject[:-1].rstrip()
+              if subject != original:
+                  subject += "…"
+              entries.append(entry(sha, subject))
+
+          caption = "\n".join([heading] + entries)
+
+          while len(caption) > MAX_CAPTION - 8 and "\n" in caption:
+              caption = caption.rsplit("\n", 1)[0]
+
+          with open(os.environ["caption_file"], "w", encoding="utf-8") as fh:
+              fh.write(caption)
+          PY
+
+          echo "Caption length: $(wc -c < "$caption_file") bytes"
+
+          send_args=(-F "chat_id=${TELEGRAM_CHAT_ID}" -F "parse_mode=HTML")
+          if [[ -n "${TELEGRAM_MESSAGE_THREAD_ID:-}" ]]; then
+            send_args+=(-F "message_thread_id=${TELEGRAM_MESSAGE_THREAD_ID}")
+          fi
+
+          send_telegram() {
+            local endpoint="$1"
+            shift
+            local response=""
+            local attempt
+            for attempt in 1 2 3; do
+              if response="$(curl -sS --max-time 900 -X POST \
+                  "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/${endpoint}" \
+                  "$@" 2>&1)" && [[ "$response" == *'"ok":true'* ]]; then
+                echo "Telegram ${endpoint}: delivered"
+                return 0
+              fi
+              echo "::warning::Telegram ${endpoint} attempt ${attempt}/3 failed: ${response}"
+              sleep 15
+            done
+            echo "::error::Telegram ${endpoint} failed after 3 attempts."
+            return 1
+          }
+
+          zip_bytes="$(stat -c%s "$ZIP_PATH")"
+          if (( zip_bytes > 50 * 1024 * 1024 )); then
+            echo "::warning::Zip is ${zip_bytes} bytes (>50 MiB); sending the caption without the file attachment."
+            send_args+=(-F "text=<${caption_file}" -F "disable_web_page_preview=true")
+            send_telegram sendMessage "${send_args[@]}"
+          else
+            send_args+=(-F "document=@${ZIP_PATH};type=application/zip"
+                        -F "caption=<${caption_file}")
+            send_telegram sendDocument "${send_args[@]}"
+          fi
+
+      - name: Notify Telegram (failure)
+        if: failure() && github.event_name != 'pull_request'
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID || '-1004390960803' }}
+          TELEGRAM_MESSAGE_THREAD_ID: ${{ secrets.TELEGRAM_MESSAGE_THREAD_ID }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          RUN_NUMBER: ${{ github.run_number }}
+          COMMIT_HASH: ${{ env.COMMIT_HASH || github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${TELEGRAM_BOT_TOKEN:-}" || -z "${TELEGRAM_CHAT_ID:-}" ]]; then
+            echo "::warning::Telegram secrets not set; skipping failure notification."
+            exit 0
+          fi
+          send_args=(-F "chat_id=${TELEGRAM_CHAT_ID}" -F "parse_mode=HTML")
+          if [[ -n "${TELEGRAM_MESSAGE_THREAD_ID:-}" ]]; then
+            send_args+=(-F "message_thread_id=${TELEGRAM_MESSAGE_THREAD_ID}")
+          fi
+          curl -fsS -X POST \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            "${send_args[@]}" \
+            -F "text=<b>❌ Pox Kernel build FAILED</b>%0A<b>Build #:</b> ${RUN_NUMBER}%0A<b>Commit:</b> <code>${COMMIT_HASH}</code>%0A<b>Run:</b> ${RUN_URL}"
+
       - name: Publish to GitHub Release
         if: github.event.inputs.release == 'true' || startsWith(github.ref, 'refs/tags/v')
         env:
@@ -211,4 +404,4 @@ jobs:
           if [[ "${{ github.event_name }}" == "push" && "${{ github.ref }}" == refs/tags/v* ]]; then
             RELEASE_TAG="${GITHUB_REF_NAME}"
           fi
-          gh release upload "$RELEASE_TAG" "$ZIP_PATH" --clobber -R "$GITHUB_REPOSITORY"
+          gh release upload "$RELEASE_TAG" "$ZIP_PATH" build/Image.gz-dtb --clobber -R "$GITHUB_REPOSITORY"
