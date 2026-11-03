@@ -13,6 +13,7 @@ across ALL targets. Root flavors and media overlays are patch sets applied **at 
 | `apatch` | `apatch.patch` (APatch defconfig + NoMount v2.2.0 + `root/apatch.env`) | latest APatch APK bundled, auto-flashed during kernel flash |
 | `folkpatch` | `folkpatch.patch` (self-contained: KernelPatch kernel side + `root/folkpatch.env`) | latest FolkPatch APK bundled, auto-flashed during kernel flash |
 | `ksu` | `ksu.patch` (BakaSU submodule + NoMount v2.2.0 + SuSFS + BakaSU/KSU-Next manager signs) | manager installed separately (BakaSU or KSU-Next) |
+| `finasu` | `finasu.patch` (FinaSU kernel-side port + `begonia_finasu_defconfig`) | FinaSU manager APK (installed separately) |
 
 Each root patch adds a packaging profile at `root/<flavor>.env` (repo, zip/APK
 names, manager package). `build.sh` sources it generically, so the flavor
@@ -77,6 +78,7 @@ configured.
 | --- | --- | --- |
 | `apatch.patch` | `begonia_apatch_defconfig`, `drivers/kernelsu` symlink, `fs/nomount/*` | used by both `apatch` and `folkpatch` |
 | `ksu.patch` | `.gitmodules` + `KernelSU` gitlink (BakaSU), `bakasu_defconfig`, `fs/nomount/*`, `fs/susfs.c`, `ksu-patches/ksu/*` | root drivers, applied before overlays |
+| `finasu.patch` | `begonia_finasu_defconfig` (+ finasu kernel sources to be vendored from LyraVoid/FinaSU) | root; finasu is an out-of-tree LKM port — sources must be vendored before it compiles |
 | `miui.patch` | WLAN drivers, `miui.config` | overlay |
 | `c2.patch` | MTK VCODEC/VCU, V4L2 uapi | overlay |
 

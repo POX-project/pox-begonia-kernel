@@ -42,7 +42,7 @@ jobs:
           python3 - <<'PY'
           import json, os
           target = os.environ.get("TARGET", "all")
-          all_roots = ["vanilla", "apatch", "folkpatch", "bakasu"]
+          all_roots = ["vanilla", "apatch", "folkpatch", "bakasu", "finasu"]
           if target == "all":
               roots = all_roots
           elif target in all_roots:

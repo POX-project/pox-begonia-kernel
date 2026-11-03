@@ -120,6 +120,8 @@ variant_patch_name() {
         onyx|vanilla|stock|none|default|"") printf '' ;;
         main|granite|obsidian|memory-enhanced) printf '' ;;
         *ksun*|*ksu-next*|*kernelsu*|*reksun*|*ksu*|*bakasu*) printf 'ksu' ;;
+        # FinaSU is a KernelSU-based root ported in-tree for begonia (LyraVoid/FinaSU).
+        *finasu*)                      printf 'finasu' ;;
         # FolkPatch is a standalone patch: same KernelPatch kernel side plus
         # its own root packaging profile. It does not stack on apatch.patch.
         *folkpatch*)                   printf 'folkpatch' ;;
@@ -139,6 +141,7 @@ parse_variant_tokens() {
             *folkpatch*)                      printf 'folkpatch'; return ;;
             *apatch*)                         printf 'apatch';    return ;;
             *ksun*|*ksu*|*kernelsu*|*reksun*|*bakasu*) printf 'ksu';       return ;;
+        *finasu*)                                  printf 'finasu';     return ;;
         esac
     done
     printf 'vanilla'
@@ -370,6 +373,7 @@ resolve_variant() {
         *folkpatch*)                  root="FolkPatch"; root_desc="FolkPatch";            defconfig="begonia_apatch_defconfig" ;;
         *apatch*)                     root="APatch";   root_desc="APatch";                  defconfig="begonia_apatch_defconfig" ;;
         *ksun*|*ksu-next*|*kernelsu*|*reksun*|*ksu*|*bakasu*) root="BakaSU"; root_desc="BakaSU"; defconfig="bakasu_defconfig" ;;
+        *finasu*)                     root="FinaSU";  root_desc="FinaSU";                  defconfig="begonia_finasu_defconfig" ;;
         *kaeru*)                      root="Kaeru";    root_desc="Kaeru Bootloader";            defconfig="begonia_user_defconfig" ;;
     esac
 
@@ -451,6 +455,7 @@ kernel_variant_tag() {
         apatch)    tag="Apatch" ;;
         folkpatch) tag="FolkPatch" ;;
         ksu)       tag="BakaSU" ;;
+        finasu)    tag="FinaSU" ;;
         *)         tag="Vanilla" ;;
     esac
     for token in $VARIANT; do
