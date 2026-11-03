@@ -5385,7 +5385,7 @@ index e1c352cf21c6..5a117fd93c62 100644
 +obj-$(CONFIG_KSU) += finasu/
 diff --git a/drivers/finasu/Kbuild b/drivers/finasu/Kbuild
 new file mode 100644
-index 000000000000..bb248ff8edbc
+index 000000000000..a0a342f553fa
 --- /dev/null
 +++ b/drivers/finasu/Kbuild
 @@ -0,0 +1,276 @@
@@ -5602,11 +5602,11 @@ index 000000000000..bb248ff8edbc
 +
 +
 +ifndef KSU_EXPECTED_SIZE
-+KSU_EXPECTED_SIZE := 0x033b
++KSU_EXPECTED_SIZE := 0x2cc
 +endif
 +
 +ifndef KSU_EXPECTED_HASH
-+KSU_EXPECTED_HASH := c371061b19d8c7d7d6133c6a9bafe198fa944e50c1b31c9d8daa8d7f1fc2d2d6
++KSU_EXPECTED_HASH := 2d89b50aaf1db013c2b6738f973f48b62ea21a3a8d7216bfec3521065d448458
 +endif
 +
 +ifdef KSU_MANAGER_PACKAGE

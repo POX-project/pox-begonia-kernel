@@ -1,0 +1,174 @@
+menu "KernelSU"
+
+config KSU
+	tristate "KernelSU function support"
+	depends on KPROBES && EXT4_FS
+	default y
+	help
+	  Enable kernel-level root privileges on Android System.
+	  Requires CONFIG_KPROBES for kernel hooking support.
+	  Requires CONFIG_EXT4_FS for `ext4_unregister_sysfs`.
+	  To compile as a module, choose M here: the
+	  module will be called kernelsu.
+
+choice
+	prompt "KernelSU syscall hook backend"
+	depends on KSU
+	default KSU_HOOK_TRACEPOINT
+	help
+	  Choose how KernelSU enters its syscall handlers. This choice is fixed at
+	  build time; the Manager does not switch it at runtime.
+
+config KSU_HOOK_TRACEPOINT
+	bool "Tracepoint"
+	depends on HAVE_SYSCALL_TRACEPOINTS
+	help
+	  Redirect selected syscalls through the sys_enter tracepoint and a shared
+	  dispatcher entry in sys_call_table. This is the default backend.
+
+config KSU_HOOK_SUSFS_INLINE
+	bool "SUSFS Inline"
+	depends on ARM64 && KSU=y && KSU_SUSFS
+	help
+	  Use the direct KSU entry points supplied by the pinned SUSFS kernel patch.
+	  This backend is built into the kernel and does not register the generic
+	  sys_enter tracepoint, dispatcher, or replaced kprobes.
+
+endchoice
+
+config KSU_DEBUG
+	bool "KernelSU debug mode"
+	depends on KSU
+	default n
+	help
+	  Enable KernelSU debug mode.
+
+config KSU_DISABLE_MANAGER
+	bool "Disable KernelSU manager integration"
+	depends on KSU
+	default n
+	help
+	  Disable manager APK detection and manager-specific handling.
+	  Root will be used in place of manager-only functionality.
+
+config KSU_DYNAMIC_MANAGER
+	bool "Enable KernelSU dynamic manager support"
+	depends on KSU && !KSU_DISABLE_MANAGER
+	default y
+	help
+	  Track manager candidates discovered by signature verification and let
+	  the user explicitly authorize them as dynamic managers. Preset
+	  signatures are recognized but never authorized automatically.
+
+config KSU_DISABLE_POLICY
+	bool "Disable KernelSU policy profiles"
+	depends on KSU
+	default n
+	help
+	  Disable per-app root/non-root profile customization.
+	  Escalation will always use the default full root profile, and
+	  non-root handling will follow the global umount policy only.
+
+config KSU_X86_PATCH_SYSCALL_DISPATCHER
+	bool "Dynamically patch x64's hardened syscall dispatcher to support syscall hooks"
+	depends on KSU && X86_64
+	default n
+	help
+	  Dynamically patch x64's hardened syscall dispatcher to support syscall hooks. This is a
+	  replacement for a kernel source code patch, and is useful for x86_64 LKM mode.
+
+menu "KernelSU - SUSFS"
+config KSU_SUSFS
+	bool "KernelSU addon - SUSFS"
+	depends on KSU=y
+	depends on THREAD_INFO_IN_TASK
+	default n
+	help
+	  Compile the KernelSU side of the SUSFS interface. The SUSFS kernel
+	  implementation still has to be applied to the kernel tree, and
+	  KernelSU has to be built in rather than loaded as a module.
+
+config KSU_SUSFS_SUS_PATH
+	bool "Enable to hide suspicious path"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Hide a user-defined path and everything below it from the system calls
+	  SUSFS intercepts. Prefer add_sus_path_loop for paths that change often.
+	  Only applies to app processes spawned from zygote that carry the
+	  TIF_PROC_UMOUNTED mark. Costs performance and is not immune to
+	  side-channel probing.
+
+config KSU_SUSFS_SUS_MOUNT
+	bool "Enable to hide suspicious mounts"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Give mounts created by the su process fake mount ids until /sdcard is
+	  decrypted, and hide SUSFS mounts from /proc/self/[mounts|mountinfo|mountstat]
+	  for non-su processes. Only applies to app processes spawned from zygote
+	  that carry the TIF_PROC_UMOUNTED mark.
+
+config KSU_SUSFS_SUS_KSTAT
+	bool "Enable to spoof suspicious kstat"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Report spoofed stat data for user-defined paths. Applies to processes
+	  whose uid modulo 100000 is at least 10000.
+
+config KSU_SUSFS_SPOOF_UNAME
+	bool "Enable to spoof uname"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Return a user-defined string from uname. Applies to all processes.
+
+config KSU_SUSFS_ENABLE_LOG
+	bool "Enable logging susfs log to kernel"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Write SUSFS diagnostics to the kernel log. Disable to silence all
+	  SUSFS logging.
+
+config KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS
+	bool "Enable to automatically hide ksu and susfs symbols from /proc/kallsyms"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Hide KernelSU and SUSFS symbols from /proc/kallsyms for all processes.
+
+config KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG
+	bool "Enable to spoof /proc/bootconfig (gki) or /proc/cmdline (non-gki)"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Replace /proc/bootconfig on GKI kernels, or /proc/cmdline on non-GKI
+	  kernels, with the contents of a user-defined file. Applies to all
+	  processes.
+
+config KSU_SUSFS_OPEN_REDIRECT
+	bool "Enable to redirect a path to be opened with another path"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Open a user-defined path in place of another one. Both paths must exist
+	  when the rule is added, and SELinux permissions for both sides remain
+	  the caller's responsibility. Only applies to processes using the
+	  predefined uid scheme.
+
+config KSU_SUSFS_SUS_MAP
+	bool "Enable to hide some mmapped real file from different proc maps interfaces"
+	depends on KSU_SUSFS
+	default y
+	help
+	  Hide the backing file of mmapped regions from
+	  /proc/<pid>/[maps|smaps|smaps_rollup|map_files|mem|pagemap]. Anonymous
+	  mappings are not covered, and hooks placed by the injected library
+	  itself are not hidden. Only applies to zygote-spawned app processes
+	  that carry the TIF_PROC_UMOUNTED mark.
+
+endmenu
+
+endmenu
