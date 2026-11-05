@@ -29,7 +29,6 @@
 		|| ((left) <= (right) && (left) <= (value) \
 			&& (value) <= (right)))
 
-extern int pox_fast_charge_get(void);
 
 static int _uA_to_mA(int uA)
 {
@@ -104,17 +103,6 @@ static bool dual_swchg_check_pd_leave(struct charger_manager *info)
 {
 	struct mtk_pdc *pd = &info->pdc;
 	int ichg = 0;
-	extern int pox_fast_charge_get(void);
-
-	/* Pox 18W fast charging: keep dual-switch active on PD adapters
-	 * while battery temperature is safe (<48C), preventing premature
-	 * drop to 9-10W single-charger mode. */
-	if (pox_fast_charge_get() && info->battery_temp < 480) {
-		extern int battery_get_bat_voltage(void);
-		if (battery_get_bat_voltage() < 3500)
-			return true;
-		return false;
-	}
 
 	if (pd->pd_cap_max_watt < 10000000)
 		return true;
@@ -134,17 +122,9 @@ static bool dual_swchg_check_pd_leave(struct charger_manager *info)
 static bool check_start_dual_charging_status(struct charger_manager *info)
 {
 	struct dual_switch_charging_alg_data *swchgalg = info->algorithm_data;
-	extern int pox_fast_charge_get(void);
 
-	/* Pox standout 18W safe fast-charge: enable dual on AC wall
-	 * chargers only when battery temp safe (<48C). JEITA + charger
-	 * AICR loop stay authoritative above that; thermal daemon can
-	 * still pull to 0 on critical. Keeps every charger working,
-	 * never forces current beyond what VBUS can sustain.
-	 * Health guard: sagging/aged battery (VBAT<3500mV) stays on
-	 * single charger to avoid current spikes and VSYS freezes. */
-	if (pox_fast_charge_get() &&
-	    (info->chr_type == STANDARD_CHARGER ||
+	/* Enable dual charging on AC wall chargers and PD adapters */
+	if ((info->chr_type == STANDARD_CHARGER ||
 	     info->chr_type == NONSTANDARD_CHARGER ||
 	     info->chr_type == APPLE_2_1A_CHARGER ||
 	     mtk_pdc_check_charger(info)) &&
@@ -352,26 +332,21 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 		if (!dual_swchg_check_pd_leave(info)) {
 			switch (swchgalg->state) {
 			case CHR_CC:
-				if (pox_fast_charge_get()) {
+				{
 					int a1, a2, i1, i2;
 					pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
 					pdata->input_current_limit = a1;
 					pdata2->input_current_limit = a2;
 					pdata->charging_current_limit = i1;
 					pdata2->charging_current_limit = i2;
-				} else {
-					pdata->charging_current_limit = info->data.chg1_ta_ac_charger_current;
-					pdata2->charging_current_limit = info->data.chg2_ta_ac_charger_current;
 				}
 				break;
 			case CHR_TUNING:
-				if (pox_fast_charge_get()) {
+				{
 					int a1, a2, i1, i2;
 					pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
 					pdata->input_current_limit = a1;
 					pdata->charging_current_limit = i1;
-				} else {
-					pdata->charging_current_limit = info->data.chg1_ta_ac_charger_current;
 				}
 				break;
 			default:
@@ -400,136 +375,87 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 			pdata->charging_current_limit =
 						pdata->input_current_limit;
 		} else {
-			/*
-			 * USB 2.0 SDP (a standard PC USB port) sources at most
-			 * 500mA. Never let the AC fast-charge experiment raise
-			 * this to 1.2A/1.5A: the port cannot sustain it, VBUS
-			 * collapses and the host trips its overcurrent
-			 * protection (repeated disconnect/reconnect).
-			 */
 			pdata->input_current_limit =
-							info->data.usb_charger_current;
+						info->data.usb_charger_current;
 			pdata->charging_current_limit =
-							info->data.usb_charger_current;
+						info->data.usb_charger_current;
 			pdata2->input_current_limit = 0;
 			pdata2->charging_current_limit = 0;
 		}
 	} else if (info->chr_type == NONSTANDARD_CHARGER) {
-		extern int pox_fast_charge_get(void);
-		if (pox_fast_charge_get()) {
-			int a1, a2, i1, i2;
-			pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
-			pdata->input_current_limit = a1;
-			pdata2->input_current_limit = a2;
-			pdata->charging_current_limit = i1;
-			pdata2->charging_current_limit = i2;
-		} else {
-			pdata->input_current_limit =
-						info->data.non_std_ac_charger_current;
-			pdata->charging_current_limit =
-						info->data.non_std_ac_charger_current;
-		}
+		int a1, a2, i1, i2;
+		pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
+		pdata->input_current_limit = a1;
+		pdata2->input_current_limit = a2;
+		pdata->charging_current_limit = i1;
+		pdata2->charging_current_limit = i2;
 	} else if (info->chr_type == STANDARD_CHARGER) {
-		extern int pox_fast_charge_get(void);
-		if (pox_fast_charge_get()) {
-			int a1, a2, i1, i2;
-			pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
-			pdata->input_current_limit = a1;
-			pdata2->input_current_limit = a2;
-			pdata->charging_current_limit = i1;
-			pdata2->charging_current_limit = i2;
-		} else if (timespec_compare(&now, &info->plugintime) >= 0) {
-			pdata->charging_current_limit =
-					info->data.ac_charger_current;
-			pdata->input_current_limit =
-					info->data.ac_charger_input_current;
-		} else {
-			pdata->charging_current_limit = 1000000;
-			pdata->input_current_limit = 1600000;
-		}
-		if (!pox_fast_charge_get()) {
-			mtk_pe20_set_charging_current(info,
-						&pdata->charging_current_limit,
-						&pdata->input_current_limit);
-			mtk_pe_set_charging_current(info,
-						&pdata->charging_current_limit,
-						&pdata->input_current_limit);
-		}
+		int a1, a2, i1, i2;
+		pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
+		pdata->input_current_limit = a1;
+		pdata2->input_current_limit = a2;
+		pdata->charging_current_limit = i1;
+		pdata2->charging_current_limit = i2;
+		mtk_pe20_set_charging_current(info,
+					&pdata->charging_current_limit,
+					&pdata->input_current_limit);
+		mtk_pe_set_charging_current(info,
+					&pdata->charging_current_limit,
+					&pdata->input_current_limit);
 
-		if (!pox_fast_charge_get())
-			pdata2->input_current_limit =
-						info->data.chg2_ta_ac_charger_input_current * 2;
+		pdata2->input_current_limit =
+					info->data.chg2_ta_ac_charger_input_current * 2;
 
-		/* Only enable slave charger when PE+/PE+2.0/QC/QC3 is connected or fast charge experiment */
-		if ((((mtk_pe20_get_is_enable(info) && mtk_pe20_get_is_connect(info))
+		/* Only enable slave charger when PE+/PE+2.0/QC/QC3 is connected */
+		if (((mtk_pe20_get_is_enable(info) && mtk_pe20_get_is_connect(info))
 			|| (mtk_pe_get_is_enable(info) && mtk_pe_get_is_connect(info))
 			|| info->hvdcp_type == HVDCP_3
 			|| ((swchgalg->vbus_mv > HVDCP2P0_VOLATGE) && (info->hvdcp_type == HVDCP)))
-			&& info->swjeita_enable_dual_charging) ||
-		    (pox_fast_charge_get() && info->battery_temp < 480)) {
+			&& info->swjeita_enable_dual_charging) {
 
-			if (!pox_fast_charge_get()) {
-				pdata->input_current_limit =
-						info->data.chg1_ta_ac_charger_input_current * 2;
-				pdata2->input_current_limit =
-						info->data.chg2_ta_ac_charger_input_current * 2;
+			pdata->input_current_limit =
+					info->data.chg1_ta_ac_charger_input_current * 2;
+			pdata2->input_current_limit =
+					info->data.chg2_ta_ac_charger_input_current * 2;
 
-				if ((swchgalg->vbus_mv > HVDCP2P0_VOLATGE) &&
-						(info->hvdcp_type == HVDCP)) {
-					pdata->input_current_limit = HVDCP_INPUT_CURRENT_LIMIT;
-					pdata2->input_current_limit = HVDCP_INPUT_CURRENT_LIMIT;
-				} else if ((mtk_pe20_get_is_enable(info) && mtk_pe20_get_is_connect(info))
-					|| (mtk_pe_get_is_enable(info) && mtk_pe_get_is_connect(info))) {
-					pdata->input_current_limit = CHG1_INPUT_CURRENT_LIMIT_PE;
-					pdata2->input_current_limit = CHG2_INPUT_CURRENT_LIMIT_PE;
-				}
-			}
-
-			switch (swchgalg->state) {
-			case CHR_CC:
-				if (pox_fast_charge_get()) {
-					int a1, a2, i1, i2;
-					pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
-					pdata->input_current_limit = a1;
-					pdata2->input_current_limit = a2;
-					pdata->charging_current_limit = i1;
-					pdata2->charging_current_limit = i2;
-				} else {
-					pdata->charging_current_limit = info->data.chg1_ta_ac_charger_current;
-					pdata2->charging_current_limit = info->data.chg2_ta_ac_charger_current;
-				}
-				if (!pox_fast_charge_get() &&
-				    (info->wireless_status == WIRELESS_CHG_HVDCP ||
-				     (info->wireless_status != WIRELESS_NULL &&
-				      (swchgalg->vbus_mv > HVDCP2P0_VOLATGE) &&
-				      (info->hvdcp_type == HVDCP)))) {
-					//wireless hvdcp support 9V/1.5A,set total current 2.4A
-					pdata->charging_current_limit
-						= WIRELESS_HVDCP_CHG_CURRENT;
-					pdata2->charging_current_limit
-						= WIRELESS_HVDCP_CHG_CURRENT;
-				}
-				break;
-			case CHR_TUNING:
-				if (pox_fast_charge_get()) {
-					int a1, a2, i1, i2;
-					pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
-					pdata->charging_current_limit = i1;
-				} else {
-					pdata->charging_current_limit = info->data.chg1_ta_ac_charger_current;
-				}
-				break;
-			default:
-				break;
+			if ((swchgalg->vbus_mv > HVDCP2P0_VOLATGE) &&
+					(info->hvdcp_type == HVDCP)) {
+				pdata->input_current_limit = HVDCP_INPUT_CURRENT_LIMIT;
+				pdata2->input_current_limit = HVDCP_INPUT_CURRENT_LIMIT;
+			} else if ((mtk_pe20_get_is_enable(info) && mtk_pe20_get_is_connect(info))
+				|| (mtk_pe_get_is_enable(info) && mtk_pe_get_is_connect(info))) {
+				pdata->input_current_limit = CHG1_INPUT_CURRENT_LIMIT_PE;
+				pdata2->input_current_limit = CHG2_INPUT_CURRENT_LIMIT_PE;
 			}
 		}
 
+		switch (swchgalg->state) {
+		case CHR_CC:
+			pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
+			pdata->input_current_limit = a1;
+			pdata2->input_current_limit = a2;
+			pdata->charging_current_limit = i1;
+			pdata2->charging_current_limit = i2;
+			if ((info->wireless_status == WIRELESS_CHG_HVDCP ||
+			     (info->wireless_status != WIRELESS_NULL &&
+			      (swchgalg->vbus_mv > HVDCP2P0_VOLATGE) &&
+			      (info->hvdcp_type == HVDCP)))) {
+				//wireless hvdcp support 9V/1.5A,set total current 2.4A
+				pdata->charging_current_limit
+					= WIRELESS_HVDCP_CHG_CURRENT;
+				pdata2->charging_current_limit
+					= WIRELESS_HVDCP_CHG_CURRENT;
+			}
+			break;
+		case CHR_TUNING:
+			pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
+			pdata->charging_current_limit = i1;
+			break;
+		default:
+			break;
+		}
+
 	} else if (info->chr_type == CHARGING_HOST) {
-		/*
-		 * BC 1.2 CDP: honour the dedicated-port current negotiated
-		 * for this charger. The AC fast-charge experiment must not
-		 * inflate a PC downstream port beyond what it advertised.
-		 */
 		pdata->input_current_limit =
 				info->data.charging_host_charger_current;
 		pdata->charging_current_limit =
@@ -542,19 +468,11 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 		if (info->wireless_status == WIRELESS_CHG_CDP)
 			pdata->charging_current_limit = WIRELESS_CHG_CDP_CURRENT;
 	} else if (info->chr_type == APPLE_2_1A_CHARGER) {
-		extern int pox_fast_charge_get(void);
-		if (pox_fast_charge_get()) {
-			/* 18W Fast Charge Always Experiment: 4.2A dual charging (~18W into batt) */
-			pdata->input_current_limit = 3000000;
-			pdata2->input_current_limit = 3000000;
-			pdata->charging_current_limit = 2200000;
-			pdata2->charging_current_limit = 2000000;
-		} else {
-			pdata->input_current_limit =
-					info->data.apple_2_1a_charger_current;
-			pdata->charging_current_limit =
-					info->data.apple_2_1a_charger_current;
-		}
+		/* 18W Fast Charge: 4.2A dual charging (~18W into batt) */
+		pdata->input_current_limit = 3000000;
+		pdata2->input_current_limit = 3000000;
+		pdata->charging_current_limit = 2200000;
+		pdata2->charging_current_limit = 2000000;
 	}
 
 	/*
@@ -565,17 +483,11 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 
 	if (pdata->thermal_charging_current_limit != -1) {
 		int eff_therm_chg = pdata->thermal_charging_current_limit;
-		extern int pox_fast_charge_get(void);
 		/*
-		 * Safe floor for dedicated AC chargers only: while <48C keep
-		 * a scaled minimum so weak thermal configs cannot stall AC
-		 * charging. Never apply it to a USB host port (SDP/CDP): the
-		 * port sources at most 500mA, and the floor would defeat the
-		 * thermal guard exactly when the system is under load.
+		 * Safe floor: while <48C keep a scaled minimum so weak
+		 * thermal configs cannot stall charging.
 		 */
-		if (pox_fast_charge_get() && info->battery_temp < 480 &&
-		    info->chr_type != STANDARD_HOST &&
-		    info->chr_type != CHARGING_HOST) {
+		if (info->battery_temp < 480) {
 			extern int pox_charge_watt_get(void);
 			int watt = pox_charge_watt_get();
 			int floor_limit = min(2200000, 2000000 * watt / 18);
@@ -598,9 +510,7 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 
 	if (pdata2->thermal_charging_current_limit != -1) {
 		int eff_therm_chg2 = pdata2->thermal_charging_current_limit;
-		extern int pox_fast_charge_get(void);
-		if (pox_fast_charge_get() && info->battery_temp < 480 &&
-		    info->chr_type != STANDARD_HOST && info->chr_type != CHARGING_HOST) {
+		if (info->battery_temp < 480) {
 			extern int pox_charge_watt_get(void);
 			int watt = pox_charge_watt_get();
 			int floor_limit2 = min(2000000, 1800000 * watt / 18);
@@ -621,16 +531,11 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 
 	if (pdata->thermal_input_current_limit != -1) {
 		int eff_therm_in = pdata->thermal_input_current_limit;
-		extern int pox_fast_charge_get(void);
 		/*
 		 * Same reasoning as the charging-current floor above: never
-		 * raise the input limit above the thermal daemon's request on
-		 * a USB host port, otherwise a heavily loaded SDP/CDP
-		 * connection still collapses VBUS at >1A.
+		 * raise the input limit above the thermal daemon's request.
 		 */
-		if (pox_fast_charge_get() && info->battery_temp < 480 &&
-		    info->chr_type != STANDARD_HOST &&
-		    info->chr_type != CHARGING_HOST) {
+		if (info->battery_temp < 480) {
 			extern int pox_charge_watt_get(void);
 			int watt = pox_charge_watt_get();
 			int in_floor = min(3000000, 2000000 * watt / 18);
@@ -651,9 +556,7 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 
 	if (pdata2->thermal_input_current_limit != -1) {
 		int eff_therm_in2 = pdata2->thermal_input_current_limit;
-		extern int pox_fast_charge_get(void);
-		if (pox_fast_charge_get() && info->battery_temp < 480 &&
-		    info->chr_type != STANDARD_HOST && info->chr_type != CHARGING_HOST) {
+		if (info->battery_temp < 480) {
 			extern int pox_charge_watt_get(void);
 			int watt = pox_charge_watt_get();
 			int in_floor2 = min(3000000, 2000000 * watt / 18);
@@ -709,7 +612,7 @@ done:
 	if (info->data.parallel_vbus && check_start_dual_charging_status(info) && chg2_chip_enabled) {
 		pdata->input_current_limit = pdata->input_current_limit / 2;
 		pdata2->input_current_limit = pdata2->input_current_limit / 2;
-	} else if (pox_fast_charge_get() && info->chr_type != STANDARD_HOST && info->chr_type != CHARGING_HOST) {
+	} else {
 		/*
 		 * When dual charging is not active (single charger or <=10W target),
 		 * master charger (chg1) must draw the full target input current,
@@ -895,10 +798,9 @@ static void dual_swchg_turn_on_charging(struct charger_manager *info)
 			chg1_enable = false;
 			chg2_enable = false;
 			pr_debug("chg1's aicr is set to 0mA, turn off\n");
-		} else if (info->chg2_data.input_current_limit < (pox_fast_charge_get() ? 500000 : 1000000)) {
+		} else if (info->chg2_data.input_current_limit < 500000) {
 			chg2_enable = false;
-			pr_debug("chg2's aicr is less than %dmA, turn off\n",
-				pox_fast_charge_get() ? 500 : 1000);
+			pr_debug("chg2's aicr is less than 500mA, turn off\n");
 		}
 
 		if (check_start_dual_charging_status(info)) {
@@ -962,7 +864,7 @@ static void dual_swchg_turn_on_charging(struct charger_manager *info)
 	}
 
 	/* If chg1 or chg2 is disabled, leave PE+/PE+20 charging */
-	if ((chg1_enable == false || (!pox_fast_charge_get() && chg2_enable == false)) &&
+	if ((chg1_enable == false || chg2_enable == false) &&
 		(info->hvdcp_type != HVDCP_NULL ||
 		info->hvdcp_check_count == HVDCP_CHECK_COUNT_MAX)) {
 		if (mtk_pe20_get_is_enable(info)) {
@@ -989,11 +891,9 @@ static void dual_swchg_turn_on_charging(struct charger_manager *info)
 			if (info->hvdcp_type != HVDCP_NULL) {
 				if (info->chg1_data.thermal_charging_current_limit == -1) {
 					int ichg = SINGLE_THERMAL_CHG_CURRENT;
-					if (pox_fast_charge_get()) {
-						int a1, a2, i1, i2;
-						pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
-						ichg = min(3200000, i1 + i2);
-					}
+					int a1, a2, i1, i2;
+					pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
+					ichg = min(3200000, i1 + i2);
 					charger_dev_set_charging_current(info->chg1_dev, ichg);
 				}
 			}
@@ -1008,11 +908,9 @@ static void dual_swchg_turn_on_charging(struct charger_manager *info)
 			if (mtk_pdc_check_charger(info)) {
 				if (info->chg1_data.thermal_charging_current_limit == -1) {
 					int ichg = info->data.pd_charger_current;
-					if (pox_fast_charge_get()) {
-						int a1, a2, i1, i2;
-						pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
-						ichg = min(3200000, i1 + i2);
-					}
+					int a1, a2, i1, i2;
+					pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
+					ichg = min(3200000, i1 + i2);
 					charger_dev_set_charging_current(info->chg1_dev, ichg);
 				}
 			}
@@ -1023,11 +921,9 @@ static void dual_swchg_turn_on_charging(struct charger_manager *info)
 			     mtk_pe_get_is_connect(info))) {
 				if (info->chg1_data.thermal_charging_current_limit == -1) {
 					int ichg = info->data.ta_ac_charger_current;
-					if (pox_fast_charge_get()) {
-						int a1, a2, i1, i2;
-						pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
-						ichg = min(3200000, i1 + i2);
-					}
+					int a1, a2, i1, i2;
+					pox_dual_swchg_get_currents(info, &a1, &a2, &i1, &i2);
+					ichg = min(3200000, i1 + i2);
 					charger_dev_set_charging_current(info->chg1_dev, ichg);
 				}
 			}
