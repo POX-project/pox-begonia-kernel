@@ -2174,6 +2174,11 @@ asmlinkage int vprintk_emit(int facility, int level,
 		in_sched = true;
 	}
 
+#ifdef CONFIG_SULTAN_DEBLOAT
+	if (level > LOGLEVEL_WARNING && level != LOGLEVEL_DEFAULT)
+		return 0;
+#endif
+
 	boot_delay_msec(level);
 	printk_delay();
 

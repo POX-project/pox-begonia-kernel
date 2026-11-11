@@ -114,6 +114,7 @@ int fbt_cpu_set_rescue_opp_c(int new_opp);
 int fbt_cpu_set_rescue_opp_f(int new_opp);
 int fbt_cpu_set_rescue_percent(int percent);
 int fbt_cpu_set_variance(int var);
+int fbt_cpu_set_ultra_rescue(int input);
 int fbt_cpu_set_floor_bound(int bound);
 int fbt_cpu_set_floor_kmin(int k);
 int fbt_cpu_set_floor_opp(int new_opp);
@@ -154,6 +155,7 @@ static inline int fbt_cpu_set_rescue_opp_c(int new_opp) { return 0; }
 static inline int fbt_cpu_set_rescue_opp_f(int new_opp) { return 0; }
 static inline int fbt_cpu_set_rescue_percent(int percent) { return 0; }
 static inline int fbt_cpu_set_variance(int var) { return 0; }
+static inline int fbt_cpu_set_ultra_rescue(int input) { return 0; }
 static inline int fbt_cpu_set_floor_bound(int bound) { return 0; }
 static inline int fbt_cpu_set_floor_kmin(int k) { return 0; }
 static inline int fbt_cpu_set_floor_opp(int new_opp) { return 0; }
