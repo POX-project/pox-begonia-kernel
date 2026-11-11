@@ -594,6 +594,16 @@ static void fbt_set_ultra_rescue_locked(int input)
 	xgf_trace("fpsgo set ultra_rescue %d", input);
 }
 
+int fbt_cpu_set_ultra_rescue(int input)
+{
+	mutex_lock(&fbt_mlock);
+	fbt_set_ultra_rescue_locked(input);
+	mutex_unlock(&fbt_mlock);
+
+	return 0;
+}
+EXPORT_SYMBOL(fbt_cpu_set_ultra_rescue);
+
 static void fbt_recal_loading(int isolate);
 static void fbt_set_isolation_locked(int input)
 {
@@ -3855,15 +3865,15 @@ int __init fbt_cpu_init(void)
 	bhr_opp = 1;
 	rescue_opp_c = (NR_FREQ_CPU - 1);
 	rescue_opp_f = 5;
-	rescue_percent = DEF_RESCUE_PERCENT;
+	rescue_percent = 20;
 	min_rescue_percent = 10;
 	short_rescue_ns = DEF_RESCUE_NS_TH;
-	rescue_percent_90 = DEF_RESCUE_PERCENT;
-	rescue_percent_120 = DEF_RESCUE_PERCENT;
+	rescue_percent_90 = 20;
+	rescue_percent_120 = 20;
 	short_min_rescue_p = 0;
 	run_time_percent = 50;
 	deqtime_bound = TIME_3MS;
-	variance = 40;
+	variance = 15;
 	floor_bound = 3;
 	kmin = 10;
 	floor_opp = 2;

@@ -1510,6 +1510,14 @@ config AIO
 	  by some high performance threaded applications. Disabling
 	  this option saves about 7k.
 
+config SULTAN_DEBLOAT
+	bool "Sultan Debloat Architecture"
+	default n
+	help
+	  Enable Sultan-style performance debloat, reducing non-critical
+	  diagnostic log contention and console lock jitter to improve
+	  system responsiveness and framerate consistency.
+
 config ADVISE_SYSCALLS
 	bool "Enable madvise/fadvise syscalls" if EXPERT
 	default y

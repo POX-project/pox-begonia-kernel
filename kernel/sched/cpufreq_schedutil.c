@@ -822,8 +822,9 @@ static int sugov_init(struct cpufreq_policy *policy)
 		goto stop_kthread;
 	}
 
-	tunables->up_rate_limit_us = cpufreq_policy_transition_delay_us(policy);
-	tunables->down_rate_limit_us = cpufreq_policy_transition_delay_us(policy);
+	/* 500us fast frequency ramp with 20ms anti-jitter hold-down */
+	tunables->up_rate_limit_us = 500;
+	tunables->down_rate_limit_us = 20000;
 
 	policy->governor_data = sg_policy;
 	sg_policy->tunables = tunables;

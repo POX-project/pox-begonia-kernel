@@ -951,7 +951,7 @@ int gx_fb_dvfs_margin = DEFAULT_DVFS_MARGIN;/* 10-bias */
 #define MIN_MARGIN_INC_STEP 1 /* 1% headroom */
 
 static int dvfs_margin_value = DEFAULT_DVFS_MARGIN/10;
-unsigned int dvfs_margin_mode = CONFIGURE_MARGIN_MODE;
+unsigned int dvfs_margin_mode = DYNAMIC_MARGIN_MODE_PERF;
 
 static int dvfs_min_margin_inc_step = MIN_MARGIN_INC_STEP;
 static int dvfs_margin_low_bound = 1; /* 1% headroom */
