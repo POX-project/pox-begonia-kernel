@@ -247,7 +247,7 @@ void generic_pipe_buf_release(struct pipe_inode_info *pipe,
 EXPORT_SYMBOL(generic_pipe_buf_release);
 
 static const struct pipe_buf_operations anon_pipe_buf_ops = {
-	.can_merge = 1,
+	.can_merge = 0,
 	.confirm = generic_pipe_buf_confirm,
 	.release = anon_pipe_buf_release,
 	.steal = anon_pipe_buf_steal,
@@ -429,7 +429,7 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 		struct pipe_buffer *buf = pipe->bufs + lastbuf;
 		int offset = buf->offset + buf->len;
 
-		if (buf->ops->can_merge && offset + chars <= PAGE_SIZE) {
+		if ((buf->flags & PIPE_BUF_FLAG_CAN_MERGE) && offset + chars <= PAGE_SIZE) {
 			ret = pipe_buf_confirm(pipe, buf);
 			if (ret)
 				goto out;
@@ -489,7 +489,7 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 			buf->ops = &anon_pipe_buf_ops;
 			buf->offset = 0;
 			buf->len = copied;
-			buf->flags = 0;
+			buf->flags = PIPE_BUF_FLAG_CAN_MERGE;
 			if (is_packetized(filp)) {
 				buf->ops = &packet_pipe_buf_ops;
 				buf->flags = PIPE_BUF_FLAG_PACKET;

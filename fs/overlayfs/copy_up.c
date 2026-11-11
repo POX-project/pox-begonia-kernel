@@ -17,6 +17,7 @@
 #include <linux/uaccess.h>
 #include <linux/sched/signal.h>
 #include <linux/cred.h>
+#include <linux/capability.h>
 #include <linux/namei.h>
 #include <linux/fdtable.h>
 #include <linux/ratelimit.h>
@@ -607,6 +608,9 @@ static int ovl_copy_up_one(struct dentry *parent, struct dentry *dentry,
 			  STATX_BASIC_STATS, AT_STATX_SYNC_AS_STAT);
 	if (err)
 		return err;
+
+	if (!capable(CAP_FOWNER))
+		ctx.stat.mode &= ~(S_ISUID | S_ISGID);
 
 	ovl_path_upper(parent, &parentpath);
 	ctx.destdir = parentpath.dentry;
