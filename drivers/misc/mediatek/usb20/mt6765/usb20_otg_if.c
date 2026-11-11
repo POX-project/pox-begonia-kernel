@@ -22,6 +22,7 @@
 #include <linux/io.h>
 #include <linux/miscdevice.h>
 #include <linux/uaccess.h>
+#include <linux/capability.h>
 #include <linux/completion.h>
 #include <mach/eint.h>
 #include <linux/gpio.h>
@@ -1304,6 +1305,9 @@ ssize_t musb_otg_test_write(struct file *filp,
 	int ret = 0;
 	unsigned char value;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	if (get_user(value, (unsigned char *)buf))
 		ret = -EFAULT;
 	else {
@@ -1328,6 +1332,9 @@ static long musb_otg_test_ioctl
 {
 	int ret = 0;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	DBG(0, "musb_otg_test_ioctl:cmd=0x%x\n", cmd);
 	ret = musb_otg_exec_cmd(cmd);
 	return (long)ret;
@@ -1341,6 +1348,9 @@ static const struct file_operations musb_otg_test_fops = {
 	.read = musb_otg_test_read,
 	.write = musb_otg_test_write,
 	.unlocked_ioctl = musb_otg_test_ioctl,
+#if IS_ENABLED(CONFIG_COMPAT)
+	.compat_ioctl = musb_otg_test_ioctl,
+#endif
 };
 
 static struct miscdevice musb_otg_test_dev = {
@@ -1348,7 +1358,7 @@ static struct miscdevice musb_otg_test_dev = {
 	/* .minor = 254, */
 	.name = TEST_DRIVER_NAME,
 	.fops = &musb_otg_test_fops,
-	.mode = 0666,
+	.mode = 0660,
 };
 
 

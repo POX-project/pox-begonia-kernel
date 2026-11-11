@@ -32,6 +32,7 @@
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/uidgid.h>
+#include <linux/capability.h>
 
 #define MAX_LEN	256
 
@@ -57,6 +58,9 @@ static ssize_t _mtk_tp_pid_write
 	int ret = 0;
 	char tmp[MAX_LEN] = { 0 };
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	len = (len < (MAX_LEN - 1)) ? len : (MAX_LEN - 1);
 	/* write data to the buffer */
 	if (copy_from_user(tmp, buf, len))
@@ -64,7 +68,7 @@ static ssize_t _mtk_tp_pid_write
 
 	ret = kstrtouint(tmp, 10, &tm_input_pid);
 	if (ret)
-		WARN_ON_ONCE(1);
+		return -EINVAL;
 
 	mtk_thermal_policy_dprintk("%s %s = %d\n", __func__, tmp,
 			tm_input_pid);
@@ -157,6 +161,9 @@ static ssize_t _mtk_tp_test_write
 	char tmp[128] = { 0 };
 	int idx, onoff;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	mtk_thermal_policy_dprintk("%s 1\n", __func__);
 
 	len = (len < (128 - 1)) ? len : (128 - 1);
@@ -227,7 +234,7 @@ static int __init mtk_thermal_policy_init(void)
 	}
 
 	entry =
-		proc_create("tp_pid", 0664,
+		proc_create("tp_pid", 0644,
 				dir_entry,
 				&_tp_pid_fops);
 	if (!entry)
@@ -238,7 +245,7 @@ static int __init mtk_thermal_policy_init(void)
 
 
 	entry =
-		proc_create("tp_test", 0664,
+		proc_create("tp_test", 0644,
 				dir_entry,
 				&_tp_test_fops);
 	if (!entry)

@@ -24,6 +24,7 @@
 #include <linux/kthread.h>
 #include <linux/slab.h>
 #include <linux/version.h>
+#include <linux/capability.h>
 
 #include <asm/barrier.h>
 
@@ -589,16 +590,19 @@ static ssize_t teed_version_read(struct file *file, char __user *buf,
 static ssize_t teed_version_write(struct file *filp, const char __user *buf,
 				  size_t count, loff_t *pos)
 {
-	ssize_t r;
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
+	if (count == 0)
+		return 0;
 
 	if (count > TEED_VERSION_SIZE)
-		return -ENOMEM;
+		return -EINVAL;
 
-	r = copy_from_user(teed_version, buf, count);
-	if (r < 0)
-		return r;
+	if (copy_from_user(teed_version, buf, count))
+		return -EFAULT;
 
-	teed_version[count + 1] = '\0';
+	teed_version[count] = '\0';
 
 	return count;
 }
@@ -667,7 +671,7 @@ static int create_entry(struct tee *tee)
 	}
 
 	tee_proc_teed_version = proc_create_data("tkcore_teed_version",
-			0666, tee_proc_dir, &teed_version_ops, (void *) tee);
+			0644, tee_proc_dir, &teed_version_ops, (void *) tee);
 
 	if (tee_proc_teed_version == NULL) {
 		pr_err("proc_create tkcore_teed_version failed\n");
