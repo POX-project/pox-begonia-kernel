@@ -17,6 +17,7 @@
 #include <linux/delay.h>
 #include <linux/list.h>
 #include <linux/slab.h>
+#include <linux/overflow.h>
 #include <linux/list_sort.h>
 #ifdef CONFIG_PM_SLEEP
 #include <linux/device.h>
@@ -729,9 +730,14 @@ int mdw_usr_fw(struct apusys_ioctl_fw *f, int op)
 	if (ret)
 		goto fail_map_iova;
 
-	if (f->size + f->offset > km.iova_size) {
-		ret = -EINVAL;
-		goto fail_check_size;
+	{
+		unsigned int total_size;
+
+		if (check_add_overflow(f->size, f->offset, &total_size) ||
+		    total_size > km.iova_size) {
+			ret = -EINVAL;
+			goto fail_check_size;
+		}
 	}
 
 	d = mdw_rsc_get_dinfo(f->dev_type, f->idx);
@@ -769,9 +775,14 @@ int mdw_usr_ucmd(struct apusys_ioctl_ucmd *uc)
 	if (ret)
 		goto fail_map_iova;
 
-	if (uc->size + uc->offset > km.iova_size) {
-		ret = -EINVAL;
-		goto fail_check_size;
+	{
+		unsigned int total_size;
+
+		if (check_add_overflow(uc->size, uc->offset, &total_size) ||
+		    total_size > km.iova_size) {
+			ret = -EINVAL;
+			goto fail_check_size;
+		}
 	}
 
 	d = mdw_rsc_get_dinfo(uc->dev_type, uc->idx);

@@ -22,6 +22,8 @@
 #include <linux/slab.h>
 
 #include <linux/init.h>
+#include <linux/capability.h>
+#include <linux/overflow.h>
 //#include <linux/io.h>
 
 #include "apusys_power.h"
@@ -1112,6 +1114,9 @@ run_sync_add_fail:
 
 	case APUSYS_IOCTL_FW_LOAD:
 		mdw_lne_debug();
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+
 		if (copy_from_user(&ioctl_fw,
 			(void *)arg, sizeof(struct apusys_ioctl_fw))) {
 			mdw_drv_err("copy fw struct fail\n");
@@ -1139,13 +1144,18 @@ run_sync_add_fail:
 		}
 
 		/* check size */
-		if (ioctl_fw.size + ioctl_fw.offset > kmem.iova_size) {
-			mdw_drv_err("check ucmd size(%u/%u/%u) fail\n",
-				ioctl_fw.size,
-				ioctl_fw.offset,
-				kmem.iova_size);
-			ret = -EINVAL;
-			goto check_unfw_size_fail;
+		{
+			unsigned int total_size;
+
+			if (check_add_overflow(ioctl_fw.size, ioctl_fw.offset, &total_size) ||
+			    total_size > kmem.iova_size) {
+				mdw_drv_err("check ucmd size(%u/%u/%u) fail\n",
+					ioctl_fw.size,
+					ioctl_fw.offset,
+					kmem.iova_size);
+				ret = -EINVAL;
+				goto check_unfw_size_fail;
+			}
 		}
 
 		ret = res_load_firmware(ioctl_fw.dev_type,
@@ -1175,6 +1185,9 @@ check_unfw_size_fail:
 
 	case APUSYS_IOCTL_FW_UNLOAD:
 		mdw_lne_debug();
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
+
 		if (copy_from_user(&ioctl_fw, (void *)arg,
 			sizeof(struct apusys_ioctl_fw))) {
 			mdw_drv_err("copy fw struct fail\n");
@@ -1258,13 +1271,18 @@ check_unfw_size_fail:
 		}
 
 		/* check size */
-		if (ioctl_ucmd.size + ioctl_ucmd.offset > kmem.iova_size) {
-			mdw_drv_err("check ucmd size(%u/%u/%u) fail\n",
-				ioctl_ucmd.size,
-				ioctl_ucmd.offset,
-				kmem.iova_size);
-			ret = -EINVAL;
-			goto check_ucmd_size_fail;
+		{
+			unsigned int total_size;
+
+			if (check_add_overflow(ioctl_ucmd.size, ioctl_ucmd.offset, &total_size) ||
+			    total_size > kmem.iova_size) {
+				mdw_drv_err("check ucmd size(%u/%u/%u) fail\n",
+					ioctl_ucmd.size,
+					ioctl_ucmd.offset,
+					kmem.iova_size);
+				ret = -EINVAL;
+				goto check_ucmd_size_fail;
+			}
 		}
 
 		/* send ucmd to driver */

@@ -22,6 +22,7 @@
 #include <linux/uaccess.h>
 #include <linux/slab.h>
 #include <linux/init.h>
+#include <linux/capability.h>
 #include <linux/dma-mapping.h>
 
 #include "apusys_power.h"
@@ -405,6 +406,8 @@ static long mdw_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 
 	case APUSYS_IOCTL_FW_LOAD:
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
 #ifdef MDW_LOAD_FW_SUPPORT
 		ret = copy_from_user(&f, (void *)arg,
 			sizeof(struct apusys_ioctl_fw));
@@ -421,6 +424,8 @@ static long mdw_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 
 	case APUSYS_IOCTL_FW_UNLOAD:
+		if (!capable(CAP_SYS_ADMIN))
+			return -EPERM;
 #ifdef MDW_LOAD_FW_SUPPORT
 		ret = copy_from_user(&f, (void *)arg,
 			sizeof(struct apusys_ioctl_fw));
