@@ -34,6 +34,8 @@
  ****************************************************************************/
 #include <linux/init.h>		/* For init/exit macros */
 #include <linux/module.h>	/* For MODULE_ marcros  */
+#include <linux/capability.h>
+#include <linux/compat.h>
 #include <linux/wait.h>		/* For wait queue*/
 #include <linux/sched.h>	/* For wait queue*/
 #include <linux/kthread.h>	/* For Kthread_run */
@@ -3184,6 +3186,9 @@ static ssize_t store_FG_daemon_disable(
 	struct device *dev, struct device_attribute *attr,
 					const char *buf, size_t size)
 {
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	bm_err("[disable FG daemon]\n");
 	disable_fg();
 	if (gm.disableGM30 == true)
@@ -3211,20 +3216,19 @@ static ssize_t store_FG_meter_resistance(
 	unsigned long val = 0;
 	int ret;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	bm_err("[%s]\n", __func__);
 
 	if (buf != NULL && size != 0) {
 		bm_err("[%s] buf is %s\n",
 			__func__, buf);
 		ret = kstrtoul(buf, 10, &val);
-		if (val < 0) {
-			bm_err(
-				"[%s] val is %d ??\n",
-				__func__,
-				(int)val);
-			val = 0;
-		} else
-			fg_cust_data.com_fg_meter_resistance = val;
+		if (ret)
+			return -EINVAL;
+
+		fg_cust_data.com_fg_meter_resistance = val;
 
 		bm_err(
 			"[%s] com FG_meter_resistance = %d\n",
@@ -3253,19 +3257,17 @@ static ssize_t store_FG_nafg_disable(
 	unsigned long val = 0;
 	int ret;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	bm_err("[%s]\n", __func__);
 
 	if (buf != NULL && size != 0) {
 		bm_err("[%s] buf is %s\n",
 			__func__, buf);
 		ret = kstrtoul(buf, 10, &val);
-		if (val < 0) {
-			bm_err(
-				"[%s] val is %d ??\n",
-				__func__,
-				(int)val);
-			val = 0;
-		}
+		if (ret)
+			return -EINVAL;
 
 		if (val == 0)
 			gm.cmd_disable_nafg = false;
@@ -3302,17 +3304,16 @@ static ssize_t store_FG_ntc_disable_nafg(
 	unsigned long val = 0;
 	int ret;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	bm_err("[%s]\n",  __func__);
 
 	if (buf != NULL && size != 0) {
 		bm_err("[%s] buf is %s\n", __func__, buf);
 		ret = kstrtoul(buf, 10, &val);
-		if (val < 0) {
-			bm_err(
-				"[%s] val is %d ??\n",  __func__,
-				(int)val);
-			val = 0;
-		}
+		if (ret)
+			return -EINVAL;
 
 		if (val == 0) {
 			gm.ntc_disable_nafg = false;
@@ -3358,21 +3359,19 @@ static ssize_t store_uisoc_update_type(
 	unsigned long val = 0;
 	int ret;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	bm_err("[%s]\n", __func__);
 
 	if (buf != NULL && size != 0) {
 		bm_err("[%s] buf is %s\n",
 			__func__, buf);
 		ret = kstrtoul(buf, 10, &val);
-		if (val < 0) {
-			bm_err(
-				"[%s] val is %d ??\n",
-				__func__,
-				(int)val);
-			val = 0;
-		}
+		if (ret)
+			return -EINVAL;
 
-		if (val >= 0 && val <= 2) {
+		if (val <= 2) {
 			fg_cust_data.uisoc_update_type = val;
 			wakeup_fg_algo_cmd(
 				FG_INTR_KERNEL_CMD,
@@ -3416,19 +3415,18 @@ static ssize_t store_FG_daemon_log_level(
 	unsigned long val = 0;
 	int ret;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	bm_err("[FG_daemon_log_level]\n");
 
 	if (buf != NULL && size != 0) {
 		bm_err("[FG_daemon_log_level] buf is %s\n", buf);
 		ret = kstrtoul(buf, 10, &val);
-		if (val < 0) {
-			bm_err(
-				"[FG_daemon_log_level] val is %d ??\n",
-				(int)val);
-			val = 0;
-		}
+		if (ret)
+			return -EINVAL;
 
-		if (val < 10 && val >= 0) {
+		if (val < 10) {
 			fg_cust_data.daemon_log_level = val;
 			wakeup_fg_algo_cmd(
 				FG_INTR_KERNEL_CMD,
@@ -3470,18 +3468,16 @@ static ssize_t store_shutdown_cond_enable(
 	unsigned long val = 0;
 	int ret;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	bm_err("[%s]\n", __func__);
 	if (buf != NULL && size != 0) {
 		bm_err("[%s] buf is %s\n",
 			__func__, buf);
 		ret = kstrtoul(buf, 10, &val);
-		if (val < 0) {
-			bm_err(
-				"[%s] val is %d ??\n",
-				__func__,
-				(int)val);
-			val = 0;
-		}
+		if (ret)
+			return -EINVAL;
 
 		set_shutdown_cond_flag(val);
 
@@ -3513,18 +3509,17 @@ static ssize_t store_reset_battery_cycle(
 	unsigned long val = 0;
 	int ret;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	bm_err("[%s]\n", __func__);
 	if (buf != NULL && size != 0) {
 		bm_err("[%s] buf is %s\n",
 			__func__, buf);
 		ret = kstrtoul(buf, 10, &val);
-		if (val < 0) {
-			bm_err(
-				"[%s] val is %d ??\n",
-				__func__,
-				(int)val);
-			val = 0;
-		}
+		if (ret)
+			return -EINVAL;
+
 		if (val == 0)
 			gm.is_reset_battery_cycle = false;
 		else {
@@ -3559,18 +3554,17 @@ static ssize_t store_reset_aging_factor(
 	unsigned long val = 0;
 	int ret;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	bm_err("[%s]\n", __func__);
 	if (buf != NULL && size != 0) {
 		bm_err("[%s] buf is %s\n",
 			__func__, buf);
 		ret = kstrtoul(buf, 10, &val);
-		if (val < 0) {
-			bm_err(
-				"[%s] val is %d ??\n",
-				__func__,
-				(int)val);
-			val = 0;
-		}
+		if (ret)
+			return -EINVAL;
+
 		if (val == 0)
 			gm.is_reset_aging_factor = false;
 		else {
@@ -3607,6 +3601,9 @@ static ssize_t store_BAT_EC(
 	int ret1 = 0, ret2 = 0;
 	char cmd_buf[4], param_buf[16];
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	bm_err("%s\n", __func__);
 	cmd_buf[3] = '\0';
 	param_buf[15] = '\0';
@@ -3614,7 +3611,7 @@ static ssize_t store_BAT_EC(
 	if (size < 4 || size > 20) {
 		bm_err("%s error, size mismatch\n",
 			__func__);
-		return -1;
+		return -EINVAL;
 	}
 
 	if (buf != NULL && size != 0) {
@@ -3637,7 +3634,7 @@ static ssize_t store_BAT_EC(
 		if (ret1 != 0 || ret2 != 0) {
 			bm_err("ERROR! not valid number! %d %d\n",
 				ret1, ret2);
-			return -1;
+			return -EINVAL;
 		}
 		bm_err("CMD is:%d, param:%d\n",
 			gm.BAT_EC_cmd, gm.BAT_EC_param);
@@ -3802,7 +3799,8 @@ signed int battery_meter_meta_tool_cali_car_tune(int meta_current)
 static long compat_adc_cali_ioctl(
 struct file *filp, unsigned int cmd, unsigned long arg)
 {
-	int adc_out_datas[2] = { 1, 1 };
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
 
 	bm_debug("%s 32bit IOCTL, cmd=0x%08x\n",
 		__func__, cmd);
@@ -3812,10 +3810,11 @@ struct file *filp, unsigned int cmd, unsigned long arg)
 		return -ENOTTY;
 	}
 
-	if (sizeof(arg) != sizeof(adc_out_datas))
-		return -EFAULT;
-
 	switch (cmd) {
+	case TEST_ADC_CALI_PRINT:
+	case SET_ADC_CALI_Slop:
+	case SET_ADC_CALI_Offset:
+	case SET_ADC_CALI_Cal:
 	case BAT_STATUS_READ:
 	case ADC_CHANNEL_READ:
 	case Get_META_BAT_VOL:
@@ -3834,9 +3833,9 @@ struct file *filp, unsigned int cmd, unsigned long arg)
 	}
 		break;
 	default:
-		bm_err("%s unknown IOCTL: 0x%08x, %d\n",
-			__func__, cmd, adc_out_datas[0]);
-		break;
+		bm_err("%s unknown IOCTL: 0x%08x\n",
+			__func__, cmd);
+		return -EINVAL;
 	}
 
 	return 0;
@@ -3855,10 +3854,20 @@ static long adc_cali_ioctl(
 	int temp_car_tune;
 	int isdisNAFG = 0;
 
+	if (!capable(CAP_SYS_ADMIN))
+		return -EPERM;
+
 	bm_debug("%s enter\n", __func__);
-	mutex_lock(&gm.fg_mutex);
 	user_data_addr = (int *)arg;
+	if (!user_data_addr)
+		return -EINVAL;
+
+	mutex_lock(&gm.fg_mutex);
 	ret = copy_from_user(adc_in_data, user_data_addr, sizeof(adc_in_data));
+	if (ret) {
+		mutex_unlock(&gm.fg_mutex);
+		return -EFAULT;
+	}
 	if (adc_in_data[1] < 0) {
 		bm_err("%s unknown data: %d\n", __func__, adc_in_data[1]);
 		mutex_unlock(&gm.fg_mutex);
@@ -3873,6 +3882,10 @@ static long adc_cali_ioctl(
 	case SET_ADC_CALI_Slop:
 		naram_data_addr = (int *)arg;
 		ret = copy_from_user(adc_cali_slop, naram_data_addr, 36);
+		if (ret) {
+			mutex_unlock(&gm.fg_mutex);
+			return -EFAULT;
+		}
 		g_ADC_Cali = false;
 		/* Protection */
 		for (i = 0; i < 14; i++) {
@@ -3889,6 +3902,10 @@ static long adc_cali_ioctl(
 	case SET_ADC_CALI_Offset:
 		naram_data_addr = (int *)arg;
 		ret = copy_from_user(adc_cali_offset, naram_data_addr, 36);
+		if (ret) {
+			mutex_unlock(&gm.fg_mutex);
+			return -EFAULT;
+		}
 		g_ADC_Cali = false;
 		for (i = 0; i < 14; i++)
 			bm_debug("adc_cali_offset[%d] = %d\n", i,
@@ -3899,6 +3916,10 @@ static long adc_cali_ioctl(
 	case SET_ADC_CALI_Cal:
 		naram_data_addr = (int *)arg;
 		ret = copy_from_user(adc_cali_cal, naram_data_addr, 4);
+		if (ret) {
+			mutex_unlock(&gm.fg_mutex);
+			return -EFAULT;
+		}
 		g_ADC_Cali = true;
 		if (adc_cali_cal[0] == 1)
 			g_ADC_Cali = true;
@@ -3947,7 +3968,10 @@ static long adc_cali_ioctl(
 		if (adc_in_data[0] == 66)
 			adc_out_data[1] = 0;	/* success */
 
-		ret = copy_to_user(user_data_addr, adc_out_data, 8);
+		if (copy_to_user(user_data_addr, adc_out_data, 8)) {
+			mutex_unlock(&gm.fg_mutex);
+			return -EFAULT;
+		}
 		bm_debug(
 			    "**** unlocked_ioctl : Channel %d * %d times = %d\n",
 			    adc_in_data[0], adc_in_data[1], adc_out_data[0]);
@@ -3955,13 +3979,19 @@ static long adc_cali_ioctl(
 
 	case BAT_STATUS_READ:
 		user_data_addr = (int *)arg;
-		ret = copy_from_user(battery_in_data, user_data_addr, 4);
+		if (copy_from_user(battery_in_data, user_data_addr, 4)) {
+			mutex_unlock(&gm.fg_mutex);
+			return -EFAULT;
+		}
 		/* [0] is_CAL */
 		if (g_ADC_Cali)
 			battery_out_data[0] = 1;
 		else
 			battery_out_data[0] = 0;
-		ret = copy_to_user(user_data_addr, battery_out_data, 4);
+		if (copy_to_user(user_data_addr, battery_out_data, 4)) {
+			mutex_unlock(&gm.fg_mutex);
+			return -EFAULT;
+		}
 		bm_debug(
 			"unlocked_ioctl : CAL:%d\n", battery_out_data[0]);
 		break;

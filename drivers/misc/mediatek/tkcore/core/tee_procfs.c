@@ -592,6 +592,8 @@ static ssize_t teed_version_write(struct file *filp, const char __user *buf,
 {
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
+	if (count == 0)
+		return 0;
 
 	if (count >= TEED_VERSION_SIZE)
 		return -EINVAL;
