@@ -334,9 +334,9 @@ jobs:
 
           echo "Caption length: $(wc -c < "$caption_file") bytes"
 
-          send_args=(-F "chat_id=${TELEGRAM_CHAT_ID}" -F "parse_mode=HTML")
+          send_args=(--form-string "chat_id=${TELEGRAM_CHAT_ID}" --form-string "parse_mode=HTML")
           if [[ -n "${TELEGRAM_MESSAGE_THREAD_ID:-}" ]]; then
-            send_args+=(-F "message_thread_id=${TELEGRAM_MESSAGE_THREAD_ID}")
+            send_args+=(--form-string "message_thread_id=${TELEGRAM_MESSAGE_THREAD_ID}")
           fi
 
           send_telegram() {
@@ -361,7 +361,7 @@ jobs:
           zip_bytes="$(stat -c%s "$ZIP_PATH")"
           if (( zip_bytes > 50 * 1024 * 1024 )); then
             echo "::warning::Zip is ${zip_bytes} bytes (>50 MiB); sending the caption without the file attachment."
-            send_args+=(-F "text=<${caption_file}" -F "disable_web_page_preview=true")
+            send_args+=(-F "text=<${caption_file}" --form-string "disable_web_page_preview=true")
             send_telegram sendMessage "${send_args[@]}"
           else
             send_args+=(-F "document=@${ZIP_PATH};type=application/zip"
@@ -385,14 +385,14 @@ jobs:
             echo "::warning::Telegram secrets not set; skipping failure notification."
             exit 0
           fi
-          send_args=(-F "chat_id=${TELEGRAM_CHAT_ID}" -F "parse_mode=HTML")
+          send_args=(--form-string "chat_id=${TELEGRAM_CHAT_ID}" --form-string "parse_mode=HTML")
           if [[ -n "${TELEGRAM_MESSAGE_THREAD_ID:-}" ]]; then
-            send_args+=(-F "message_thread_id=${TELEGRAM_MESSAGE_THREAD_ID}")
+            send_args+=(--form-string "message_thread_id=${TELEGRAM_MESSAGE_THREAD_ID}")
           fi
           curl -fsS -X POST \
             "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
             "${send_args[@]}" \
-            -F "text=<b>❌ Pox Kernel build FAILED</b>%0A<b>Build #:</b> ${RUN_NUMBER}%0A<b>Commit:</b> <code>${COMMIT_HASH}</code>%0A<b>Run:</b> ${RUN_URL}"
+            --form-string "text=<b>❌ Pox Kernel build FAILED</b>"$'\n'"<b>Build #:</b> ${RUN_NUMBER}"$'\n'"<b>Commit:</b> <code>${COMMIT_HASH}</code>"$'\n'"<b>Run:</b> ${RUN_URL}"
 
       - name: Publish to GitHub Release
         if: github.event.inputs.release == 'true' || startsWith(github.ref, 'refs/tags/v')
