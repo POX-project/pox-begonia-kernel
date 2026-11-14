@@ -13,6 +13,7 @@
  */
 
 #include <linux/delay.h>
+#include <linux/jiffies.h>
 #include <linux/sched.h>
 #include <linux/sched/clock.h>
 #include <linux/sched/types.h>
@@ -114,6 +115,19 @@ static unsigned int extd_esd_check_enable;
 
 atomic_t enable_ovl0_recovery = ATOMIC_INIT(0);
 atomic_t enable_ovl0_2l_recovery = ATOMIC_INIT(0);
+
+/*
+ * Pox: an OVL layer stall is proof of a malfunction on its own, so it does
+ * not have to match the exact register snapshot that ovl_need_mmsys_sw_reset()
+ * expects (a wedged pipeline is frequently in a different state, which is why
+ * the abnormal SOF path silently did nothing in that case).  Throttle the
+ * recovery so a config that keeps stalling cannot turn the panel into a
+ * flicker loop.
+ */
+#define OVL_STALL_RECOVERY_MIN_MS	10000
+static atomic_t enable_ovl0_stall_recovery = ATOMIC_INIT(0);
+static atomic_t enable_ovl0_2l_stall_recovery = ATOMIC_INIT(0);
+static unsigned long last_stall_recovery;
 
 unsigned int get_esd_check_mode(void)
 {
@@ -1480,8 +1494,24 @@ void primary_display_set_recovery_module(enum DISP_MODULE_ENUM module)
 	}
 }
 
+void primary_display_set_recovery_module_stall(enum DISP_MODULE_ENUM module)
+{
+	switch (module) {
+	case DISP_MODULE_OVL0:
+		atomic_set(&enable_ovl0_stall_recovery, 1);
+		break;
+	case DISP_MODULE_OVL0_2L:
+		atomic_set(&enable_ovl0_2l_stall_recovery, 1);
+		break;
+	default:
+		break;
+	}
+}
+
 static int primary_display_recovery_kthread(void *data)
 {
+	int stall;
+
 	dpmgr_enable_event(primary_get_dpmgr_handle(),
 		DISP_PATH_EVENT_DISP_RECOVERY);
 	while (1) {
@@ -1504,6 +1534,20 @@ static int primary_display_recovery_kthread(void *data)
 			DISP_PR_ERR("Detect %s malfunction, do recovery\n",
 				ddp_get_module_name(DISP_MODULE_OVL0_2L));
 			primary_display_ovl_recovery();
+		}
+
+		stall = atomic_xchg(&enable_ovl0_stall_recovery, 0);
+		stall |= atomic_xchg(&enable_ovl0_2l_stall_recovery, 0);
+		if (stall) {
+			if (last_stall_recovery &&
+			    !time_after(jiffies, last_stall_recovery +
+				msecs_to_jiffies(OVL_STALL_RECOVERY_MIN_MS))) {
+				DISP_PR_ERR("OVL layer stall, recovery throttled\n");
+			} else {
+				last_stall_recovery = jiffies;
+				DISP_PR_ERR("OVL layer stall, do recovery\n");
+				primary_display_ovl_recovery();
+			}
 		}
 
 		if (kthread_should_stop())

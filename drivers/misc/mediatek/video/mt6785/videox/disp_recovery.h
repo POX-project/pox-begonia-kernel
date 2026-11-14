@@ -40,5 +40,6 @@ int do_lcm_vdo_lp_write_without_lock(struct dsi_cmd_desc *write_table,
 
 int primary_display_ovl_recovery(void);
 void primary_display_set_recovery_module(enum DISP_MODULE_ENUM module);
+void primary_display_set_recovery_module_stall(enum DISP_MODULE_ENUM module);
 
 #endif /* _DISP_RECOVERY_H_ */

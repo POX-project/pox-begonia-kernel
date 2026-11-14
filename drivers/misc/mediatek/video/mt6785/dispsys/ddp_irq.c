@@ -23,6 +23,7 @@
 #include <linux/spinlock.h>
 #include <linux/kthread.h>
 #include <linux/timer.h>
+#include <linux/jiffies.h>
 
 /* #include <mach/mt_irq.h> */
 #include "ddp_reg.h"
@@ -50,6 +51,27 @@ static unsigned int cnt_rdma_abnormal[2];
 static unsigned int cnt_wdma_underflow[2];
 static unsigned int cnt_postmask_abnormal;
 static unsigned int cnt_postmask_underflow;
+
+/*
+ * Pox: OVL layer stall watchdog.
+ *
+ * OVL reports "Lx not complete until EOF" for a layer whose read did not
+ * finish before the end of the frame.  Short starvation clears itself on the
+ * next frame, but when the OVL/M4U pipeline is wedged the bit stays asserted
+ * and that layer keeps scanning out stale or partially updated data for as
+ * long as the display stays powered - the "screen glitches after long uptime,
+ * turning HW overlays off hides it" failure.  Count the stalled frames (with
+ * a slow decay so an alternating stall/stall-free pattern is caught too)
+ * inside a bounded observation window and hand the module to the display
+ * path recovery thread, which stops the path, resets OVL/PVRIC and restarts
+ * it with the last configuration.
+ */
+#define OVL_EOF_STALL_FRAMES	30	/* ~0.5 s at 60 fps */
+#define OVL_EOF_STALL_WINDOW_MS	4000	/* give up on stale observations */
+#define OVL_EOF_STALL_RETRY_MS	10000	/* min interval between requests */
+static unsigned long ovl_eof_stall_since[OVL_NUM];
+static unsigned int ovl_eof_stall_frames[OVL_NUM];
+static unsigned long ovl_eof_stall_last_req[OVL_NUM];
 
 unsigned long long rdma_start_time[2] = { 0 };
 unsigned long long rdma_end_time[2] = { 0 };
@@ -305,6 +327,53 @@ irqreturn_t disp_irq_handler(int irq, void *dev_id)
 		if (reg_val & (1 << 8))
 			DDP_PR_ERR("IRQ: %s-L3 not complete until EOF!\n",
 				   ddp_get_module_name(module));
+
+		/*
+		 * Pox: bits 5..8 are enabled as interrupts (OVL INTEN), so a
+		 * wedged layer asserts this on every frame.  Escalate to a real
+		 * path recovery only when the stalls are sustained - a dead
+		 * pipeline would otherwise keep the panel corrupted until the
+		 * next reboot.
+		 */
+		if (reg_val & 0x1e0) {
+			unsigned long now = jiffies;
+
+			if (!ovl_eof_stall_since[index] ||
+			    time_after(now, ovl_eof_stall_since[index] +
+				msecs_to_jiffies(OVL_EOF_STALL_WINDOW_MS))) {
+				ovl_eof_stall_since[index] = now;
+				ovl_eof_stall_frames[index] = 0;
+			}
+			if (ovl_eof_stall_frames[index] < OVL_EOF_STALL_FRAMES)
+				ovl_eof_stall_frames[index]++;
+
+			if (ovl_eof_stall_frames[index] >=
+			    OVL_EOF_STALL_FRAMES) {
+				ovl_eof_stall_since[index] = 0;
+				ovl_eof_stall_frames[index] = 0;
+				if ((module == DISP_MODULE_OVL0 ||
+				     module == DISP_MODULE_OVL0_2L) &&
+				    (!ovl_eof_stall_last_req[index] ||
+				     time_after(now,
+						ovl_eof_stall_last_req[index] +
+						msecs_to_jiffies(
+						OVL_EOF_STALL_RETRY_MS)))) {
+					ovl_eof_stall_last_req[index] = now;
+					DDP_PR_ERR(
+						"IRQ: %s layer stalled, recovering display path\n",
+						ddp_get_module_name(module));
+					primary_display_set_recovery_module_stall(
+						module);
+					dpmgr_module_notify(DISP_MODULE_RDMA0,
+					    DISP_PATH_EVENT_DISP_RECOVERY);
+				}
+			}
+		} else if (ovl_eof_stall_frames[index]) {
+			/* slow decay so alternating stalls still accumulate */
+			ovl_eof_stall_frames[index]--;
+			if (!ovl_eof_stall_frames[index])
+				ovl_eof_stall_since[index] = 0;
+		}
 
 		if (reg_val & (1 << 13)) {
 			DDP_PR_ERR("IRQ: %s abnormal SOF!\n",
