@@ -19,7 +19,7 @@ new file mode 100644
 index 000000000..692a81252
 --- /dev/null
 +++ b/arch/arm64/configs/bakasu_defconfig
-@@ -0,0 +1,5288 @@
+@@ -0,0 +1,5289 @@
 +#
 +# Automatically generated file; DO NOT EDIT.
 +# Linux/arm64 4.14.333 Kernel Configuration
