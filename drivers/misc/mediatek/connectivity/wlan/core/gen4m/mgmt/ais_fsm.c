@@ -3625,7 +3625,12 @@ void aisPostponedEventOfDisconnTimeout(IN struct ADAPTER *prAdapter,
 	if (prAisFsmInfo->eCurrentState == AIS_STATE_LOOKING_FOR)
 		prAisFsmInfo->eCurrentState = AIS_STATE_IDLE;
 
-	prAisBssInfo->u2DeauthReason += REASON_CODE_BEACON_TIMEOUT*100;
+	/* u2DeauthReason is already in the MediaTek-internal encoding
+	 * (REASON_CODE_BEACON_TIMEOUT*100 + firmware subreason) since
+	 * aisBssBeaconTimeout_impl(); do not add the offset again here,
+	 * otherwise it would be double-encoded and leak as an invalid
+	 * 802.11 reason code to cfg80211.
+	 */
 
 	/* 4 <3> Indicate Disconnected Event to Host immediately. */
 	aisIndicationOfMediaStateToHost(prAdapter,
@@ -4930,8 +4935,16 @@ void aisBssBeaconTimeout_impl(IN struct ADAPTER *prAdapter,
 	}
 	/* 4 <2> invoke abort handler */
 	if (fgDoAbortIndication) {
+		/* Store the reason in the MediaTek-internal encoding
+		 * (REASON_CODE_BEACON_TIMEOUT*100 + firmware subreason) so it is
+		 * consistently in the proprietary range for both the direct and
+		 * the postponed indication paths.  The raw firmware subreason
+		 * (0..14) must never reach cfg80211 as-is: values such as 7
+		 * collide with standard 802.11 reason codes and make Android
+		 * log "Invalid reason code received".
+		 */
 		prAisBssInfo->u2DeauthReason =
-			ucBcnTimeoutReason;
+			REASON_CODE_BEACON_TIMEOUT * 100 + ucBcnTimeoutReason;
 
 		DBGLOG(AIS, EVENT, "aisBssBeaconTimeout\n");
 		aisFsmStateAbort(prAdapter,

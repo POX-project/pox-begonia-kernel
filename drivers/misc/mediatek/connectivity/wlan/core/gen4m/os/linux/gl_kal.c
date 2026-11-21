@@ -1696,6 +1696,15 @@ kalIndicateStatusAndComplete(IN struct GLUE_INFO
 			}
 			}
 #endif
+			/* Map the MediaTek-internal reason (which may be
+			 * REASON_CODE_BEACON_TIMEOUT*100 + firmware subreason)
+			 * to a valid IEEE 802.11 reason code before reporting
+			 * it to cfg80211, otherwise Android rejects it with
+			 * "Invalid reason code received".
+			 */
+			if (u2DeauthReason >= REASON_CODE_BEACON_TIMEOUT * 100)
+				u2DeauthReason = 4; /* WLAN_REASON_DISASSOC_DUE_TO_INACTIVITY */
+
 			/* CFG80211 Indication */
 			DBGLOG(INIT, INFO,
 			    "[wifi]Indicate disconnection: Reason=%d Locally[%d]\n",
@@ -1726,6 +1735,8 @@ kalIndicateStatusAndComplete(IN struct GLUE_INFO
 				if (prBssInfo)
 					u2DeauthReason =
 						prBssInfo->u2DeauthReason;
+				if (u2DeauthReason >= REASON_CODE_BEACON_TIMEOUT * 100)
+					u2DeauthReason = 4; /* WLAN_REASON_DISASSOC_DUE_TO_INACTIVITY */
 				/* CFG80211 Indication */
 				cfg80211_disconnected(prDevHandler,
 						      u2DeauthReason, NULL, 0,

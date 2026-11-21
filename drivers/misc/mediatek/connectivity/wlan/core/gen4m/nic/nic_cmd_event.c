@@ -4583,8 +4583,11 @@ bool nicBeaconTimeoutFilterPolicy(IN struct ADAPTER *prAdapter,
 			bValid = true;
 		} else if (!CHECK_FOR_TIMEOUT(u4CurrentTime,
 			prRxCtrl->u4LastRxTime[ucBssIdx],
+			SEC_TO_SYSTIME(MSEC_TO_SEC(u4MonitorWindow))) ||
+			!CHECK_FOR_TIMEOUT(u4CurrentTime,
+			prTxCtrl->u4LastTxTime[ucBssIdx],
 			SEC_TO_SYSTIME(MSEC_TO_SEC(u4MonitorWindow)))) {
-			/* Policy 1, if RX in the past duration (in ms) */
+			/* Policy 1, if RX or TX in the past duration (in ms) */
 			if (scanBeaconTimeoutFilterPolicyForAis(
 					prAdapter, ucBssIdx)) {
 				DBGLOG(NIC, INFO, "Driver find better TX AP");
