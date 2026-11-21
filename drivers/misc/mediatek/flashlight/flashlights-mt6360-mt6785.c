@@ -793,24 +793,34 @@ static int pox_torch_val_to_sel(int val)
 	 * Current per channel = 25mA + (selector * 12.5mA)
 	 * Selector 0 = 25mA, Selector 6 = 100mA, Selector 24 = 325mA (650mA dual)
 	 */
-	static const u8 step10_table[11] = {
+	static const u8 step20_table[21] = {
 		0,  /* 0 - off */
-		0,  /* 1:  25.0 mA (bedside reading / dim torch) */
+		1,  /* 1:  ~37.5 mA */
 		2,  /* 2:  50.0 mA */
 		4,  /* 3:  75.0 mA */
-		6,  /* 4: 100.0 mA (stock Xiaomi torch level) */
-		9,  /* 5: 137.5 mA */
-		12, /* 6: 175.0 mA */
-		15, /* 7: 212.5 mA */
-		18, /* 8: 250.0 mA */
-		21, /* 9: 287.5 mA */
-		24, /* 10: 325.0 mA (overdrive continuous max) */
+		5,  /* 4:  ~87.5 mA */
+		6,  /* 5: 100.0 mA (stock Xiaomi torch level) */
+		7,  /* 6: ~112.5 mA */
+		9,  /* 7: 137.5 mA */
+		10, /* 8: ~150.0 mA */
+		12, /* 9: 175.0 mA */
+		13, /* 10: ~187.5 mA */
+		15, /* 11: 212.5 mA */
+		16, /* 12: ~225.0 mA */
+		18, /* 13: 250.0 mA */
+		19, /* 14: ~262.5 mA */
+		21, /* 15: 287.5 mA */
+		22, /* 16: ~300.0 mA */
+		22, /* 17: ~300.0 mA */
+		23, /* 18: ~312.5 mA */
+		24, /* 19: ~325.0 mA */
+		24, /* 20: 325.0 mA (overdrive continuous max) */
 	};
 
 	if (val <= 0)
 		return 0;
-	if (val <= 10)
-		return step10_table[val];
+	if (val <= 20)
+		return step20_table[val];
 	if (val <= 24)
 		return val; /* direct selector */
 	if (val <= 100)
