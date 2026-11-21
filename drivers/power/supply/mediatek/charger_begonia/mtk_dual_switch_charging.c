@@ -231,7 +231,8 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 
 		pdata->charging_current_limit = pdata->force_charging_current;
 		if (pdata->force_charging_current <= 450000)
-			pdata->input_current_limit = 500000;
+			pdata->input_current_limit =
+				info->data.ac_charger_input_current;
 		else
 			pdata->input_current_limit =
 					info->data.ac_charger_input_current;
@@ -303,8 +304,10 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
 			pdata->charging_current_limit = 2000000;
 		} else {
 			chr_err("type-C: inquire rp error\n");
-			pdata->input_current_limit = 500000;
-			pdata->charging_current_limit = 500000;
+			pdata->input_current_limit =
+				info->data.ac_charger_input_current;
+			pdata->charging_current_limit =
+				info->data.ac_charger_current;
 		}
 
 		chr_err("type-C:%d current:%d\n",
