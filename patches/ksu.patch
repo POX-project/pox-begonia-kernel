@@ -9,14 +9,14 @@ index 000000000..df486fca7
 +	url = https://github.com/Baka-SU/BakaSU.git
 diff --git a/KernelSU b/KernelSU
 new file mode 160000
-index 000000000..d5e9e025b
+index 000000000..7b65bde07
 --- /dev/null
 +++ b/KernelSU
 @@ -0,0 +1 @@
-+Subproject commit d5e9e025b8b49155f8014684d64c91742b465f65
++Subproject commit 7b65bde0710b5e7c6f755545cb15a4abd417f3a8
 diff --git a/arch/arm64/configs/bakasu_defconfig b/arch/arm64/configs/bakasu_defconfig
 new file mode 100644
-index 000000000..692a81252
+index 000000000..4452acc99
 --- /dev/null
 +++ b/arch/arm64/configs/bakasu_defconfig
 @@ -0,0 +1,5289 @@
@@ -5280,7 +5280,7 @@ index 000000000..692a81252
 +# CONFIG_STRING_SELFTEST is not set
 +CONFIG_HWCONF_MANAGER=y
 +
-+# BakaSU main d5e9e025 (4.14 SUSFS inline hook mode)
++# BakaSU main 7b65bde0 (4.14 SUSFS inline hook mode)
 +CONFIG_KSU=y
 +# CONFIG_KSU_DEBUG is not set
 +CONFIG_KSU_TOOLKIT_SUPPORT=y
@@ -5417,8 +5417,21 @@ index f39d1c031..c2621c2d9 100644
  	return do_execveat_common(AT_FDCWD, filename, argv, envp, 0);
  }
  
+diff --git a/fs/internal.h b/fs/internal.h
+index de5a35fde..ecad65771 100644
+--- a/fs/internal.h
++++ b/fs/internal.h
+@@ -55,6 +55,8 @@ extern void __init chrdev_init(void);
+ extern int user_path_mountpoint_at(int, const char __user *, unsigned int, struct path *);
+ extern int vfs_path_lookup(struct dentry *, struct vfsmount *,
+ 			   const char *, unsigned int, struct path *);
++extern int filename_lookup(int dfd, struct filename *name, unsigned flags,
++			   struct path *path, struct path *root);
+ 
+ /*
+  * namespace.c
 diff --git a/fs/namei.c b/fs/namei.c
-index a982495f5..081a1bff3 100644
+index a982495f5..59d7eb13f 100644
 --- a/fs/namei.c
 +++ b/fs/namei.c
 @@ -39,6 +39,9 @@
@@ -5578,6 +5591,17 @@ index a982495f5..081a1bff3 100644
  	nd->flags &= ~LOOKUP_PARENT;
  	return walk_component(nd, 0);
  }
+@@ -2461,8 +2517,8 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
+ 	return err;
+ }
+ 
+-static int filename_lookup(int dfd, struct filename *name, unsigned flags,
+-			   struct path *path, struct path *root)
++int filename_lookup(int dfd, struct filename *name, unsigned flags,
++		    struct path *path, struct path *root)
+ {
+ 	int retval;
+ 	struct nameidata nd;
 @@ -2482,6 +2538,15 @@ static int filename_lookup(int dfd, struct filename *name, unsigned flags,
  	if (likely(!retval))
  		audit_inode(name, path->dentry, flags & LOOKUP_PARENT);
@@ -8794,14 +8818,16 @@ index d309171b6..74a4ea497 100644
  			   inode_mark->wd, inode->i_ino, inode->i_sb->s_dev,
  			   inotify_mark_user_mask(mark));
 diff --git a/fs/open.c b/fs/open.c
-index 377929e7f..233649899 100644
+index 377929e7f..b4ff0a148 100644
 --- a/fs/open.c
 +++ b/fs/open.c
-@@ -354,6 +354,11 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
+@@ -354,6 +354,13 @@ SYSCALL_DEFINE4(fallocate, int, fd, int, mode, loff_t, offset, loff_t, len)
  	return error;
  }
  
-+#ifdef CONFIG_KSU
++#ifdef CONFIG_KSU_SUSFS
++#include <linux/susfs_def.h>
++extern bool __ksu_is_allow_uid_for_current(uid_t uid);
 +extern int ksu_handle_faccessat(int *dfd, struct filename **filename,
 +				int *mode, int *__unused_flags);
 +#endif
@@ -8809,35 +8835,39 @@ index 377929e7f..233649899 100644
  /*
   * access() needs to use the real uid/gid, not the effective uid/gid.
   * We do this by temporarily clearing all FS-related capabilities and
-@@ -368,6 +373,27 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
+@@ -368,6 +375,9 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
  	struct vfsmount *mnt;
  	int res;
  	unsigned int lookup_flags = LOOKUP_FOLLOW;
-+#ifdef CONFIG_KSU
-+	/*
-+	 * CONFIG_KSU_SUSFS makes BakaSU export the struct filename **
-+	 * variant of this hook, not const char __user **. Passing the
-+	 * raw user pointer here made BakaSU dereference the pathname
-+	 * bytes as a struct filename and oops.
-+	 *
-+	 * getname() also lets kernel-internal callers through unchanged:
-+	 * init_eaccess() calls access("/init") from kernel_init_freeable
-+	 * with a *kernel* string, which getname() rejects with EFAULT.
-+	 */
-+	{
-+		struct filename *ksu_name;
-+
-+		ksu_name = getname(filename);
-+		if (!IS_ERR(ksu_name)) {
-+			ksu_handle_faccessat(&dfd, &ksu_name, &mode, NULL);
-+			putname(ksu_name);
-+		}
-+	}
++#ifdef CONFIG_KSU_SUSFS
++	struct filename *fname = NULL;
 +#endif
  
  	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
  		return -EINVAL;
-@@ -736,8 +762,6 @@ static int do_dentry_open(struct file *f,
+@@ -410,7 +420,21 @@ SYSCALL_DEFINE3(faccessat, int, dfd, const char __user *, filename, int, mode)
+ 
+ 	old_cred = override_creds(override_cred);
+ retry:
++#ifdef CONFIG_KSU_SUSFS
++	fname = getname_flags(filename, lookup_flags, NULL);
++
++	if (likely(susfs_is_current_proc_no_su()))
++		goto orig_flow;
++
++	if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val)))
++		ksu_handle_faccessat(&dfd, &fname, &mode, NULL);
++
++orig_flow:
++	res = filename_lookup(dfd, fname, lookup_flags, &path, NULL);
++	/* no putname(fname) here, filename_lookup() has done it for us already */
++#else
+ 	res = user_path_at(dfd, filename, lookup_flags, &path);
++#endif
+ 	if (res)
+ 		goto out;
+ 
+@@ -736,8 +760,6 @@ static int do_dentry_open(struct file *f,
  	path_get(&f->f_path);
  	f->f_inode = inode;
  	f->f_mapping = inode->i_mapping;
@@ -8846,7 +8876,7 @@ index 377929e7f..233649899 100644
  	f->f_wb_err = filemap_sample_wb_err(f->f_mapping);
  
  	if (unlikely(f->f_flags & O_PATH)) {
-@@ -1072,11 +1096,20 @@ struct file *filp_clone_open(struct file *oldfile)
+@@ -1072,11 +1094,20 @@ struct file *filp_clone_open(struct file *oldfile)
  }
  EXPORT_SYMBOL(filp_clone_open);
  
@@ -8867,7 +8897,7 @@ index 377929e7f..233649899 100644
  
  	if (fd)
  		return fd;
-@@ -1086,8 +1119,33 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
+@@ -1086,8 +1117,33 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
  		return PTR_ERR(tmp);
  
  	fd = get_unused_fd_flags(flags);
@@ -8901,7 +8931,7 @@ index 377929e7f..233649899 100644
  		if (IS_ERR(f)) {
  			put_unused_fd(fd);
  			fd = PTR_ERR(f);
-@@ -1096,6 +1154,8 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
+@@ -1096,6 +1152,8 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
  			fd_install(fd, f);
  		}
  	}
@@ -9243,20 +9273,27 @@ index e6f4c7b88..3f6bd8220 100644
  	if (error >= 0)
  		error = buf.error;
 diff --git a/fs/stat.c b/fs/stat.c
-index 0fda4b6b8..6b80c1ece 100644
+index 0fda4b6b8..35e476bb9 100644
 --- a/fs/stat.c
 +++ b/fs/stat.c
-@@ -17,6 +17,9 @@
- #include <linux/syscalls.h>
+@@ -18,6 +18,16 @@
  #include <linux/pagemap.h>
  #include <linux/compat.h>
-+#if defined(CONFIG_KSU_SUSFS_SUS_KSTAT) || defined(CONFIG_KSU_SUSFS_SUS_MOUNT)
-+#include <linux/susfs_def.h>
-+#endif
  
++#include "internal.h"
++
++#ifdef CONFIG_KSU_SUSFS
++#include <linux/susfs_def.h>
++extern struct static_key_true ksu_is_init_rc_hook_enabled;
++extern void ksu_handle_vfs_fstat(int fd, loff_t *kstat_size_ptr);
++extern bool __ksu_is_allow_uid_for_current(uid_t uid);
++extern int ksu_handle_stat(int *dfd, struct filename **filename, int *flags);
++#endif
++
  #include <linux/uaccess.h>
  #include <asm/unistd.h>
-@@ -30,6 +33,11 @@
+ 
+@@ -30,6 +40,11 @@
   * found on the VFS inode structure.  This is the default if no getattr inode
   * operation is supplied.
   */
@@ -9268,7 +9305,7 @@ index 0fda4b6b8..6b80c1ece 100644
  void generic_fillattr(struct inode *inode, struct kstat *stat)
  {
  	stat->dev = inode->i_sb->s_dev;
-@@ -45,6 +53,9 @@ void generic_fillattr(struct inode *inode, struct kstat *stat)
+@@ -45,6 +60,9 @@ void generic_fillattr(struct inode *inode, struct kstat *stat)
  	stat->ctime = inode->i_ctime;
  	stat->blksize = i_blocksize(inode);
  	stat->blocks = inode->i_blocks;
@@ -9278,50 +9315,49 @@ index 0fda4b6b8..6b80c1ece 100644
  
  	if (IS_NOATIME(inode))
  		stat->result_mask &= ~STATX_ATIME;
-@@ -353,6 +364,11 @@ SYSCALL_DEFINE2(newlstat, const char __user *, filename,
- 	return cp_new_stat(&stat, statbuf);
- }
- 
-+#ifdef CONFIG_KSU
-+extern int ksu_handle_stat(int *dfd, struct filename **filename,
-+				int *flags);
+@@ -142,6 +160,10 @@ int vfs_statx_fd(unsigned int fd, struct kstat *stat,
+ 	if (f.file) {
+ 		error = vfs_getattr(&f.file->f_path, stat,
+ 				    request_mask, query_flags);
++#ifdef CONFIG_KSU_SUSFS
++		if (static_branch_unlikely(&ksu_is_init_rc_hook_enabled))
++			ksu_handle_vfs_fstat(fd, &stat->size);
 +#endif
+ 		fdput(f);
+ 	}
+ 	return error;
+@@ -169,6 +191,9 @@ int vfs_statx(int dfd, const char __user *filename, int flags,
+ 	struct path path;
+ 	int error = -EINVAL;
+ 	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_AUTOMOUNT;
++#ifdef CONFIG_KSU_SUSFS
++	struct filename *fname = NULL;
++#endif
+ 
+ 	if ((flags & ~(AT_SYMLINK_NOFOLLOW | AT_NO_AUTOMOUNT |
+ 		       AT_EMPTY_PATH | KSTAT_QUERY_FLAGS)) != 0)
+@@ -182,7 +207,21 @@ int vfs_statx(int dfd, const char __user *filename, int flags,
+ 		lookup_flags |= LOOKUP_EMPTY;
+ 
+ retry:
++#ifdef CONFIG_KSU_SUSFS
++	fname = getname_flags(filename, lookup_flags, NULL);
 +
- #if !defined(__ARCH_WANT_STAT64) || defined(__ARCH_WANT_SYS_NEWFSTATAT)
- SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
- 		struct stat __user *, statbuf, int, flag)
-@@ -360,7 +376,16 @@ SYSCALL_DEFINE4(newfstatat, int, dfd, const char __user *, filename,
- 	struct kstat stat;
- 	int error;
- 
-+#ifdef CONFIG_KSU
-+	/* see fs/open.c: CONFIG_KSU_SUSFS exports the struct filename ** form */
-+	struct filename *ksu_name = getname(filename);
-+	if (!IS_ERR(ksu_name)) {
-+		ksu_handle_stat(&dfd, &ksu_name, &flag);
-+		putname(ksu_name);
-+	}
-+#endif
- 	error = vfs_fstatat(dfd, filename, &stat, flag);
++	if (likely(susfs_is_current_proc_no_su()))
++		goto orig_flow;
 +
- 	if (error)
- 		return error;
- 	return cp_new_stat(&stat, statbuf);
-@@ -504,6 +529,14 @@ SYSCALL_DEFINE4(fstatat64, int, dfd, const char __user *, filename,
- 	struct kstat stat;
- 	int error;
- 
-+#ifdef CONFIG_KSU // 32-bit su
-+	/* see fs/open.c: CONFIG_KSU_SUSFS exports the struct filename ** form */
-+	struct filename *ksu_name = getname(filename);
-+	if (!IS_ERR(ksu_name)) {
-+		ksu_handle_stat(&dfd, &ksu_name, &flag);
-+		putname(ksu_name);
-+	}
++	if (unlikely(__ksu_is_allow_uid_for_current(current_uid().val)))
++		ksu_handle_stat(&dfd, &fname, &flags);
++
++orig_flow:
++	error = filename_lookup(dfd, fname, lookup_flags, &path, NULL);
++	/* no putname(fname) here, filename_lookup() has done it for us already */
++#else
+ 	error = user_path_at(dfd, filename, lookup_flags, &path);
 +#endif
- 	error = vfs_fstatat(dfd, filename, &stat, flag);
  	if (error)
- 		return error;
+ 		goto out;
+ 
 diff --git a/fs/statfs.c b/fs/statfs.c
 index e6ceb3e87..28480a88e 100644
 --- a/fs/statfs.c
@@ -10948,10 +10984,10 @@ index 1ff21c19b..99adc5d71 100644
  
  struct file; /* forward dec */
 diff --git a/include/linux/sched.h b/include/linux/sched.h
-index 4975af452..ecb50c314 100644
+index 9e9ff78e2..f819e9ac2 100644
 --- a/include/linux/sched.h
 +++ b/include/linux/sched.h
-@@ -1412,6 +1412,10 @@ struct task_struct {
+@@ -1424,6 +1424,10 @@ struct task_struct {
  	 * New fields for task_struct should be added above here, so that
  	 * they are included in the randomized portion of task_struct.
  	 */
@@ -11368,7 +11404,7 @@ index 000000000..f8eaeaacd
 +#endif // #ifndef KSU_SUSFS_DEF_H
 \ No newline at end of file
 diff --git a/kernel/reboot.c b/kernel/reboot.c
-index eea91461e..beb41f2bf 100644
+index eea91461e..e85e79a3c 100644
 --- a/kernel/reboot.c
 +++ b/kernel/reboot.c
 @@ -17,6 +17,17 @@
