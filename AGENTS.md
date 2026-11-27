@@ -22,10 +22,13 @@ per-variant branches, no merge conflicts when upstream updates land.
 | `ksu` | BakaSU | none | `ksu.patch` |
 | `miui` | (any root) | MIUI/HyperOS | `miui.patch` |
 | `c2` | (any root) | Codec2 | `c2.patch` |
+| `overclock` | (any root) | none | `overclock.patch` |
 
 Combine with commas: `VARIANT=ksu,c2`, `VARIANT=apatch,miui`. `miui` and `c2`
 compose — `VARIANT=ksu,miui,c2` applies both overlays (always in the fixed order
-`miui` then `c2`, reverted in reverse by `unvariant`).
+`miui` then `c2`, reverted in reverse by `unvariant`). `overclock` composes with
+everything and is applied before the media overlays:
+`VARIANT=folkpatch,overclock`, `VARIANT=ksu,overclock,miui,c2`.
 
 Build locally:
 ```bash
@@ -115,6 +118,56 @@ Sultan debloat architecture has been merged universally into the `onyx` base.
 are enabled in `arch/arm64/configs/begonia_user_defconfig`, and are enforced in `build.sh`
 `prepare_config()` across ALL targets (vanilla, apatch, folkpatch, ksu, miui, c2).
 No separate `sultan` variant exists because all editions now run Sultan debloat.
+
+### 2.6 `patches/overclock.patch` (performance set, composes with everything)
+
+**Kernel side:**
+- CPU OPP tables (`mtk_cpufreq_opp_table.h`, `mtk_cpufreq_opp_pv_table.h`):
+  little 2.15 GHz, big 2.30 GHz, CCI 1.5 GHz, 16 OPPs with OC voltages
+- `arch/arm64/boot/dts/mediatek/mt6785.dts`: L/B/CCI DVFS tables rebuilt
+- `mtk_unified_power_data_mt6785.h`: upower capacity/power tables rescaled
+- `mtk_gpufreq_core.[ch]`: 950 MHz top OPP + 105 mV, thermal/PBM/low-batt
+  limit APIs turned into no-ops
+- `ged_dvfs.c`: GPU DVFS thermal ceiling removed
+- `eem_v2`: `VMAX` = 0x7F (1.19375 V) so OC OPPs are not clipped
+- `ppm_v3/*`: DLPT, thermal, pwr_thro, user/hard-user limit, force-limit and
+  LCM-off policies disabled
+- `thermal/*`: trip points 118–130 °C, all coolers (`atm`, `dtm`, `gpu_cus`,
+  `vpu_cus`, `char_curr_cus`, `mutt`, `cam`, `backlight_cus`, `flashlight_cus`,
+  `shutdown`, `kshutdown`, `sysrst`) neutralized / no-op
+- `pbm_v4/mtk_pbm.c` + `power_throttling/mtk_md_power_throttling.c`: PBM budget
+  throttling (`DISABLE_PBM_FEATURE`) and MD low-battery/OC/percent throttling
+  disabled
+- `fpsgo_v3` + `eara_thermal`: frame-drop thermal paths and budget disabled
+- `charger_begonia/*`: charger thermal floors and input-current throttle
+  removed; USB SDP 500 mA cap intentionally kept
+- Runtime cap locks: `cpufreq.c` locks `scaling_max_freq` to
+  `policy->cpuinfo.max_freq` and blocks `powersave`/`conservative`/`userspace`
+  governors; `mtk_gpufreq_core.c` blocks lower-OPP/fixed-volt/stress-test
+  procfs overrides; `ppm_v3` (`ut`, `sys_boost`) blocks core/max-freq caps;
+  `gaming_mode.c` forces `EXTREME` profile (`kprofiles_mode_set`,
+  `pox_kprofile_custom_set`, brownout derates removed)
+- Droidspaces (4.14 backports + config): `arch/arm64/configs/droidspaces.config`
+  merged by `merge_config_fragments()`; kernel backports for `waitid(P_PIDFD)`,
+  `CLONE_PIDFD` `parent_tidptr`, `STATX_MNT_ID`, `STATX_ATTR_MOUNT_ROOT`,
+  `utimensat(AT_EMPTY_PATH)`, `faccessat2` (syscall 439, kept separate from
+  `sys_faccessat` so `ksu.patch` composes cleanly), and `RTM_GETNEXTHOP` /
+  `RTNLGRP_NEXTHOP` + SELinux `nlmsgtab` rows
+
+**Rules:**
+- Never apply this patch on top of `miui`/`c2` when regenerating; it must apply
+  to clean `onyx` and stack cleanly with the root and media patches.
+- Keep `sys_faccessat` unmodified and place `#include "mount.h"` in `fs/stat.c`
+  between `vfs_getattr_nosec` and `vfs_statx` so `ksu.patch` SUSFS hunks apply
+  before `overclock.patch` without context conflicts.
+- The five options the upstream Droidspaces list spells for newer kernels
+  (`NETFILTER_XT_TARGET_MASQUERADE`, `NF_CONNTRACK_NETLINK`,
+  `IP_NF_TARGET_ULOG`, `FW_LOADER_COMPRESS`, `ANDROID_PARANOID_NETWORK`) do not
+  exist in 4.14; the fragment documents their 4.14 equivalents.
+- Droidspaces non-GKI patch `02.fix_restore cgroup file prefix handling` is
+  folded in as the `kernel/cgroup/cgroup.c` hunk. Patch `01` (xt_qtaguid) does
+  not apply because this tree has no `net/netfilter/xt_qtaguid.c`.
+
 
 ---
 
@@ -324,6 +377,9 @@ added to `c2.patch`. This is a large change — see the commit history for conte
   (`VARIANT=ksu,miui,c2`). They touch disjoint files (WLAN/config vs vcodec) and
   are applied in a fixed order (`OVERLAY_ORDER` in `build.sh`) so token order
   does not matter.
+- `overclock` is a performance set that composes with every root and overlay.
+  It is applied after the root patch and before `OVERLAY_ORDER`, so its
+  `mt6785.dts`, thermal, PPM and charger hunks never meet a media overlay hunk.
 - Regenerate patches after any base change:
   ```bash
   git apply --check patches/<name>.patch

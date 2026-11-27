@@ -35,6 +35,37 @@ the manager package.
 | --- | --- | --- |
 | `miui` | `miui.patch` | WLAN/network hardening + `miui.config` fragment (MIUI/HyperOS) |
 | `c2` | `c2.patch` | MTK VDEC/VENC + VCU Codec2 media stack (full VCU + V4L2 port) |
+| `overclock` | `overclock.patch` | CPU/GPU/CCI overclock, every thermal/power/charging limit removed, Droidspaces container support |
+
+`overclock` is a performance set, not a root: it composes with every root and
+with the media overlays (`VARIANT=folkpatch,overclock`, `VARIANT=ksu,overclock,c2`).
+It is applied before the media overlays so the two never fight over a file.
+It also ships `arch/arm64/configs/droidspaces.config`, which `build.sh` merges
+into whichever defconfig the root selected.
+
+### `overclock` in detail
+
+| Area | Change |
+| --- | --- |
+| Little CPU | 2.15 GHz top OPP (was 2.0 GHz), 16 OPPs with OC voltages |
+| Big CPU | 2.30 GHz top OPP (was 2.0 GHz), 16 OPPs with OC voltages |
+| CCI | 1.5 GHz top OPP |
+| GPU | 950 MHz top OPP, 105 mV bump, dynamic power table updated |
+| CPU/GPU/CCI DVFS tables | `mt6785.dts` + upower tables rebuilt for the new OPPs |
+| EEM | `VMAX` raised to 0x7F (1.19375 V) so the OC OPPs are not clipped |
+| Thermal | CPU/LTE/GPU trip points raised to 118–130 °C, all coolers (`atm`, `dtm`, `gpu_cus`, `vpu_cus`, `char_curr_cus`, `mutt`, `cam`, `backlight_cus`, `flashlight_cus`, `shutdown`, `kshutdown`, `sysrst`) neutralized |
+| PBM / Power Throttling | PBM budget throttling (`DISABLE_PBM_FEATURE`) and MD battery-OC/low-volt/percent throttling disabled |
+| PPM | DLPT / thermal / pwr_thro / user / hard-user / force-limit / LCM-off policies disabled; `ut` / `sys_boost` max caps blocked |
+| FPSGO / EARA | thermal-aware frame-drop paths and thermal budget disabled |
+| GED | GPU DVFS thermal ceiling removed, gaming boost forced, procfs downclock/fixed-volt overrides blocked |
+| CPUFreq / `gaming_mode.c` | `scaling_max_freq` locked to `cpuinfo.max_freq`, `powersave`/`conservative`/`userspace` governors blocked, EXTREME profile locked, brownout derates removed |
+| Charging | charger thermal floors and input-current throttling removed (USB SDP 500 mA cap kept) |
+| Droidspaces | `droidspaces.config` fragment plus 4.14 backports (`waitid(P_PIDFD)`, `CLONE_PIDFD` `parent_tidptr`, `STATX_MNT_ID`, `STATX_ATTR_MOUNT_ROOT`, `utimensat(AT_EMPTY_PATH)`, `faccessat2`, `RTM_GETNEXTHOP` / `RTNLGRP_NEXTHOP` + SELinux rows) |
+
+The thermal risk is deliberate: the OPPs are valid silicon for MT6785, but the
+phone needs external cooling. Do not flash this build on a device that relies
+on its own thermal throttling.
+
 
 `c2` is the only set that carries the MT6785 VCU + V4L2 vcodec port. Without
 it the build uses the legacy vendor vcodec driver, which is what the
@@ -56,6 +87,8 @@ VARIANT=apatch ./build.sh all
 VARIANT=folkpatch,miui ./build.sh all
 VARIANT=ksu,c2 ./build.sh all
 VARIANT=ksu,miui,c2 ./build.sh all      # both overlays
+VARIANT=folkpatch,overclock ./build.sh all   # max performance + Droidspaces
+VARIANT=ksu,overclock,c2 ./build.sh all      # performance + Codec2
 ./build.sh unvariant                  # restore the clean onyx tree
 ```
 
@@ -79,6 +112,7 @@ configured.
 | `ksu.patch` | `.gitmodules` + `KernelSU` gitlink (BakaSU), `bakasu_defconfig`, `fs/nomount/*`, `fs/susfs.c`, `ksu-patches/ksu/*` | root drivers, applied before overlays |
 | `miui.patch` | WLAN drivers, `miui.config` | overlay |
 | `c2.patch` | MTK VCODEC/VCU, V4L2 uapi | overlay |
+| `overclock.patch` | CPU/GPU/CCI OPP + DVFS, thermal/PBM/PPM/charger/GED/FPSGO, runtime cap locks, Droidspaces 4.14 backports + `droidspaces.config` | performance set, composes with roots and overlays |
 
 ## Updating a patch
 
