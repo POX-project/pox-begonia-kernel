@@ -126,6 +126,9 @@ variant_patch_name() {
         *apatch*)                      printf 'apatch' ;;
         *miui*|*hyperos*)              printf 'miui' ;;
         *c2*|*codec2*)                 printf 'c2' ;;
+        # Performance patch set: CPU/GPU/CCI overclock, thermal and power
+        # limits removed, plus the Droidspaces container config fragment.
+        *overclock*|*droidspaces*)     printf 'overclock' ;;
         *) printf '%s' "$1" ;;
     esac
 }
@@ -380,6 +383,9 @@ resolve_variant() {
     if [[ "$branch" == *c2* || "$branch" == *codec2* ]]; then
         extra_desc="${extra_desc:+$extra_desc + }Codec2 Media"
     fi
+    if [[ "$branch" == *overclock* || "$branch" == *droidspaces* ]]; then
+        extra_desc="${extra_desc:+$extra_desc + }Overclock + Droidspaces"
+    fi
 
     DEFAULT_DEFCONFIG="$defconfig"
 
@@ -400,6 +406,7 @@ resolve_variant() {
     local edition="Onyx"
     [[ "$branch" == *c2* || "$branch" == *codec2* ]] && edition="${edition}-C2"
     [[ "$branch" == *miui* || "$branch" == *hyperos* ]] && edition="${edition}-MIUI"
+    [[ "$branch" == *overclock* || "$branch" == *droidspaces* ]] && edition="${edition}-OC"
 
     BRANCH_DESC="Zero Frame-Drop Gaming"
     [[ -n "$extra_desc" ]] && BRANCH_DESC="$BRANCH_DESC & $extra_desc"
@@ -457,6 +464,7 @@ kernel_variant_tag() {
         case "$token" in
             *miui*|*hyperos*) [[ "$tag" == *-MIUI ]] || tag="$tag-MIUI" ;;
             *c2*|*codec2*)    [[ "$tag" == *-C2 ]]   || tag="$tag-C2" ;;
+            *overclock*|*droidspaces*) [[ "$tag" == *-OC ]] || tag="$tag-OC" ;;
         esac
     done
     printf '%s' "$tag"
