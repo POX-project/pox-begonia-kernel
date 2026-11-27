@@ -1,0 +1,5287 @@
+diff --git a/arch/arm/tools/syscall.tbl b/arch/arm/tools/syscall.tbl
+index 56ad0d91c..78e907aad 100644
+--- a/arch/arm/tools/syscall.tbl
++++ b/arch/arm/tools/syscall.tbl
+@@ -415,4 +415,5 @@
+ 424	common	pidfd_send_signal	sys_pidfd_send_signal
+ 434	common	pidfd_open		sys_pidfd_open
+ 436	common	close_range		sys_close_range
++439	common	faccessat2		sys_faccessat2
+ 441	common	epoll_pwait2		sys_epoll_pwait2
+diff --git a/arch/arm64/boot/dts/mediatek/mt6785.dts b/arch/arm64/boot/dts/mediatek/mt6785.dts
+index 1f5b60b13..8f91c1975 100644
+--- a/arch/arm64/boot/dts/mediatek/mt6785.dts
++++ b/arch/arm64/boot/dts/mediatek/mt6785.dts
+@@ -1593,62 +1593,62 @@ page_owner=on quiet nodebugmon loop.max_part=7";
+ 		reg = <0 0x0011bc00 0 0x1400>,
+ 		      <0 0x0011bc00 0 0x1400>;
+ 		state = <1>;
+-		imax_state = <2>;
++		imax_state = <0>;
+ 		change_flag = <0>;
+ 		little-rise-time = <1000>;
+ 		little-down-time = <750>;
+ 		big-rise-time = <1000>;
+ 		big-down-time = <750>;
+-		L-table = <2000 96 1 1
+-			   1933 92 1 1
+-			   1866	88 1 1
+-			   1800 83 1 1
+-			   1733 80 1 1
+-			   1666 75 1 1
+-			   1548 71 1 1
+-			   1475 66 2 1
+-			   1375 64 2 1
+-			   1275 58 2 1
+-			   1175 54 2 1
+-			   1075 49 2 1
+-			    999 46 2 1
+-			    925 43 2 1
+-			    850 40 2 1
+-			    774 38 2 1 >;
+-
+-		B-table = <2200 100 1 1
+-			   2133 96 1 1
+-			   2066	92 1 1
+-			   2000 88 1 1
+-			   1933 84 1 1
+-			   1866 80 1 1
+-			   1800 75 1 1
+-			   1651 70 1 1
+-			   1503 64 1 1
+-			   1414 61 2 1
+-			   1295 57 2 1
+-			   1176 53 2 1
+-			   1087 49 2 1
+-			    998 46 2 1
+-			    909 43 2 1
+-			    850 40 2 1 >;
+-
+-		CCI-table = <1400 96 2 1
+-			     1353 92 2 1
+-			     1306 88 2 1
+-			     1260 84 2 1
+-			     1190 78 2 1
+-			     1155 75 2 1
+-			     1120 71 2 1
+-			      984 64 2 1
+-			      917 62 2 1
+-			      827 58 2 1
+-			      737 54 2 2
+-			      669 51 2 2
+-			      579 47 2 2
+-			      512 44 2 2
+-			      445 41 2 2
+-			      400 38 2 2 >;
++		L-table = <2150 118 1 1
++			   2080 111 1 1
++			   2000 101 1 1
++			   1933 97 1 1
++			   1866 93 1 1
++			   1800 88 1 1
++			   1733 84 1 1
++			   1666 80 2 1
++			   1560 73 2 1
++			   1440 68 2 1
++			   1275 64 2 1
++			   1175 60 2 1
++			   1075 56 2 1
++			    975 52 2 1
++			    774 44 4 1
++			    500 32 4 1 >;
++
++		B-table = <2300 127 1 1
++			   2250 124 1 1
++			   2200 121 1 1
++			   2133 118 1 1
++			   2050 115 1 1
++			   1986 111 1 1
++			   1923 106 1 1
++			   1860 102 1 1
++			   1796 98 1 1
++			   1670 89 1 1
++			   1530 82 2 1
++			   1419 76 2 1
++			   1308 71 2 1
++			   1169 64 2 1
++			   1002 55 2 1
++			    774 44 4 1 >;
++
++		CCI-table = <1500 113 2 1
++			     1450 107 2 1
++			     1400 101 2 1
++			     1330 95 2 1
++			     1260 88 2 1
++			     1190 81 2 1
++			     1120 74 2 1
++			     1050 71 2 1
++			      980 67 2 1
++			      927 64 2 1
++			      875 61 2 1
++			      822 59 2 1
++			      752 55 2 1
++			      682 51 4 1
++			      560 44 4 1
++			      500 32 4 1 >;
+ 
+ 	};
+ 
+diff --git a/arch/arm64/configs/droidspaces.config b/arch/arm64/configs/droidspaces.config
+new file mode 100644
+index 000000000..01760a7fc
+--- /dev/null
++++ b/arch/arm64/configs/droidspaces.config
+@@ -0,0 +1,163 @@
++# Kernel configurations for full DroidSpaces container support (Linux 4.14 Non-GKI)
++# Includes all MUST, RECOMMENDED, and OPTIONAL features (Docker, systemd, NAT/NAT66, macvlan, UFW/Fail2Ban)
++
++# IPC mechanisms
++CONFIG_SYSCTL=y
++CONFIG_SYSVIPC=y
++CONFIG_POSIX_MQUEUE=y
++
++# Core namespaces & sandboxing
++CONFIG_NAMESPACES=y
++CONFIG_PID_NS=y
++CONFIG_UTS_NS=y
++CONFIG_IPC_NS=y
++CONFIG_USER_NS=y
++CONFIG_NET_NS=y
++
++# Seccomp support
++CONFIG_SECCOMP=y
++CONFIG_SECCOMP_FILTER=y
++
++# Control groups & resource limits (--memory, --cpus, --pids-limit, CPU accounting)
++CONFIG_CGROUPS=y
++CONFIG_CGROUP_DEVICE=y
++CONFIG_CGROUP_SCHED=y
++CONFIG_FAIR_GROUP_SCHED=y
++CONFIG_CFS_BANDWIDTH=y
++CONFIG_CGROUP_FREEZER=y
++CONFIG_CGROUP_PIDS=y
++CONFIG_CGROUP_CPUACCT=y
++CONFIG_CGROUP_PERF=y
++CONFIG_CGROUP_NET_PRIO=y
++CONFIG_CGROUP_NET_CLASSID=y
++CONFIG_NET_CLS_CGROUP=y
++CONFIG_CPUSETS=y
++CONFIG_PROC_PID_CPUSET=y
++CONFIG_MEMCG=y
++CONFIG_MEMCG_SWAP=y
++CONFIG_MEMCG_SWAP_ENABLED=y
++CONFIG_BLK_CGROUP=y
++CONFIG_BLK_DEV_THROTTLING=y
++
++# Devices, filesystems & container storage
++CONFIG_DEVTMPFS=y
++CONFIG_DEVTMPFS_MOUNT=y
++CONFIG_SHMEM=y
++CONFIG_TMPFS=y
++CONFIG_TMPFS_POSIX_ACL=y
++CONFIG_TMPFS_XATTR=y
++CONFIG_OVERLAY_FS=y
++CONFIG_OVERLAY_FS_REDIRECT_DIR=y
++CONFIG_OVERLAY_FS_INDEX=y
++CONFIG_FUSE_FS=y
++CONFIG_BLK_DEV_LOOP=y
++CONFIG_EXT4_FS=y
++CONFIG_EXT4_FS_POSIX_ACL=y
++CONFIG_EXT4_FS_SECURITY=y
++CONFIG_UNIX98_PTYS=y
++
++# Firmware loading support
++CONFIG_FW_LOADER=y
++CONFIG_FW_LOADER_USER_HELPER=y
++
++# Container networking: NAT / NAT66 / Macvlan / Bridge / VPN (TUN)
++CONFIG_VETH=y
++CONFIG_TUN=y
++CONFIG_BRIDGE=y
++CONFIG_BRIDGE_NETFILTER=y
++CONFIG_BRIDGE_NF_EBTABLES=y
++CONFIG_MACVLAN=y
++CONFIG_IP_ADVANCED_ROUTER=y
++CONFIG_IP_MULTIPLE_TABLES=y
++CONFIG_IPV6=y
++CONFIG_IPV6_MULTIPLE_TABLES=y
++
++# Netfilter / iptables / nftables core & NAT/NAT66
++CONFIG_NETFILTER=y
++CONFIG_NETFILTER_ADVANCED=y
++CONFIG_NETFILTER_NETLINK=y
++CONFIG_NETFILTER_NETLINK_ACCT=y
++CONFIG_NETFILTER_NETLINK_QUEUE=y
++CONFIG_NETFILTER_NETLINK_LOG=y
++CONFIG_NF_CONNTRACK=y
++CONFIG_NF_CONNTRACK_IPV4=y
++CONFIG_NF_CONNTRACK_IPV6=y
++CONFIG_NF_CT_NETLINK=y
++CONFIG_NF_NAT=y
++CONFIG_NF_NAT_IPV4=y
++CONFIG_NF_NAT_IPV6=y
++CONFIG_NF_NAT_NEEDED=y
++CONFIG_NF_NAT_REDIRECT=y
++CONFIG_NETFILTER_XTABLES=y
++CONFIG_NETFILTER_XT_NAT=y
++CONFIG_NETFILTER_XT_TARGET_NETMAP=y
++CONFIG_NETFILTER_XT_TARGET_REDIRECT=y
++CONFIG_NETFILTER_XT_TARGET_TCPMSS=y
++CONFIG_NETFILTER_XT_TARGET_LOG=y
++CONFIG_NETFILTER_XT_TARGET_NFLOG=y
++CONFIG_NETFILTER_XT_TARGET_MARK=y
++CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
++CONFIG_NETFILTER_XT_MATCH_COMMENT=y
++CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y
++CONFIG_NETFILTER_XT_MATCH_STATE=y
++CONFIG_NETFILTER_XT_MATCH_STATISTIC=y
++CONFIG_NETFILTER_XT_MATCH_MULTIPORT=y
++CONFIG_NETFILTER_XT_MATCH_HL=y
++CONFIG_NETFILTER_XT_MATCH_RECENT=y
++CONFIG_NETFILTER_XT_MATCH_LIMIT=y
++CONFIG_NETFILTER_XT_MATCH_HASHLIMIT=y
++CONFIG_NETFILTER_XT_MATCH_OWNER=y
++CONFIG_NETFILTER_XT_MATCH_PKTTYPE=y
++CONFIG_NETFILTER_XT_MATCH_MARK=y
++
++# iptables IPv4 & IPv6
++CONFIG_IP_NF_IPTABLES=y
++CONFIG_IP_NF_FILTER=y
++CONFIG_IP_NF_MANGLE=y
++CONFIG_IP_NF_RAW=y
++CONFIG_IP_NF_NAT=y
++CONFIG_IP_NF_TARGET_MASQUERADE=y
++CONFIG_IP_NF_TARGET_REJECT=y
++CONFIG_IP6_NF_IPTABLES=y
++CONFIG_IP6_NF_FILTER=y
++CONFIG_IP6_NF_MANGLE=y
++CONFIG_IP6_NF_RAW=y
++CONFIG_IP6_NF_NAT=y
++CONFIG_IP6_NF_TARGET_MASQUERADE=y
++CONFIG_IP6_NF_TARGET_REJECT=y
++
++# nftables
++CONFIG_NF_TABLES=y
++CONFIG_NF_TABLES_INET=y
++CONFIG_NF_TABLES_IPV4=y
++CONFIG_NF_TABLES_IPV6=y
++CONFIG_NF_TABLES_NETDEV=y
++CONFIG_NFT_CT=y
++CONFIG_NFT_NAT=y
++CONFIG_NFT_MASQ=y
++CONFIG_NFT_MASQ_IPV4=y
++CONFIG_NFT_MASQ_IPV6=y
++CONFIG_NFT_CHAIN_NAT_IPV4=y
++CONFIG_NFT_CHAIN_NAT_IPV6=y
++CONFIG_NFT_COUNTER=y
++CONFIG_NFT_LOG=y
++CONFIG_NFT_LIMIT=y
++CONFIG_NFT_REJECT=y
++CONFIG_NFT_REJECT_IPV4=y
++CONFIG_NFT_REJECT_IPV6=y
++
++# IPSet (Fail2Ban)
++CONFIG_IP_SET=y
++CONFIG_IP_SET_HASH_IP=y
++CONFIG_IP_SET_HASH_NET=y
++CONFIG_NETFILTER_XT_SET=y
++
++# Linux 4.14 name mapping for the options the upstream list spells for newer
++# kernels. The 4.14 tree has no symbol for the names on the left, so the
++# equivalents below are what actually get built:
++#   NETFILTER_XT_TARGET_MASQUERADE -> IP_NF_TARGET_MASQUERADE + NETFILTER_XT_NAT
++#   NF_CONNTRACK_NETLINK           -> NF_CT_NETLINK
++#   IP_NF_TARGET_ULOG              -> NETFILTER_XT_TARGET_NFLOG (ipt_ULOG removed)
++#   FW_LOADER_COMPRESS             -> not available before 4.15
++#   ANDROID_PARANOID_NETWORK       -> symbol absent, so no per-UID netfilter
++#                                     restriction: containers get internet.
+diff --git a/arch/arm64/include/asm/unistd32.h b/arch/arm64/include/asm/unistd32.h
+index b07d96ea7..8b4c29e20 100644
+--- a/arch/arm64/include/asm/unistd32.h
++++ b/arch/arm64/include/asm/unistd32.h
+@@ -823,6 +823,8 @@ __SYSCALL(__NR_pidfd_send_signal, sys_pidfd_send_signal)
+ __SYSCALL(__NR_pidfd_open, sys_pidfd_open)
+ #define __NR_close_range 436
+ __SYSCALL(__NR_close_range, sys_close_range)
++#define __NR_faccessat2 439
++__SYSCALL(__NR_faccessat2, sys_faccessat2)
+ #define __NR_epoll_pwait2 441
+ __SYSCALL(__NR_epoll_pwait2, compat_sys_epoll_pwait2)
+ 
+diff --git a/arch/x86/entry/syscalls/syscall_32.tbl b/arch/x86/entry/syscalls/syscall_32.tbl
+index 950cc82f6..68bc53bc8 100644
+--- a/arch/x86/entry/syscalls/syscall_32.tbl
++++ b/arch/x86/entry/syscalls/syscall_32.tbl
+@@ -394,4 +394,5 @@
+ 424	i386	pidfd_send_signal	sys_pidfd_send_signal
+ 434	i386	pidfd_open		sys_pidfd_open
+ 436	i386	close_range		sys_close_range
++439	i386	faccessat2		sys_faccessat2
+ 441	i386	epoll_pwait2		sys_epoll_pwait2		__ia32_sys_epoll_pwait2
+diff --git a/arch/x86/entry/syscalls/syscall_64.tbl b/arch/x86/entry/syscalls/syscall_64.tbl
+index 3afb15056..6c702f253 100644
+--- a/arch/x86/entry/syscalls/syscall_64.tbl
++++ b/arch/x86/entry/syscalls/syscall_64.tbl
+@@ -342,6 +342,7 @@
+ 424	common	pidfd_send_signal	sys_pidfd_send_signal
+ 434	common	pidfd_open		sys_pidfd_open
+ 436	common	close_range		sys_close_range
++439	common	faccessat2		sys_faccessat2
+ 441	common	epoll_pwait2		sys_epoll_pwait2
+ 
+ #
+diff --git a/drivers/cpufreq/cpufreq.c b/drivers/cpufreq/cpufreq.c
+index bb3b75818..3175918ce 100644
+--- a/drivers/cpufreq/cpufreq.c
++++ b/drivers/cpufreq/cpufreq.c
+@@ -716,7 +716,24 @@ static ssize_t store_##file_name					\
+ }
+ 
+ store_one(scaling_min_freq, min);
+-store_one(scaling_max_freq, max);
++
++static ssize_t store_scaling_max_freq
++(struct cpufreq_policy *policy, const char *buf, size_t count)
++{
++	int ret;
++	struct cpufreq_policy new_policy;
++
++	memcpy(&new_policy, policy, sizeof(*policy));
++	new_policy.min = policy->user_policy.min;
++	/* OC build: keep max ceiling locked at hardware OC maximum */
++	new_policy.max = policy->cpuinfo.max_freq;
++
++	ret = cpufreq_set_policy(policy, &new_policy);
++	if (!ret)
++		policy->user_policy.max = policy->cpuinfo.max_freq;
++
++	return ret ? ret : count;
++}
+ 
+ /**
+  * show_cpuinfo_cur_freq - current CPU frequency as detected by hardware
+@@ -763,6 +780,11 @@ static ssize_t store_scaling_governor(struct cpufreq_policy *policy,
+ 	if (ret != 1)
+ 		return -EINVAL;
+ 
++	if (strcmp(str_governor, "powersave") == 0 ||
++	    strcmp(str_governor, "conservative") == 0 ||
++	    strcmp(str_governor, "userspace") == 0)
++		return -EPERM;
++
+ 	if (cpufreq_parse_governor(str_governor, &new_policy.policy,
+ 						&new_policy.governor))
+ 		return -EINVAL;
+@@ -2223,12 +2245,11 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
+ 
+ 	memcpy(&new_policy->cpuinfo, &policy->cpuinfo, sizeof(policy->cpuinfo));
+ 
+-	/*
+-	* This check works well when we store new min/max freq attributes,
+-	* because new_policy is a copy of policy with one field updated.
+-	*/
++	/* Keep scaling_max_freq locked to the hardware max OPP */
++	new_policy->max = policy->cpuinfo.max_freq;
++	policy->user_policy.max = policy->cpuinfo.max_freq;
+ 	if (new_policy->min > new_policy->max)
+-		return -EINVAL;
++		new_policy->min = new_policy->max;
+ 
+ 	/* verify the cpu speed can be set within this limit */
+ 	ret = cpufreq_driver->verify(new_policy);
+@@ -2243,6 +2264,11 @@ static int cpufreq_set_policy(struct cpufreq_policy *policy,
+ 	blocking_notifier_call_chain(&cpufreq_policy_notifier_list,
+ 			CPUFREQ_THERMAL, new_policy);
+ 
++	/* Re-assert hardware max after policy/thermal notifier chain */
++	new_policy->max = policy->cpuinfo.max_freq;
++	if (new_policy->min > new_policy->max)
++		new_policy->min = new_policy->max;
++
+ 	/*
+ 	 * verify the cpu speed can be set within this limit, which might be
+ 	 * different to the first one
+diff --git a/drivers/misc/mediatek/base/power/cm_mgr_v1/mt6785/mtk_cm_mgr_platform.c b/drivers/misc/mediatek/base/power/cm_mgr_v1/mt6785/mtk_cm_mgr_platform.c
+index 45b5aa0d2..91a3229f7 100644
+--- a/drivers/misc/mediatek/base/power/cm_mgr_v1/mt6785/mtk_cm_mgr_platform.c
++++ b/drivers/misc/mediatek/base/power/cm_mgr_v1/mt6785/mtk_cm_mgr_platform.c
+@@ -895,6 +895,12 @@ int cm_mgr_get_bw(void)
+ #ifdef USE_CPU_TO_DRAM_MAP
+ static int cm_mgr_cpu_opp_to_dram[CM_MGR_CPU_OPP_SIZE] = {
+ /* start from cpu opp 0 */
++	0,
++	0,
++	0,
++	0,
++	0,
++	0,
+ 	0,
+ 	0,
+ 	0,
+@@ -903,12 +909,6 @@ static int cm_mgr_cpu_opp_to_dram[CM_MGR_CPU_OPP_SIZE] = {
+ 	1,
+ 	1,
+ 	1,
+-	1,
+-	2,
+-	2,
+-	2,
+-	2,
+-	2,
+ 	2,
+ 	2,
+ };
+diff --git a/drivers/misc/mediatek/base/power/cpufreq_v1/src/mach/mt6785/mtk_cpufreq_opp_pv_table.h b/drivers/misc/mediatek/base/power/cpufreq_v1/src/mach/mt6785/mtk_cpufreq_opp_pv_table.h
+index 5e17cf3ca..a9e48d4c4 100644
+--- a/drivers/misc/mediatek/base/power/cpufreq_v1/src/mach/mt6785/mtk_cpufreq_opp_pv_table.h
++++ b/drivers/misc/mediatek/base/power/cpufreq_v1/src/mach/mt6785/mtk_cpufreq_opp_pv_table.h
+@@ -20,51 +20,52 @@
+ static unsigned int FY_6785Tbl[NR_FREQ * NR_MT_CPU_DVFS][ARRAY_COL_SIZE] = {
+ 	/* Freq, Vproc, post_div, clk_div */
+ 	/* LL */
++	{ 2150, 118, 1, 1 },
++	{ 2080, 111, 1, 1 },
+ 	{ 2000, 101, 1, 1 },
+ 	{ 1933, 97, 1, 1 },
+ 	{ 1866, 93, 1, 1 },
+ 	{ 1800, 88, 1, 1 },
+ 	{ 1733, 84, 1, 1 },
+ 	{ 1666, 80, 2, 1 },
+-	{ 1618, 76, 2, 1 },
+-	{ 1500, 73, 2, 1 },
+-	{ 1375, 68, 2, 1 },
++	{ 1560, 73, 2, 1 },
++	{ 1440, 68, 2, 1 },
+ 	{ 1275, 64, 2, 1 },
+ 	{ 1175, 60, 2, 1 },
+ 	{ 1075, 56, 2, 1 },
+ 	{ 975, 52, 2, 1 },
+-	{ 875, 48, 2, 1 },
+ 	{ 774, 44, 4, 1 },
+ 	{ 500, 32, 4, 1 },
+ 
+ 
+ 
+ 	/* L */
+-	{ 2002, 112, 1, 1 },
+-	{ 1955, 109, 1, 1 },
+-	{ 1907, 105, 1, 1 },
++	{ 2300, 127, 1, 1 },
++	{ 2250, 124, 1, 1 },
++	{ 2200, 121, 1, 1 },
++	{ 2133, 118, 1, 1 },
++	{ 2050, 115, 1, 1 },
++	{ 1986, 111, 1, 1 },
++	{ 1923, 106, 1, 1 },
+ 	{ 1860, 102, 1, 1 },
+ 	{ 1796, 98, 1, 1 },
+-	{ 1733, 93, 1, 1 },
+ 	{ 1670, 89, 1, 1 },
+ 	{ 1530, 82, 2, 1 },
+ 	{ 1419, 76, 2, 1 },
+ 	{ 1308, 71, 2, 1 },
+ 	{ 1169, 64, 2, 1 },
+-	{ 1085, 60, 2, 1 },
+ 	{ 1002, 55, 2, 1 },
+-	{ 919, 51, 2, 1 },
+-	{ 835, 47, 2, 1 },
+ 	{ 774, 44, 4, 1 },
+ 
+ 
+ 
+ 	/* CCI */
++	{ 1500, 113, 2, 1 },
++	{ 1450, 107, 2, 1 },
+ 	{ 1400, 101, 2, 1 },
+ 	{ 1330, 95, 2, 1 },
+ 	{ 1260, 88, 2, 1 },
+ 	{ 1190, 81, 2, 1 },
+-	{ 1155, 78, 2, 1 },
+ 	{ 1120, 74, 2, 1 },
+ 	{ 1050, 71, 2, 1 },
+ 	{ 980, 67, 2, 1 },
+@@ -73,7 +74,6 @@ static unsigned int FY_6785Tbl[NR_FREQ * NR_MT_CPU_DVFS][ARRAY_COL_SIZE] = {
+ 	{ 822, 59, 2, 1 },
+ 	{ 752, 55, 2, 1 },
+ 	{ 682, 51, 4, 1 },
+-	{ 612, 47, 4, 1 },
+ 	{ 560, 44, 4, 1 },
+ 	{ 500, 32, 4, 1 },
+ 
+@@ -82,51 +82,52 @@ static unsigned int FY_6785Tbl[NR_FREQ * NR_MT_CPU_DVFS][ARRAY_COL_SIZE] = {
+ static unsigned int FY_6785TTbl[NR_FREQ * NR_MT_CPU_DVFS][ARRAY_COL_SIZE] = {
+ 	/* Freq, Vproc, post_div, clk_div */
+ 	/* LL */
++	{ 2150, 118, 1, 1 },
++	{ 2080, 111, 1, 1 },
+ 	{ 2000, 101, 1, 1 },
+ 	{ 1933, 97, 1, 1 },
+ 	{ 1866, 93, 1, 1 },
+ 	{ 1800, 88, 1, 1 },
+ 	{ 1733, 84, 1, 1 },
+ 	{ 1666, 80, 2, 1 },
+-	{ 1618, 76, 2, 1 },
+-	{ 1500, 73, 2, 1 },
+-	{ 1375, 68, 2, 1 },
++	{ 1560, 73, 2, 1 },
++	{ 1440, 68, 2, 1 },
+ 	{ 1275, 64, 2, 1 },
+ 	{ 1175, 60, 2, 1 },
+ 	{ 1075, 56, 2, 1 },
+ 	{ 975, 52, 2, 1 },
+-	{ 875, 48, 2, 1 },
+ 	{ 774, 44, 4, 1 },
+ 	{ 500, 32, 4, 1 },
+ 
+ 
+ 
+ 	/* L */
++	{ 2300, 127, 1, 1 },
++	{ 2250, 124, 1, 1 },
++	{ 2200, 121, 1, 1 },
++	{ 2133, 118, 1, 1 },
+ 	{ 2050, 115, 1, 1 },
+ 	{ 1986, 111, 1, 1 },
+ 	{ 1923, 106, 1, 1 },
+ 	{ 1860, 102, 1, 1 },
+ 	{ 1796, 98, 1, 1 },
+-	{ 1733, 93, 1, 1 },
+ 	{ 1670, 89, 1, 1 },
+ 	{ 1530, 82, 2, 1 },
+ 	{ 1419, 76, 2, 1 },
+ 	{ 1308, 71, 2, 1 },
+ 	{ 1169, 64, 2, 1 },
+-	{ 1085, 60, 2, 1 },
+ 	{ 1002, 55, 2, 1 },
+-	{ 919, 51, 2, 1 },
+-	{ 835, 47, 2, 1 },
+ 	{ 774, 44, 4, 1 },
+ 
+ 
+ 
+ 	/* CCI */
++	{ 1500, 113, 2, 1 },
++	{ 1450, 107, 2, 1 },
+ 	{ 1400, 101, 2, 1 },
+ 	{ 1330, 95, 2, 1 },
+ 	{ 1260, 88, 2, 1 },
+ 	{ 1190, 81, 2, 1 },
+-	{ 1155, 78, 2, 1 },
+ 	{ 1120, 74, 2, 1 },
+ 	{ 1050, 71, 2, 1 },
+ 	{ 980, 67, 2, 1 },
+@@ -135,7 +136,6 @@ static unsigned int FY_6785TTbl[NR_FREQ * NR_MT_CPU_DVFS][ARRAY_COL_SIZE] = {
+ 	{ 822, 59, 2, 1 },
+ 	{ 752, 55, 2, 1 },
+ 	{ 682, 51, 4, 1 },
+-	{ 612, 47, 4, 1 },
+ 	{ 560, 44, 4, 1 },
+ 	{ 500, 32, 4, 1 },
+ 
+diff --git a/drivers/misc/mediatek/base/power/cpufreq_v1/src/mach/mt6785/mtk_cpufreq_opp_table.h b/drivers/misc/mediatek/base/power/cpufreq_v1/src/mach/mt6785/mtk_cpufreq_opp_table.h
+index e31d0f517..35e18c14c 100644
+--- a/drivers/misc/mediatek/base/power/cpufreq_v1/src/mach/mt6785/mtk_cpufreq_opp_table.h
++++ b/drivers/misc/mediatek/base/power/cpufreq_v1/src/mach/mt6785/mtk_cpufreq_opp_table.h
+@@ -16,221 +16,221 @@
+ 
+ /* 6785 */
+ /* for DVFS OPP table L */
+-#define CPU_DVFS_FREQ0_LL_6785          2000000         /* KHz */
+-#define CPU_DVFS_FREQ1_LL_6785          1933000         /* KHz */
+-#define CPU_DVFS_FREQ2_LL_6785		1866000		/* KHz */
+-#define CPU_DVFS_FREQ3_LL_6785		1800000		/* KHz */
+-#define CPU_DVFS_FREQ4_LL_6785		1733000		/* KHz */
+-#define CPU_DVFS_FREQ5_LL_6785		1666000		/* KHz */
+-#define CPU_DVFS_FREQ6_LL_6785		1618000		/* KHz */
+-#define CPU_DVFS_FREQ7_LL_6785		1500000		/* KHz */
+-#define CPU_DVFS_FREQ8_LL_6785		1375000		/* KHz */
+-#define CPU_DVFS_FREQ9_LL_6785		1275000		/* KHz */
+-#define CPU_DVFS_FREQ10_LL_6785		1175000		/* KHz */
+-#define CPU_DVFS_FREQ11_LL_6785		1075000		/* KHz */
+-#define CPU_DVFS_FREQ12_LL_6785		975000		/* KHz */
+-#define CPU_DVFS_FREQ13_LL_6785		875000		/* KHz */
++#define CPU_DVFS_FREQ0_LL_6785          2150000         /* KHz */
++#define CPU_DVFS_FREQ1_LL_6785          2080000         /* KHz */
++#define CPU_DVFS_FREQ2_LL_6785		2000000		/* KHz */
++#define CPU_DVFS_FREQ3_LL_6785		1933000		/* KHz */
++#define CPU_DVFS_FREQ4_LL_6785		1866000		/* KHz */
++#define CPU_DVFS_FREQ5_LL_6785		1800000		/* KHz */
++#define CPU_DVFS_FREQ6_LL_6785		1733000		/* KHz */
++#define CPU_DVFS_FREQ7_LL_6785		1666000		/* KHz */
++#define CPU_DVFS_FREQ8_LL_6785		1560000		/* KHz */
++#define CPU_DVFS_FREQ9_LL_6785		1440000		/* KHz */
++#define CPU_DVFS_FREQ10_LL_6785		1275000		/* KHz */
++#define CPU_DVFS_FREQ11_LL_6785		1175000		/* KHz */
++#define CPU_DVFS_FREQ12_LL_6785		1075000		/* KHz */
++#define CPU_DVFS_FREQ13_LL_6785		975000		/* KHz */
+ #define CPU_DVFS_FREQ14_LL_6785		774000		/* KHz */
+ #define CPU_DVFS_FREQ15_LL_6785		500000		/* KHz */
+ 
+ /* for DVFS OPP table B */
+-#define CPU_DVFS_FREQ0_L_6785		2002000		/* KHz */
+-#define CPU_DVFS_FREQ1_L_6785		1955000		/* KHz */
+-#define CPU_DVFS_FREQ2_L_6785		1907000		/* KHz */
+-#define CPU_DVFS_FREQ3_L_6785		1860000		/* KHz */
+-#define CPU_DVFS_FREQ4_L_6785		1796000		/* KHz */
+-#define CPU_DVFS_FREQ5_L_6785		1733000		/* KHz */
+-#define CPU_DVFS_FREQ6_L_6785		1670000		/* KHz */
+-#define CPU_DVFS_FREQ7_L_6785		1530000		/* KHz */
+-#define CPU_DVFS_FREQ8_L_6785		1419000		/* KHz */
+-#define CPU_DVFS_FREQ9_L_6785		1308000		/* KHz */
+-#define CPU_DVFS_FREQ10_L_6785		1169000		/* KHz */
+-#define CPU_DVFS_FREQ11_L_6785		1085000		/* KHz */
+-#define CPU_DVFS_FREQ12_L_6785		1002000		/* KHz */
+-#define CPU_DVFS_FREQ13_L_6785		919000		/* KHz */
+-#define CPU_DVFS_FREQ14_L_6785		835000		/* KHz */
++#define CPU_DVFS_FREQ0_L_6785		2300000		/* KHz */
++#define CPU_DVFS_FREQ1_L_6785		2250000		/* KHz */
++#define CPU_DVFS_FREQ2_L_6785		2200000		/* KHz */
++#define CPU_DVFS_FREQ3_L_6785		2133000		/* KHz */
++#define CPU_DVFS_FREQ4_L_6785		2050000		/* KHz */
++#define CPU_DVFS_FREQ5_L_6785		1986000		/* KHz */
++#define CPU_DVFS_FREQ6_L_6785		1923000		/* KHz */
++#define CPU_DVFS_FREQ7_L_6785		1860000		/* KHz */
++#define CPU_DVFS_FREQ8_L_6785		1796000		/* KHz */
++#define CPU_DVFS_FREQ9_L_6785		1670000		/* KHz */
++#define CPU_DVFS_FREQ10_L_6785		1530000		/* KHz */
++#define CPU_DVFS_FREQ11_L_6785		1419000		/* KHz */
++#define CPU_DVFS_FREQ12_L_6785		1308000		/* KHz */
++#define CPU_DVFS_FREQ13_L_6785		1169000		/* KHz */
++#define CPU_DVFS_FREQ14_L_6785		1002000		/* KHz */
+ #define CPU_DVFS_FREQ15_L_6785		774000		/* KHz */
+ 
+ /* for DVFS OPP table CCI */
+-#define CPU_DVFS_FREQ0_CCI_6785		1400000		/* KHz */
+-#define CPU_DVFS_FREQ1_CCI_6785		1330000		/* KHz */
+-#define CPU_DVFS_FREQ2_CCI_6785		1260000		/* KHz */
+-#define CPU_DVFS_FREQ3_CCI_6785		1190000		/* KHz */
+-#define CPU_DVFS_FREQ4_CCI_6785		1155000		/* KHz */
+-#define CPU_DVFS_FREQ5_CCI_6785		1120000		/* KHz */
+-#define CPU_DVFS_FREQ6_CCI_6785		1050000		/* KHz */
+-#define CPU_DVFS_FREQ7_CCI_6785		980000		/* KHz */
+-#define CPU_DVFS_FREQ8_CCI_6785		927000		/* KHz */
+-#define CPU_DVFS_FREQ9_CCI_6785		875000		/* KHz */
+-#define CPU_DVFS_FREQ10_CCI_6785	822000		/* KHz */
+-#define CPU_DVFS_FREQ11_CCI_6785	752000		/* KHz */
+-#define CPU_DVFS_FREQ12_CCI_6785	682000		/* KHz */
+-#define CPU_DVFS_FREQ13_CCI_6785	612000		/* KHz */
++#define CPU_DVFS_FREQ0_CCI_6785		1500000		/* KHz */
++#define CPU_DVFS_FREQ1_CCI_6785		1450000		/* KHz */
++#define CPU_DVFS_FREQ2_CCI_6785		1400000		/* KHz */
++#define CPU_DVFS_FREQ3_CCI_6785		1330000		/* KHz */
++#define CPU_DVFS_FREQ4_CCI_6785		1260000		/* KHz */
++#define CPU_DVFS_FREQ5_CCI_6785		1190000		/* KHz */
++#define CPU_DVFS_FREQ6_CCI_6785		1120000		/* KHz */
++#define CPU_DVFS_FREQ7_CCI_6785		1050000		/* KHz */
++#define CPU_DVFS_FREQ8_CCI_6785		980000		/* KHz */
++#define CPU_DVFS_FREQ9_CCI_6785		927000		/* KHz */
++#define CPU_DVFS_FREQ10_CCI_6785	875000		/* KHz */
++#define CPU_DVFS_FREQ11_CCI_6785	822000		/* KHz */
++#define CPU_DVFS_FREQ12_CCI_6785	752000		/* KHz */
++#define CPU_DVFS_FREQ13_CCI_6785	682000		/* KHz */
+ #define CPU_DVFS_FREQ14_CCI_6785	560000		/* KHz */
+ #define CPU_DVFS_FREQ15_CCI_6785	500000		/* KHz */
+ 
+ /* for DVFS OPP table L */
+-#define CPU_DVFS_VOLT0_VPROC1_6785	103125		/* 10uV */
+-#define CPU_DVFS_VOLT1_VPROC1_6785	100625		/* 10uV */
+-#define CPU_DVFS_VOLT2_VPROC1_6785	 98125		/* 10uV */
+-#define CPU_DVFS_VOLT3_VPROC1_6785	 95000		/* 10uV */
+-#define CPU_DVFS_VOLT4_VPROC1_6785	 92500		/* 10uV */
+-#define CPU_DVFS_VOLT5_VPROC1_6785	 90000		/* 10uV */
+-#define CPU_DVFS_VOLT6_VPROC1_6785	 87500		/* 10uV */
+-#define CPU_DVFS_VOLT7_VPROC1_6785	 85625		/* 10uV */
+-#define CPU_DVFS_VOLT8_VPROC1_6785	 82500		/* 10uV */
+-#define CPU_DVFS_VOLT9_VPROC1_6785	 80000		/* 10uV */
+-#define CPU_DVFS_VOLT10_VPROC1_6785	 77500		/* 10uV */
+-#define CPU_DVFS_VOLT11_VPROC1_6785	 75000		/* 10uV */
+-#define CPU_DVFS_VOLT12_VPROC1_6785	 72500		/* 10uV */
+-#define CPU_DVFS_VOLT13_VPROC1_6785	 70000		/* 10uV */
++#define CPU_DVFS_VOLT0_VPROC1_6785	113750		/* 10uV */
++#define CPU_DVFS_VOLT1_VPROC1_6785	109375		/* 10uV */
++#define CPU_DVFS_VOLT2_VPROC1_6785	103125		/* 10uV */
++#define CPU_DVFS_VOLT3_VPROC1_6785	100625		/* 10uV */
++#define CPU_DVFS_VOLT4_VPROC1_6785	 98125		/* 10uV */
++#define CPU_DVFS_VOLT5_VPROC1_6785	 95000		/* 10uV */
++#define CPU_DVFS_VOLT6_VPROC1_6785	 92500		/* 10uV */
++#define CPU_DVFS_VOLT7_VPROC1_6785	 90000		/* 10uV */
++#define CPU_DVFS_VOLT8_VPROC1_6785	 85625		/* 10uV */
++#define CPU_DVFS_VOLT9_VPROC1_6785	 82500		/* 10uV */
++#define CPU_DVFS_VOLT10_VPROC1_6785	 80000		/* 10uV */
++#define CPU_DVFS_VOLT11_VPROC1_6785	 77500		/* 10uV */
++#define CPU_DVFS_VOLT12_VPROC1_6785	 75000		/* 10uV */
++#define CPU_DVFS_VOLT13_VPROC1_6785	 72500		/* 10uV */
+ #define CPU_DVFS_VOLT14_VPROC1_6785	 67500		/* 10uV */
+ #define CPU_DVFS_VOLT15_VPROC1_6785	 60000		/* 10uV */
+ 
+ /* for DVFS OPP table B */
+-#define CPU_DVFS_VOLT0_VPROC2_6785	110000		/* 10uV	*/
+-#define CPU_DVFS_VOLT1_VPROC2_6785	108125		/* 10uV	*/
+-#define CPU_DVFS_VOLT2_VPROC2_6785	105625		/* 10uV	*/
+-#define CPU_DVFS_VOLT3_VPROC2_6785	103750		/* 10uV	*/
+-#define CPU_DVFS_VOLT4_VPROC2_6785	101250		/* 10uV	*/
+-#define CPU_DVFS_VOLT5_VPROC2_6785	98125		/* 10uV	*/
+-#define CPU_DVFS_VOLT6_VPROC2_6785	95625		/* 10uV	*/
+-#define CPU_DVFS_VOLT7_VPROC2_6785	91250		/* 10uV	*/
+-#define CPU_DVFS_VOLT8_VPROC2_6785	87500		/* 10uV	*/
+-#define CPU_DVFS_VOLT9_VPROC2_6785	84375		/* 10uV	*/
+-#define CPU_DVFS_VOLT10_VPROC2_6785	80000		/* 10uV	*/
+-#define CPU_DVFS_VOLT11_VPROC2_6785	77500		/* 10uV	*/
+-#define CPU_DVFS_VOLT12_VPROC2_6785	74375		/* 10uV	*/
+-#define CPU_DVFS_VOLT13_VPROC2_6785	71875		/* 10uV	*/
+-#define CPU_DVFS_VOLT14_VPROC2_6785	69375		/* 10uV	*/
+-#define CPU_DVFS_VOLT15_VPROC2_6785	67500		/* 10uV	*/
++#define CPU_DVFS_VOLT0_VPROC2_6785	119375		/* 10uV	*/
++#define CPU_DVFS_VOLT1_VPROC2_6785	117500		/* 10uV	*/
++#define CPU_DVFS_VOLT2_VPROC2_6785	115625		/* 10uV	*/
++#define CPU_DVFS_VOLT3_VPROC2_6785	113750		/* 10uV	*/
++#define CPU_DVFS_VOLT4_VPROC2_6785	111875		/* 10uV	*/
++#define CPU_DVFS_VOLT5_VPROC2_6785	109375		/* 10uV	*/
++#define CPU_DVFS_VOLT6_VPROC2_6785	106250		/* 10uV	*/
++#define CPU_DVFS_VOLT7_VPROC2_6785	103750		/* 10uV	*/
++#define CPU_DVFS_VOLT8_VPROC2_6785	101250		/* 10uV	*/
++#define CPU_DVFS_VOLT9_VPROC2_6785	 95625		/* 10uV	*/
++#define CPU_DVFS_VOLT10_VPROC2_6785	 91250		/* 10uV	*/
++#define CPU_DVFS_VOLT11_VPROC2_6785	 87500		/* 10uV	*/
++#define CPU_DVFS_VOLT12_VPROC2_6785	 84375		/* 10uV	*/
++#define CPU_DVFS_VOLT13_VPROC2_6785	 80000		/* 10uV	*/
++#define CPU_DVFS_VOLT14_VPROC2_6785	 74375		/* 10uV	*/
++#define CPU_DVFS_VOLT15_VPROC2_6785	 67500		/* 10uV	*/
+ 
+ /* for DVFS OPP table CCI */
+-#define CPU_DVFS_VOLT0_VPROC3_6785	103125		/* 10uV */
+-#define CPU_DVFS_VOLT1_VPROC3_6785	 99375		/* 10uV */
+-#define CPU_DVFS_VOLT2_VPROC3_6785	 95000		/* 10uV */
+-#define CPU_DVFS_VOLT3_VPROC3_6785	 90625		/* 10uV */
+-#define CPU_DVFS_VOLT4_VPROC3_6785	 88750		/* 10uV */
+-#define CPU_DVFS_VOLT5_VPROC3_6785	 86250		/* 10uV */
+-#define CPU_DVFS_VOLT6_VPROC3_6785	 84375		/* 10uV */
+-#define CPU_DVFS_VOLT7_VPROC3_6785	 81875		/* 10uV */
+-#define CPU_DVFS_VOLT8_VPROC3_6785	 80000		/* 10uV */
+-#define CPU_DVFS_VOLT9_VPROC3_6785	 78125		/* 10uV */
+-#define CPU_DVFS_VOLT10_VPROC3_6785	 76875		/* 10uV */
+-#define CPU_DVFS_VOLT11_VPROC3_6785	 74375		/* 10uV */
+-#define CPU_DVFS_VOLT12_VPROC3_6785	 71875		/* 10uV */
+-#define CPU_DVFS_VOLT13_VPROC3_6785	 69375		/* 10uV */
++#define CPU_DVFS_VOLT0_VPROC3_6785	110625		/* 10uV */
++#define CPU_DVFS_VOLT1_VPROC3_6785	106875		/* 10uV */
++#define CPU_DVFS_VOLT2_VPROC3_6785	103125		/* 10uV */
++#define CPU_DVFS_VOLT3_VPROC3_6785	 99375		/* 10uV */
++#define CPU_DVFS_VOLT4_VPROC3_6785	 95000		/* 10uV */
++#define CPU_DVFS_VOLT5_VPROC3_6785	 90625		/* 10uV */
++#define CPU_DVFS_VOLT6_VPROC3_6785	 86250		/* 10uV */
++#define CPU_DVFS_VOLT7_VPROC3_6785	 84375		/* 10uV */
++#define CPU_DVFS_VOLT8_VPROC3_6785	 81875		/* 10uV */
++#define CPU_DVFS_VOLT9_VPROC3_6785	 80000		/* 10uV */
++#define CPU_DVFS_VOLT10_VPROC3_6785	 78125		/* 10uV */
++#define CPU_DVFS_VOLT11_VPROC3_6785	 76875		/* 10uV */
++#define CPU_DVFS_VOLT12_VPROC3_6785	 74375		/* 10uV */
++#define CPU_DVFS_VOLT13_VPROC3_6785	 71875		/* 10uV */
+ #define CPU_DVFS_VOLT14_VPROC3_6785	 67500		/* 10uV */
+ #define CPU_DVFS_VOLT15_VPROC3_6785	 60000		/* 10uV */
+ 
+ /* 6785T */
+ /* for DVFS OPP table L */
+-#define CPU_DVFS_FREQ0_LL_6785T		2000000		/* KHz */
+-#define CPU_DVFS_FREQ1_LL_6785T		1933000		/* KHz */
+-#define CPU_DVFS_FREQ2_LL_6785T		1866000		/* KHz */
+-#define CPU_DVFS_FREQ3_LL_6785T		1800000		/* KHz */
+-#define CPU_DVFS_FREQ4_LL_6785T		1733000		/* KHz */
+-#define CPU_DVFS_FREQ5_LL_6785T		1666000		/* KHz */
+-#define CPU_DVFS_FREQ6_LL_6785T		1618000		/* KHz */
+-#define CPU_DVFS_FREQ7_LL_6785T		1500000		/* KHz */
+-#define CPU_DVFS_FREQ8_LL_6785T		1375000		/* KHz */
+-#define CPU_DVFS_FREQ9_LL_6785T		1275000		/* KHz */
+-#define CPU_DVFS_FREQ10_LL_6785T	1175000		/* KHz */
+-#define CPU_DVFS_FREQ11_LL_6785T	1075000		/* KHz */
+-#define CPU_DVFS_FREQ12_LL_6785T	975000		/* KHz */
+-#define CPU_DVFS_FREQ13_LL_6785T	875000		/* KHz */
++#define CPU_DVFS_FREQ0_LL_6785T		2150000		/* KHz */
++#define CPU_DVFS_FREQ1_LL_6785T		2080000		/* KHz */
++#define CPU_DVFS_FREQ2_LL_6785T		2000000		/* KHz */
++#define CPU_DVFS_FREQ3_LL_6785T		1933000		/* KHz */
++#define CPU_DVFS_FREQ4_LL_6785T		1866000		/* KHz */
++#define CPU_DVFS_FREQ5_LL_6785T		1800000		/* KHz */
++#define CPU_DVFS_FREQ6_LL_6785T		1733000		/* KHz */
++#define CPU_DVFS_FREQ7_LL_6785T		1666000		/* KHz */
++#define CPU_DVFS_FREQ8_LL_6785T		1560000		/* KHz */
++#define CPU_DVFS_FREQ9_LL_6785T		1440000		/* KHz */
++#define CPU_DVFS_FREQ10_LL_6785T	1275000		/* KHz */
++#define CPU_DVFS_FREQ11_LL_6785T	1175000		/* KHz */
++#define CPU_DVFS_FREQ12_LL_6785T	1075000		/* KHz */
++#define CPU_DVFS_FREQ13_LL_6785T	975000		/* KHz */
+ #define CPU_DVFS_FREQ14_LL_6785T	774000		/* KHz */
+ #define CPU_DVFS_FREQ15_LL_6785T	500000		/* KHz */
+ 
+ /* for DVFS OPP table B */
+-#define CPU_DVFS_FREQ0_L_6785T		2050000		/* KHz */
+-#define CPU_DVFS_FREQ1_L_6785T		1986000		/* KHz */
+-#define CPU_DVFS_FREQ2_L_6785T		1923000		/* KHz */
+-#define CPU_DVFS_FREQ3_L_6785T		1860000		/* KHz */
+-#define CPU_DVFS_FREQ4_L_6785T		1796000		/* KHz */
+-#define CPU_DVFS_FREQ5_L_6785T		1733000		/* KHz */
+-#define CPU_DVFS_FREQ6_L_6785T		1670000		/* KHz */
+-#define CPU_DVFS_FREQ7_L_6785T		1530000		/* KHz */
+-#define CPU_DVFS_FREQ8_L_6785T		1419000		/* KHz */
+-#define CPU_DVFS_FREQ9_L_6785T		1308000		/* KHz */
+-#define CPU_DVFS_FREQ10_L_6785T		1169000		/* KHz */
+-#define CPU_DVFS_FREQ11_L_6785T		1085000		/* KHz */
+-#define CPU_DVFS_FREQ12_L_6785T		1002000		/* KHz */
+-#define CPU_DVFS_FREQ13_L_6785T		919000		/* KHz */
+-#define CPU_DVFS_FREQ14_L_6785T		835000		/* KHz */
++#define CPU_DVFS_FREQ0_L_6785T		2300000		/* KHz */
++#define CPU_DVFS_FREQ1_L_6785T		2250000		/* KHz */
++#define CPU_DVFS_FREQ2_L_6785T		2200000		/* KHz */
++#define CPU_DVFS_FREQ3_L_6785T		2133000		/* KHz */
++#define CPU_DVFS_FREQ4_L_6785T		2050000		/* KHz */
++#define CPU_DVFS_FREQ5_L_6785T		1986000		/* KHz */
++#define CPU_DVFS_FREQ6_L_6785T		1923000		/* KHz */
++#define CPU_DVFS_FREQ7_L_6785T		1860000		/* KHz */
++#define CPU_DVFS_FREQ8_L_6785T		1796000		/* KHz */
++#define CPU_DVFS_FREQ9_L_6785T		1670000		/* KHz */
++#define CPU_DVFS_FREQ10_L_6785T		1530000		/* KHz */
++#define CPU_DVFS_FREQ11_L_6785T		1419000		/* KHz */
++#define CPU_DVFS_FREQ12_L_6785T		1308000		/* KHz */
++#define CPU_DVFS_FREQ13_L_6785T		1169000		/* KHz */
++#define CPU_DVFS_FREQ14_L_6785T		1002000		/* KHz */
+ #define CPU_DVFS_FREQ15_L_6785T		774000		/* KHz */
+ 
+ /* for DVFS OPP table CCI */
+-#define CPU_DVFS_FREQ0_CCI_6785T	1400000		/* KHz */
+-#define CPU_DVFS_FREQ1_CCI_6785T	1330000		/* KHz */
+-#define CPU_DVFS_FREQ2_CCI_6785T	1260000		/* KHz */
+-#define CPU_DVFS_FREQ3_CCI_6785T	1190000		/* KHz */
+-#define CPU_DVFS_FREQ4_CCI_6785T	1155000		/* KHz */
+-#define CPU_DVFS_FREQ5_CCI_6785T	1120000		/* KHz */
+-#define CPU_DVFS_FREQ6_CCI_6785T	1050000		/* KHz */
+-#define CPU_DVFS_FREQ7_CCI_6785T	980000		/* KHz */
+-#define CPU_DVFS_FREQ8_CCI_6785T	927000		/* KHz */
+-#define CPU_DVFS_FREQ9_CCI_6785T	875000		/* KHz */
+-#define CPU_DVFS_FREQ10_CCI_6785T	822000		/* KHz */
+-#define CPU_DVFS_FREQ11_CCI_6785T	752000		/* KHz */
+-#define CPU_DVFS_FREQ12_CCI_6785T	682000		/* KHz */
+-#define CPU_DVFS_FREQ13_CCI_6785T	612000		/* KHz */
++#define CPU_DVFS_FREQ0_CCI_6785T	1500000		/* KHz */
++#define CPU_DVFS_FREQ1_CCI_6785T	1450000		/* KHz */
++#define CPU_DVFS_FREQ2_CCI_6785T	1400000		/* KHz */
++#define CPU_DVFS_FREQ3_CCI_6785T	1330000		/* KHz */
++#define CPU_DVFS_FREQ4_CCI_6785T	1260000		/* KHz */
++#define CPU_DVFS_FREQ5_CCI_6785T	1190000		/* KHz */
++#define CPU_DVFS_FREQ6_CCI_6785T	1120000		/* KHz */
++#define CPU_DVFS_FREQ7_CCI_6785T	1050000		/* KHz */
++#define CPU_DVFS_FREQ8_CCI_6785T	980000		/* KHz */
++#define CPU_DVFS_FREQ9_CCI_6785T	927000		/* KHz */
++#define CPU_DVFS_FREQ10_CCI_6785T	875000		/* KHz */
++#define CPU_DVFS_FREQ11_CCI_6785T	822000		/* KHz */
++#define CPU_DVFS_FREQ12_CCI_6785T	752000		/* KHz */
++#define CPU_DVFS_FREQ13_CCI_6785T	682000		/* KHz */
+ #define CPU_DVFS_FREQ14_CCI_6785T	560000		/* KHz */
+ #define CPU_DVFS_FREQ15_CCI_6785T	500000		/* KHz */
+ 
+ /* for DVFS OPP table L */
+-#define CPU_DVFS_VOLT0_VPROC1_6785T	103125		/* 10uV */
+-#define CPU_DVFS_VOLT1_VPROC1_6785T	100625		/* 10uV */
+-#define CPU_DVFS_VOLT2_VPROC1_6785T	 98125		/* 10uV */
+-#define CPU_DVFS_VOLT3_VPROC1_6785T	 95000		/* 10uV */
+-#define CPU_DVFS_VOLT4_VPROC1_6785T	 92500		/* 10uV */
+-#define CPU_DVFS_VOLT5_VPROC1_6785T	 90000		/* 10uV */
+-#define CPU_DVFS_VOLT6_VPROC1_6785T	 87500		/* 10uV */
+-#define CPU_DVFS_VOLT7_VPROC1_6785T	 85625		/* 10uV */
+-#define CPU_DVFS_VOLT8_VPROC1_6785T	 82500		/* 10uV */
+-#define CPU_DVFS_VOLT9_VPROC1_6785T	 80000		/* 10uV */
+-#define CPU_DVFS_VOLT10_VPROC1_6785T     77500          /* 10uV */
+-#define CPU_DVFS_VOLT11_VPROC1_6785T     75000		/* 10uV */
+-#define CPU_DVFS_VOLT12_VPROC1_6785T     72500          /* 10uV */
+-#define CPU_DVFS_VOLT13_VPROC1_6785T     70000          /* 10uV */
+-#define CPU_DVFS_VOLT14_VPROC1_6785T     67500          /* 10uV */
+-#define CPU_DVFS_VOLT15_VPROC1_6785T     60000          /* 10uV */
++#define CPU_DVFS_VOLT0_VPROC1_6785T	113750		/* 10uV */
++#define CPU_DVFS_VOLT1_VPROC1_6785T	109375		/* 10uV */
++#define CPU_DVFS_VOLT2_VPROC1_6785T	103125		/* 10uV */
++#define CPU_DVFS_VOLT3_VPROC1_6785T	100625		/* 10uV */
++#define CPU_DVFS_VOLT4_VPROC1_6785T	 98125		/* 10uV */
++#define CPU_DVFS_VOLT5_VPROC1_6785T	 95000		/* 10uV */
++#define CPU_DVFS_VOLT6_VPROC1_6785T	 92500		/* 10uV */
++#define CPU_DVFS_VOLT7_VPROC1_6785T	 90000		/* 10uV */
++#define CPU_DVFS_VOLT8_VPROC1_6785T	 85625		/* 10uV */
++#define CPU_DVFS_VOLT9_VPROC1_6785T	 82500		/* 10uV */
++#define CPU_DVFS_VOLT10_VPROC1_6785T	 80000		/* 10uV */
++#define CPU_DVFS_VOLT11_VPROC1_6785T	 77500		/* 10uV */
++#define CPU_DVFS_VOLT12_VPROC1_6785T	 75000		/* 10uV */
++#define CPU_DVFS_VOLT13_VPROC1_6785T	 72500		/* 10uV */
++#define CPU_DVFS_VOLT14_VPROC1_6785T	 67500		/* 10uV */
++#define CPU_DVFS_VOLT15_VPROC1_6785T	 60000		/* 10uV */
+ 
+ /* for DVFS OPP table B */
+-#define CPU_DVFS_VOLT0_VPROC2_6785T	 111875		/* 10uV */
+-#define CPU_DVFS_VOLT1_VPROC2_6785T	 109375		/* 10uV */
+-#define CPU_DVFS_VOLT2_VPROC2_6785T	 106250     /* 10uV */
+-#define CPU_DVFS_VOLT3_VPROC2_6785T	 103750		/* 10uV */
+-#define CPU_DVFS_VOLT4_VPROC2_6785T	 101250		/* 10uV */
+-#define CPU_DVFS_VOLT5_VPROC2_6785T	 98125		/* 10uV */
+-#define CPU_DVFS_VOLT6_VPROC2_6785T	 95625		/* 10uV */
+-#define CPU_DVFS_VOLT7_VPROC2_6785T	 91250		/* 10uV */
+-#define CPU_DVFS_VOLT8_VPROC2_6785T	 87500		/* 10uV */
+-#define CPU_DVFS_VOLT9_VPROC2_6785T	 84375		/* 10uV */
+-#define CPU_DVFS_VOLT10_VPROC2_6785T     80000          /* 10uV */
+-#define CPU_DVFS_VOLT11_VPROC2_6785T     77500          /* 10uV */
+-#define CPU_DVFS_VOLT12_VPROC2_6785T     74375          /* 10uV */
+-#define CPU_DVFS_VOLT13_VPROC2_6785T     71875          /* 10uV */
+-#define CPU_DVFS_VOLT14_VPROC2_6785T     69375          /* 10uV */
+-#define CPU_DVFS_VOLT15_VPROC2_6785T     67500          /* 10uV */
++#define CPU_DVFS_VOLT0_VPROC2_6785T	119375		/* 10uV */
++#define CPU_DVFS_VOLT1_VPROC2_6785T	117500		/* 10uV */
++#define CPU_DVFS_VOLT2_VPROC2_6785T	115625		/* 10uV */
++#define CPU_DVFS_VOLT3_VPROC2_6785T	113750		/* 10uV */
++#define CPU_DVFS_VOLT4_VPROC2_6785T	111875		/* 10uV */
++#define CPU_DVFS_VOLT5_VPROC2_6785T	109375		/* 10uV */
++#define CPU_DVFS_VOLT6_VPROC2_6785T	106250		/* 10uV */
++#define CPU_DVFS_VOLT7_VPROC2_6785T	103750		/* 10uV */
++#define CPU_DVFS_VOLT8_VPROC2_6785T	101250		/* 10uV */
++#define CPU_DVFS_VOLT9_VPROC2_6785T	 95625		/* 10uV */
++#define CPU_DVFS_VOLT10_VPROC2_6785T	 91250		/* 10uV */
++#define CPU_DVFS_VOLT11_VPROC2_6785T	 87500		/* 10uV */
++#define CPU_DVFS_VOLT12_VPROC2_6785T	 84375		/* 10uV */
++#define CPU_DVFS_VOLT13_VPROC2_6785T	 80000		/* 10uV */
++#define CPU_DVFS_VOLT14_VPROC2_6785T	 74375		/* 10uV */
++#define CPU_DVFS_VOLT15_VPROC2_6785T	 67500		/* 10uV */
+ 
+ /* for DVFS OPP table CCI */
+-#define CPU_DVFS_VOLT0_VPROC3_6785T	103125		/* 10uV */
+-#define CPU_DVFS_VOLT1_VPROC3_6785T	 99375		/* 10uV */
+-#define CPU_DVFS_VOLT2_VPROC3_6785T	 95000		/* 10uV */
+-#define CPU_DVFS_VOLT3_VPROC3_6785T	 90625		/* 10uV */
+-#define CPU_DVFS_VOLT4_VPROC3_6785T	 88750		/* 10uV */
+-#define CPU_DVFS_VOLT5_VPROC3_6785T	 86250		/* 10uV */
+-#define CPU_DVFS_VOLT6_VPROC3_6785T	 84375		/* 10uV */
+-#define CPU_DVFS_VOLT7_VPROC3_6785T	 81875		/* 10uV */
+-#define CPU_DVFS_VOLT8_VPROC3_6785T	 80000		/* 10uV */
+-#define CPU_DVFS_VOLT9_VPROC3_6785T	 78125		/* 10uV */
+-#define CPU_DVFS_VOLT10_VPROC3_6785T     76875          /* 10uV */
+-#define CPU_DVFS_VOLT11_VPROC3_6785T     74375          /* 10uV */
+-#define CPU_DVFS_VOLT12_VPROC3_6785T     71875          /* 10uV */
+-#define CPU_DVFS_VOLT13_VPROC3_6785T     69375          /* 10uV */
+-#define CPU_DVFS_VOLT14_VPROC3_6785T     67500          /* 10uV */
+-#define CPU_DVFS_VOLT15_VPROC3_6785T     60000          /* 10uV */
++#define CPU_DVFS_VOLT0_VPROC3_6785T	110625		/* 10uV */
++#define CPU_DVFS_VOLT1_VPROC3_6785T	106875		/* 10uV */
++#define CPU_DVFS_VOLT2_VPROC3_6785T	103125		/* 10uV */
++#define CPU_DVFS_VOLT3_VPROC3_6785T	 99375		/* 10uV */
++#define CPU_DVFS_VOLT4_VPROC3_6785T	 95000		/* 10uV */
++#define CPU_DVFS_VOLT5_VPROC3_6785T	 90625		/* 10uV */
++#define CPU_DVFS_VOLT6_VPROC3_6785T	 86250		/* 10uV */
++#define CPU_DVFS_VOLT7_VPROC3_6785T	 84375		/* 10uV */
++#define CPU_DVFS_VOLT8_VPROC3_6785T	 81875		/* 10uV */
++#define CPU_DVFS_VOLT9_VPROC3_6785T	 80000		/* 10uV */
++#define CPU_DVFS_VOLT10_VPROC3_6785T	 78125		/* 10uV */
++#define CPU_DVFS_VOLT11_VPROC3_6785T	 76875		/* 10uV */
++#define CPU_DVFS_VOLT12_VPROC3_6785T	 74375		/* 10uV */
++#define CPU_DVFS_VOLT13_VPROC3_6785T	 71875		/* 10uV */
++#define CPU_DVFS_VOLT14_VPROC3_6785T	 67500		/* 10uV */
++#define CPU_DVFS_VOLT15_VPROC3_6785T	 60000		/* 10uV */
+ 
+ /* 6783 */
+ /* for DVFS OPP table L */
+@@ -432,8 +432,8 @@ static struct mt_cpu_freq_method opp_tbl_method_LL_6785[] = {	/* 6785 */
+ 	FP(1,	1),
+ 	FP(1,	1),
+ 	FP(1,	1),
+-	FP(2,	1),
+-	FP(2,	1),
++	FP(1,	1),
++	FP(1,	1),
+ 	FP(2,	1),
+ 	FP(2,	1),
+ 	FP(2,	1),
+@@ -454,9 +454,9 @@ static struct mt_cpu_freq_method opp_tbl_method_L_6785[] = {	/* 6785 */
+ 	FP(1,	1),
+ 	FP(1,	1),
+ 	FP(1,	1),
+-	FP(2,	1),
+-	FP(2,	1),
+-	FP(2,	1),
++	FP(1,	1),
++	FP(1,	1),
++	FP(1,	1),
+ 	FP(2,	1),
+ 	FP(2,	1),
+ 	FP(2,	1),
+@@ -479,7 +479,7 @@ static struct mt_cpu_freq_method opp_tbl_method_CCI_6785[] = {	/* 6785 */
+ 	FP(2,	1),
+ 	FP(2,	1),
+ 	FP(2,	1),
+-	FP(4,	1),
++	FP(2,	1),
+ 	FP(4,	1),
+ 	FP(4,	1),
+ 	FP(4,	1),
+@@ -492,8 +492,8 @@ static struct mt_cpu_freq_method opp_tbl_method_LL_6785T[] = {	/* 6785T */
+ 	FP(1,	1),
+ 	FP(1,	1),
+ 	FP(1,	1),
+-	FP(2,	1),
+-	FP(2,	1),
++	FP(1,	1),
++	FP(1,	1),
+ 	FP(2,	1),
+ 	FP(2,	1),
+ 	FP(2,	1),
+@@ -514,9 +514,9 @@ static struct mt_cpu_freq_method opp_tbl_method_L_6785T[] = {	/* 6785T */
+ 	FP(1,	1),
+ 	FP(1,	1),
+ 	FP(1,	1),
+-	FP(2,	1),
+-	FP(2,	1),
+-	FP(2,	1),
++	FP(1,	1),
++	FP(1,	1),
++	FP(1,	1),
+ 	FP(2,	1),
+ 	FP(2,	1),
+ 	FP(2,	1),
+@@ -539,7 +539,7 @@ static struct mt_cpu_freq_method opp_tbl_method_CCI_6785T[] = {	/* 6785T */
+ 	FP(2,	1),
+ 	FP(2,	1),
+ 	FP(2,	1),
+-	FP(4,	1),
++	FP(2,	1),
+ 	FP(4,	1),
+ 	FP(4,	1),
+ 	FP(4,	1),
+diff --git a/drivers/misc/mediatek/base/power/cpufreq_v1/src/mach/mt6785/mtk_cpufreq_platform.h b/drivers/misc/mediatek/base/power/cpufreq_v1/src/mach/mt6785/mtk_cpufreq_platform.h
+index 22a55a487..0b4de6394 100644
+--- a/drivers/misc/mediatek/base/power/cpufreq_v1/src/mach/mt6785/mtk_cpufreq_platform.h
++++ b/drivers/misc/mediatek/base/power/cpufreq_v1/src/mach/mt6785/mtk_cpufreq_platform.h
+@@ -25,8 +25,8 @@
+ #define CCI_MAP_TBL_SUPPORT	1
+ #define ENABLE_DOE              1
+ #define MET_READY              1
+-#define IMAX_ENABLE             1
+-#define IMAX_INIT_STATE         1
++#define IMAX_ENABLE             0
++#define IMAX_INIT_STATE         0
+ /* #define CPU_DVFS_NOT_READY	1 */
+ #define REPORT_IDLE_FREQ	1
+ #else
+@@ -47,9 +47,9 @@
+ #define NORMAL_DIFF_VRSAM_VPROC		10000
+ #define MAX_DIFF_VSRAM_VPROC		22500
+ #define MIN_VSRAM_VOLT			85000
+-#define MAX_VSRAM_VOLT			112000
++#define MAX_VSRAM_VOLT			119375
+ #define MIN_VPROC_VOLT			60000
+-#define MAX_VPROC_VOLT			112000
++#define MAX_VPROC_VOLT			119375
+ 
+ #define UP_SRATE	1000
+ #define DOWN_SRATE	750
+diff --git a/drivers/misc/mediatek/base/power/cpufreq_v1/src/mtk_cpufreq_hybrid.c b/drivers/misc/mediatek/base/power/cpufreq_v1/src/mtk_cpufreq_hybrid.c
+index 6a8c0a811..e23dc00b0 100644
+--- a/drivers/misc/mediatek/base/power/cpufreq_v1/src/mtk_cpufreq_hybrid.c
++++ b/drivers/misc/mediatek/base/power/cpufreq_v1/src/mtk_cpufreq_hybrid.c
+@@ -1665,8 +1665,8 @@ void cpuhvfs_pvt_tbl_create(void)
+ 	record_IMAX_Tbl = xrecord_IMAX_Tbl[lv];
+ 	for (i = 0; i < (NR_FREQ + 1) * IMAX_EN_RATIO_TBL_NUM; i++)
+ 		record_IMAX_Ref[i] = *(record_IMAX_Tbl + i);
+-	csram_write(OFFS_IMAX_EN, imax_state);
+-	csram_write(OFFS_IMAX_THERMAL_EN, 1);
++	csram_write(OFFS_IMAX_EN, 0);
++	csram_write(OFFS_IMAX_THERMAL_EN, 0);
+ 	mb(); /* SRAM writing */
+ #endif
+ }
+diff --git a/drivers/misc/mediatek/base/power/eem_v2/mt6785/inc/mtk_eem_config.h b/drivers/misc/mediatek/base/power/eem_v2/mt6785/inc/mtk_eem_config.h
+index 46783f8e1..eef089eb7 100644
+--- a/drivers/misc/mediatek/base/power/eem_v2/mt6785/inc/mtk_eem_config.h
++++ b/drivers/misc/mediatek/base/power/eem_v2/mt6785/inc/mtk_eem_config.h
+@@ -285,10 +285,10 @@ enum mt_cpu_dvfs_id {
+ #define NR_FREQ_VPU 16
+ #define NR_FREQ_CPU 16
+ 
+-#define L_FREQ_BASE			2000000
+-#define B_FREQ_BASE			2050000
+-#define	CCI_FREQ_BASE		1400000
+-#define GPU_FREQ_BASE		806000
++#define L_FREQ_BASE			2150000
++#define B_FREQ_BASE			2300000
++#define	CCI_FREQ_BASE		1500000
++#define GPU_FREQ_BASE		950000
+ #define B_M_FREQ_BASE		1670000
+ #define GPU_M_FREQ_BASE		620000
+ 
+@@ -333,7 +333,7 @@ enum mt_cpu_dvfs_id {
+ #define VBOOT_PMIC_VAL	(80000)
+ #define VBOOT_PMIC_CLR	(0)
+ #define VBOOT_VAL		(0x40) /* volt domain: 0.8v */
+-#define VMAX_VAL		(0x73) /* volt domain: 1.11875v*/
++#define VMAX_VAL		(0x7F) /* volt domain: 1.19375v*/
+ #define VMIN_VAL		(0x20) /* volt domain: 0.6v*/
+ #define VCO_VAL			(0x20)
+ #define DVTFIXED_VAL	(0x6)
+@@ -342,7 +342,7 @@ enum mt_cpu_dvfs_id {
+ #define DVTFIXED_M_VAL	(0x07)
+ 
+ 
+-#define VMAX_VAL_B		(0x73) /* volt domain: 1.11875v*/
++#define VMAX_VAL_B		(0x7F) /* volt domain: 1.19375v*/
+ #define VMIN_VAL_B		(0x20) /* volt domain: 0.6v*/
+ #define VCO_VAL_B		(0x20) /* volt domain: 0.6v*/
+ #define DVTFIXED_VAL_B	(0x6)
+@@ -357,7 +357,7 @@ enum mt_cpu_dvfs_id {
+ #define DCCONFIG_VAL	(0x555555)
+ 
+ /* different for CCI */
+-#define VMAX_VAL_CCI		(0x73) /* volt domain: 1.11875v*/
++#define VMAX_VAL_CCI		(0x7F) /* volt domain: 1.19375v*/
+ #define VMIN_VAL_CCI		(0x20)
+ #define VCO_VAL_CCI			(0x20)
+ #define DVTFIXED_VAL_CCI	(0x6)
+@@ -365,19 +365,19 @@ enum mt_cpu_dvfs_id {
+ 
+ 
+ /* different for GPU */
+-#define VMAX_VAL_GPU                    (0x73) /* eem domain: 1.11875v*/
++#define VMAX_VAL_GPU                    (0x7F) /* eem domain: 1.19375v*/
+ #define VMIN_VAL_GPU                    (0x22) /* eem domain: 0.6125v*/
+ #define VCO_VAL_GPU                     (0x1C) /* eem domain: 0.575v*/
+ 
+ /* different for GPU_L */
+-#define VMAX_VAL_GL                     (0x73)
++#define VMAX_VAL_GL                     (0x7F)
+ #define VMIN_VAL_GL                     (0x22)
+ #define VCO_VAL_GL                      (0x1C)
+ #define DVTFIXED_VAL_GL					(0x04)
+ #define DVTFIXED_VAL_GPU				(0x04)
+ 
+ /* different for GPU_H */
+-#define VMAX_VAL_GH                     (0x73) /* volt domain: 1.11875v*/
++#define VMAX_VAL_GH                     (0x7F) /* volt domain: 1.19375v*/
+ #define VMIN_VAL_GH                     (0x22)
+ #define VCO_VAL_GH                      (0x1C)
+ 
+@@ -387,7 +387,7 @@ enum mt_cpu_dvfs_id {
+ #define VCO_VAL_LL                      (0x15)
+ 
+ /* different for B_L */
+-#define VMAX_VAL_BL                     (0x73) /* volt domain: 1.11875v*/
++#define VMAX_VAL_BL                     (0x7F) /* volt domain: 1.19375v*/
+ #define VMIN_VAL_BL                     (0x20)
+ #define VCO_VAL_BL                      (0x20)
+ #define DVTFIXED_VAL_BL					(0x6)
+@@ -399,7 +399,7 @@ enum mt_cpu_dvfs_id {
+ #define DVTFIXED_VAL_H			(0x03)
+ 
+ /* different for B_H */
+-#define VMAX_VAL_BH			(0x73) /* volt domain: 1.11875v*/
++#define VMAX_VAL_BH			(0x7F) /* volt domain: 1.19375v*/
+ #define VMIN_VAL_BH			(0x20)
+ #define VCO_VAL_BH			(0x20)
+ #define DVTFIXED_VAL_BH		(0x6)
+diff --git a/drivers/misc/mediatek/base/power/eem_v2/mt6785/mtk_eem.c b/drivers/misc/mediatek/base/power/eem_v2/mt6785/mtk_eem.c
+index bdc4e0d4f..a64a55214 100644
+--- a/drivers/misc/mediatek/base/power/eem_v2/mt6785/mtk_eem.c
++++ b/drivers/misc/mediatek/base/power/eem_v2/mt6785/mtk_eem.c
+@@ -1786,6 +1786,14 @@ static void get_volt_table_in_thread(struct eem_det *det)
+ 					ndet->name);
+ 			break;
+ 		}
++		/* Prevent EEM efuse undervolting boosted/OC OPP slots */
++		if ((ndet->ctrl_id == EEM_CTRL_GPU && i <= 4) ||
++		    ((ndet->ctrl_id == EEM_CTRL_L ||
++		      ndet->ctrl_id == EEM_CTRL_B ||
++		      ndet->ctrl_id == EEM_CTRL_CCI) && i <= 7)) {
++			if (ndet->volt_tbl_pmic[i] < ndet->volt_tbl_orig[i])
++				ndet->volt_tbl_pmic[i] = ndet->volt_tbl_orig[i];
++		}
+ #if 0
+ 		eem_error("[%s].volt[%d]=0x%X, Ori[0x%x], pmic[%d]=0x%x(%d)\n",
+ 			det->name,
+diff --git a/drivers/misc/mediatek/base/power/include/upower_v2/mtk_unified_power_data_mt6785.h b/drivers/misc/mediatek/base/power/include/upower_v2/mtk_unified_power_data_mt6785.h
+index e6c218e30..d755d31bd 100644
+--- a/drivers/misc/mediatek/base/power/include/upower_v2/mtk_unified_power_data_mt6785.h
++++ b/drivers/misc/mediatek/base/power/include/upower_v2/mtk_unified_power_data_mt6785.h
+@@ -37,34 +37,34 @@ struct upower_tbl upower_tbl_l_6785 = {
+ 			.lkg_pwr = {34199, 34199, 34199, 34199, 34199, 34199} },
+ 		{.cap = 195, .volt = 67500, .dyn_pwr = 28865,
+ 			.lkg_pwr = {39842, 39842, 39842, 39842, 39842, 39842} },
+-		{.cap = 215, .volt = 70000, .dyn_pwr = 35094,
+-			.lkg_pwr = {41723, 41723, 41723, 41723, 41723, 41723} },
+-		{.cap = 233, .volt = 72500, .dyn_pwr = 41948,
++		{.cap = 242, .volt = 72500, .dyn_pwr = 41948,
+ 			.lkg_pwr = {43791, 43791, 43791, 43791, 43791, 43791} },
+-		{.cap = 255, .volt = 75000, .dyn_pwr = 49495,
++		{.cap = 264, .volt = 75000, .dyn_pwr = 49495,
+ 			.lkg_pwr = {45859, 45859, 45859, 45859, 45859, 45859} },
+-		{.cap = 276, .volt = 77500, .dyn_pwr = 57766,
++		{.cap = 286, .volt = 77500, .dyn_pwr = 57766,
+ 			.lkg_pwr = {47927, 47927, 47927, 47927, 47927, 47927} },
+-		{.cap = 297, .volt = 80000, .dyn_pwr = 66791,
++		{.cap = 308, .volt = 80000, .dyn_pwr = 66791,
+ 			.lkg_pwr = {49995, 49995, 49995, 49995, 49995, 49995} },
+-		{.cap = 317, .volt = 82500, .dyn_pwr = 76602,
++		{.cap = 342, .volt = 82500, .dyn_pwr = 76602,
+ 			.lkg_pwr = {52446, 52446, 52446, 52446, 52446, 52446} },
+-		{.cap = 341, .volt = 85625, .dyn_pwr = 90016,
++		{.cap = 364, .volt = 85625, .dyn_pwr = 90016,
+ 			.lkg_pwr = {55510, 55510, 55510, 55510, 55510, 55510} },
+-		{.cap = 365, .volt = 87500, .dyn_pwr = 101397,
+-			.lkg_pwr = {57349, 57349, 57349, 57349, 57349, 57349} },
+-		{.cap = 375, .volt = 90000, .dyn_pwr = 110456,
++		{.cap = 382, .volt = 90000, .dyn_pwr = 110456,
+ 			.lkg_pwr = {59800, 59800, 59800, 59800, 59800, 59800} },
+-		{.cap = 387, .volt = 92500, .dyn_pwr = 121370,
++		{.cap = 394, .volt = 92500, .dyn_pwr = 121370,
+ 			.lkg_pwr = {62616, 62616, 62616, 62616, 62616, 62616} },
+-		{.cap = 397, .volt = 95000, .dyn_pwr = 132968,
++		{.cap = 406, .volt = 95000, .dyn_pwr = 132968,
+ 			.lkg_pwr = {65432, 65432, 65432, 65432, 65432, 65432} },
+-		{.cap = 411, .volt = 98125, .dyn_pwr = 147062,
++		{.cap = 416, .volt = 98125, .dyn_pwr = 147062,
+ 			.lkg_pwr = {68953, 68953, 68953, 68953, 68953, 68953} },
+-		{.cap = 423, .volt = 100625, .dyn_pwr = 160204,
++		{.cap = 426, .volt = 100625, .dyn_pwr = 160204,
+ 			.lkg_pwr = {72082, 72082, 72082, 72082, 72082, 72082} },
+ 		{.cap = 435, .volt = 103125, .dyn_pwr = 174095,
+ 			.lkg_pwr = {76151, 76151, 76151, 76151, 76151, 76151} },
++		{.cap = 442, .volt = 109375, .dyn_pwr = 198000,
++			.lkg_pwr = {82000, 82000, 82000, 82000, 82000, 82000} },
++		{.cap = 448, .volt = 113750, .dyn_pwr = 218000,
++			.lkg_pwr = {88000, 88000, 88000, 88000, 88000, 88000} },
+ 	},
+ 	.lkg_idx = DEFAULT_LKG_IDX,
+ 	.row_num = UPOWER_OPP_NUM,
+@@ -85,33 +85,33 @@ struct upower_tbl upower_tbl_cluster_l_6785 = {
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+ 		{.cap = 195, .volt = 67500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 215, .volt = 70000, .dyn_pwr = 0,
++		{.cap = 242, .volt = 72500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 233, .volt = 72500, .dyn_pwr = 0,
++		{.cap = 264, .volt = 75000, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 255, .volt = 75000, .dyn_pwr = 0,
++		{.cap = 286, .volt = 77500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 276, .volt = 77500, .dyn_pwr = 0,
++		{.cap = 308, .volt = 80000, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 297, .volt = 80000, .dyn_pwr = 0,
++		{.cap = 342, .volt = 82500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 317, .volt = 82500, .dyn_pwr = 0,
++		{.cap = 364, .volt = 85625, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 341, .volt = 85625, .dyn_pwr = 0,
++		{.cap = 382, .volt = 90000, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 365, .volt = 87500, .dyn_pwr = 0,
++		{.cap = 394, .volt = 92500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 375, .volt = 90000, .dyn_pwr = 0,
++		{.cap = 406, .volt = 95000, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 387, .volt = 92500, .dyn_pwr = 0,
++		{.cap = 416, .volt = 98125, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 397, .volt = 95000, .dyn_pwr = 0,
++		{.cap = 426, .volt = 100625, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 411, .volt = 98125, .dyn_pwr = 0,
++		{.cap = 435, .volt = 103125, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 423, .volt = 100625, .dyn_pwr = 0,
++		{.cap = 442, .volt = 109375, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 435, .volt = 103125, .dyn_pwr = 0,
++		{.cap = 448, .volt = 113750, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+ 	},
+ 	.lkg_idx = DEFAULT_LKG_IDX,
+@@ -129,38 +129,38 @@ struct upower_tbl upower_tbl_cluster_l_6785 = {
+ 
+ struct upower_tbl upower_tbl_b_6785 = {
+ 	.row = {
+-		{.cap = 459, .volt = 67500, .dyn_pwr = 126720,
++		{.cap = 418, .volt = 67500, .dyn_pwr = 115000,
+ 		.lkg_pwr = {177757, 177757, 177757, 177757, 177757, 177757} },
+-		{.cap = 495, .volt = 69375, .dyn_pwr = 144408,
+-		.lkg_pwr = {184214, 184214, 184214, 184214, 184214, 184214} },
+-		{.cap = 537, .volt = 71875, .dyn_pwr = 170323,
+-		.lkg_pwr = {193892, 193892, 193892, 193892, 193892, 193892} },
+-		{.cap = 582, .volt = 74375, .dyn_pwr = 197699,
++		{.cap = 518, .volt = 74375, .dyn_pwr = 170000,
+ 		.lkg_pwr = {203926, 203926, 203926, 203926, 203926, 203926} },
+-		{.cap = 624, .volt = 77500, .dyn_pwr = 231091,
+-		.lkg_pwr = {216469, 216469, 216469, 216469, 216469, 216469} },
+-		{.cap = 663, .volt = 80000, .dyn_pwr = 263734,
++		{.cap = 588, .volt = 80000, .dyn_pwr = 225000,
+ 		.lkg_pwr = {226503, 226503, 226503, 226503, 226503, 226503} },
+-		{.cap = 731, .volt = 84375, .dyn_pwr = 325017,
++		{.cap = 648, .volt = 84375, .dyn_pwr = 280000,
+ 		.lkg_pwr = {245139, 245139, 245139, 245139, 245139, 245139} },
+-		{.cap = 786, .volt = 87500, .dyn_pwr = 376186,
++		{.cap = 696, .volt = 87500, .dyn_pwr = 335000,
+ 		.lkg_pwr = {258451, 258451, 258451, 258451, 258451, 258451} },
+-		{.cap = 832, .volt = 91250, .dyn_pwr = 437591,
++		{.cap = 744, .volt = 91250, .dyn_pwr = 390000,
+ 		.lkg_pwr = {275322, 275322, 275322, 275322, 275322, 275322} },
+-		{.cap = 888, .volt = 95625, .dyn_pwr = 519186,
++		{.cap = 800, .volt = 95625, .dyn_pwr = 460000,
+ 		.lkg_pwr = {297101, 297101, 297101, 297101, 297101, 297101} },
+-		{.cap = 914, .volt = 98125, .dyn_pwr = 564684,
+-		.lkg_pwr = {309546, 309546, 309546, 309546, 309546, 309546} },
+-		{.cap = 939, .volt = 101250, .dyn_pwr = 620182,
++		{.cap = 848, .volt = 101250, .dyn_pwr = 550000,
+ 		.lkg_pwr = {326261, 326261, 326261, 326261, 326261, 326261} },
+-		{.cap = 966, .volt = 103750, .dyn_pwr = 671188,
++		{.cap = 874, .volt = 103750, .dyn_pwr = 600000,
+ 		.lkg_pwr = {341023, 341023, 341023, 341023, 341023, 341023} },
+-		{.cap = 986, .volt = 105625, .dyn_pwr = 710747,
+-		.lkg_pwr = {352095, 352095, 352095, 352095, 352095, 352095} },
+-		{.cap = 1006, .volt = 108125, .dyn_pwr = 760794,
+-		.lkg_pwr = {366858, 366858, 366858, 366858, 366858, 366858} },
+-		{.cap = 1024, .volt = 110000, .dyn_pwr = 803493,
+-		.lkg_pwr = {377930, 377930, 377930, 377930, 377930, 377930} },
++		{.cap = 898, .volt = 106250, .dyn_pwr = 655000,
++		.lkg_pwr = {355786, 355786, 355786, 355786, 355786, 355786} },
++		{.cap = 922, .volt = 109375, .dyn_pwr = 720000,
++		.lkg_pwr = {374239, 374239, 374239, 374239, 374239, 374239} },
++		{.cap = 946, .volt = 111875, .dyn_pwr = 780000,
++		.lkg_pwr = {392972, 392972, 392972, 392972, 392972, 392972} },
++		{.cap = 974, .volt = 113750, .dyn_pwr = 840000,
++		.lkg_pwr = {408000, 408000, 408000, 408000, 408000, 408000} },
++		{.cap = 996, .volt = 115625, .dyn_pwr = 900000,
++		.lkg_pwr = {424000, 424000, 424000, 424000, 424000, 424000} },
++		{.cap = 1010, .volt = 117500, .dyn_pwr = 945000,
++		.lkg_pwr = {440000, 440000, 440000, 440000, 440000, 440000} },
++		{.cap = 1024, .volt = 119375, .dyn_pwr = 990000,
++		.lkg_pwr = {456000, 456000, 456000, 456000, 456000, 456000} },
+ 	},
+ 	.lkg_idx = DEFAULT_LKG_IDX,
+ 	.row_num = UPOWER_OPP_NUM,
+@@ -177,37 +177,37 @@ struct upower_tbl upower_tbl_b_6785 = {
+ 
+ struct upower_tbl upower_tbl_cluster_b_6785 = {
+ 	.row = {
+-		{.cap = 459, .volt = 67500, .dyn_pwr = 0,
++		{.cap = 418, .volt = 67500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 495, .volt = 69375, .dyn_pwr = 0,
++		{.cap = 518, .volt = 74375, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 537, .volt = 71875, .dyn_pwr = 0,
++		{.cap = 588, .volt = 80000, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 582, .volt = 74375, .dyn_pwr = 0,
++		{.cap = 648, .volt = 84375, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 624, .volt = 77500, .dyn_pwr = 0,
++		{.cap = 696, .volt = 87500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 663, .volt = 80000, .dyn_pwr = 0,
++		{.cap = 744, .volt = 91250, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 731, .volt = 84375, .dyn_pwr = 0,
++		{.cap = 800, .volt = 95625, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 786, .volt = 87500, .dyn_pwr = 0,
++		{.cap = 848, .volt = 101250, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 832, .volt = 91250, .dyn_pwr = 0,
++		{.cap = 874, .volt = 103750, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 888, .volt = 95625, .dyn_pwr = 0,
++		{.cap = 898, .volt = 106250, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 914, .volt = 98125, .dyn_pwr = 0,
++		{.cap = 922, .volt = 109375, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 939, .volt = 101250, .dyn_pwr = 0,
++		{.cap = 946, .volt = 111875, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 966, .volt = 103750, .dyn_pwr = 0,
++		{.cap = 974, .volt = 113750, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 986, .volt = 105625, .dyn_pwr = 0,
++		{.cap = 996, .volt = 115625, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 1006, .volt = 108125, .dyn_pwr = 0,
++		{.cap = 1010, .volt = 117500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 1024, .volt = 110000, .dyn_pwr = 0,
++		{.cap = 1024, .volt = 119375, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+ 	},
+ 	.lkg_idx = DEFAULT_LKG_IDX,
+@@ -229,34 +229,34 @@ struct upower_tbl upower_tbl_cci_6785 = {
+ 			.lkg_pwr = {48325, 48325, 48325, 48325, 48325, 48325} },
+ 		{.cap = 0, .volt = 67500, .dyn_pwr = 10360,
+ 			.lkg_pwr = {56298, 56298, 56298, 56298, 56298, 56298} },
+-		{.cap = 0, .volt = 69375, .dyn_pwr = 11960,
+-			.lkg_pwr = {58292, 58292, 58292, 58292, 58292, 58292} },
+-		{.cap = 0, .volt = 71250, .dyn_pwr = 14058,
+-			.lkg_pwr = {60417, 60417, 60417, 60417, 60417, 60417} },
+-		{.cap = 0, .volt = 73125, .dyn_pwr = 16328,
+-			.lkg_pwr = {62609, 62609, 62609, 62609, 62609, 62609} },
+-		{.cap = 0, .volt = 75625, .dyn_pwr = 19089,
+-			.lkg_pwr = {65531, 65531, 65531, 65531, 65531, 65531} },
+-		{.cap = 0, .volt = 76875, .dyn_pwr = 20997,
++		{.cap = 0, .volt = 71875, .dyn_pwr = 14306,
++			.lkg_pwr = {61148, 61148, 61148, 61148, 61148, 61148} },
++		{.cap = 0, .volt = 74375, .dyn_pwr = 16891,
++			.lkg_pwr = {64070, 64070, 64070, 64070, 64070, 64070} },
++		{.cap = 0, .volt = 76875, .dyn_pwr = 19725,
+ 			.lkg_pwr = {66992, 66992, 66992, 66992, 66992, 66992} },
+-		{.cap = 0, .volt = 78750, .dyn_pwr = 23343,
+-			.lkg_pwr = {69184, 69184, 69184, 69184, 69184, 69184} },
+-		{.cap = 0, .volt = 80000, .dyn_pwr = 25467,
++		{.cap = 0, .volt = 78125, .dyn_pwr = 21685,
++			.lkg_pwr = {68454, 68454, 68454, 68454, 68454, 68454} },
++		{.cap = 0, .volt = 80000, .dyn_pwr = 24090,
+ 			.lkg_pwr = {70645, 70645, 70645, 70645, 70645, 70645} },
+-		{.cap = 0, .volt = 81875, .dyn_pwr = 28581,
++		{.cap = 0, .volt = 81875, .dyn_pwr = 26675,
+ 			.lkg_pwr = {73243, 73243, 73243, 73243, 73243, 73243} },
+-		{.cap = 0, .volt = 83750, .dyn_pwr = 31898,
+-			.lkg_pwr = {75841, 75841, 75841, 75841, 75841, 75841} },
+-		{.cap = 0, .volt = 86250, .dyn_pwr = 34888,
++		{.cap = 0, .volt = 84375, .dyn_pwr = 30353,
++			.lkg_pwr = {76707, 76707, 76707, 76707, 76707, 76707} },
++		{.cap = 0, .volt = 86250, .dyn_pwr = 33831,
+ 			.lkg_pwr = {79304, 79304, 79304, 79304, 79304, 79304} },
+-		{.cap = 0, .volt = 88125, .dyn_pwr = 37525,
+-			.lkg_pwr = {81902, 81902, 81902, 81902, 81902, 81902} },
+-		{.cap = 0, .volt = 91875, .dyn_pwr = 43186,
+-			.lkg_pwr = {87485, 87485, 87485, 87485, 87485, 87485} },
+-		{.cap = 0, .volt = 96250, .dyn_pwr = 50030,
+-			.lkg_pwr = {94449, 94449, 94449, 94449, 94449, 94449} },
+-		{.cap = 0, .volt = 100000, .dyn_pwr = 56847,
+-		.lkg_pwr = {100418, 100418, 100418, 100418, 100418, 100418} },
++		{.cap = 0, .volt = 90625, .dyn_pwr = 39685,
++			.lkg_pwr = {85495, 85495, 85495, 85495, 85495, 85495} },
++		{.cap = 0, .volt = 95000, .dyn_pwr = 46174,
++			.lkg_pwr = {92459, 92459, 92459, 92459, 92459, 92459} },
++		{.cap = 0, .volt = 99375, .dyn_pwr = 53332,
++			.lkg_pwr = {99423, 99423, 99423, 99423, 99423, 99423} },
++		{.cap = 0, .volt = 103125, .dyn_pwr = 60455,
++			.lkg_pwr = {107604, 107604, 107604, 107604, 107604, 107604} },
++		{.cap = 0, .volt = 106875, .dyn_pwr = 68000,
++			.lkg_pwr = {115000, 115000, 115000, 115000, 115000, 115000} },
++		{.cap = 0, .volt = 110625, .dyn_pwr = 76000,
++			.lkg_pwr = {123000, 123000, 123000, 123000, 123000, 123000} },
+ 	},
+ 	.lkg_idx = DEFAULT_LKG_IDX,
+ 	.row_num = UPOWER_OPP_NUM,
+@@ -273,38 +273,38 @@ struct upower_tbl upower_tbl_cci_6785 = {
+ 
+ struct upower_tbl upower_tbl_l_6785T = {
+ 	.row = {
+-		{.cap = 124, .volt = 60000, .dyn_pwr = 14733,
++		{.cap = 126, .volt = 60000, .dyn_pwr = 14733,
+ 			.lkg_pwr = {34199, 34199, 34199, 34199, 34199, 34199} },
+-		{.cap = 192, .volt = 67500, .dyn_pwr = 28865,
++		{.cap = 195, .volt = 67500, .dyn_pwr = 28865,
+ 			.lkg_pwr = {39842, 39842, 39842, 39842, 39842, 39842} },
+-		{.cap = 211, .volt = 70000, .dyn_pwr = 35094,
+-			.lkg_pwr = {41723, 41723, 41723, 41723, 41723, 41723} },
+-		{.cap = 228, .volt = 72500, .dyn_pwr = 41948,
++		{.cap = 242, .volt = 72500, .dyn_pwr = 41948,
+ 			.lkg_pwr = {43791, 43791, 43791, 43791, 43791, 43791} },
+-		{.cap = 250, .volt = 75000, .dyn_pwr = 49495,
++		{.cap = 264, .volt = 75000, .dyn_pwr = 49495,
+ 			.lkg_pwr = {45859, 45859, 45859, 45859, 45859, 45859} },
+-		{.cap = 271, .volt = 77500, .dyn_pwr = 57766,
++		{.cap = 286, .volt = 77500, .dyn_pwr = 57766,
+ 			.lkg_pwr = {47927, 47927, 47927, 47927, 47927, 47927} },
+-		{.cap = 291, .volt = 80000, .dyn_pwr = 66791,
++		{.cap = 308, .volt = 80000, .dyn_pwr = 66791,
+ 			.lkg_pwr = {49995, 49995, 49995, 49995, 49995, 49995} },
+-		{.cap = 311, .volt = 82500, .dyn_pwr = 76602,
++		{.cap = 342, .volt = 82500, .dyn_pwr = 76602,
+ 			.lkg_pwr = {52446, 52446, 52446, 52446, 52446, 52446} },
+-		{.cap = 335, .volt = 85625, .dyn_pwr = 90016,
++		{.cap = 364, .volt = 85625, .dyn_pwr = 90016,
+ 			.lkg_pwr = {55510, 55510, 55510, 55510, 55510, 55510} },
+-		{.cap = 358, .volt = 87500, .dyn_pwr = 101397,
+-			.lkg_pwr = {57349, 57349, 57349, 57349, 57349, 57349} },
+-		{.cap = 368, .volt = 90000, .dyn_pwr = 110456,
++		{.cap = 382, .volt = 90000, .dyn_pwr = 110456,
+ 			.lkg_pwr = {59800, 59800, 59800, 59800, 59800, 59800} },
+-		{.cap = 380, .volt = 92500, .dyn_pwr = 121370,
++		{.cap = 394, .volt = 92500, .dyn_pwr = 121370,
+ 			.lkg_pwr = {62616, 62616, 62616, 62616, 62616, 62616} },
+-		{.cap = 390, .volt = 95000, .dyn_pwr = 132968,
++		{.cap = 406, .volt = 95000, .dyn_pwr = 132968,
+ 			.lkg_pwr = {65432, 65432, 65432, 65432, 65432, 65432} },
+-		{.cap = 404, .volt = 98125, .dyn_pwr = 147062,
++		{.cap = 416, .volt = 98125, .dyn_pwr = 147062,
+ 			.lkg_pwr = {68953, 68953, 68953, 68953, 68953, 68953} },
+-		{.cap = 416, .volt = 100625, .dyn_pwr = 160204,
++		{.cap = 426, .volt = 100625, .dyn_pwr = 160204,
+ 			.lkg_pwr = {72082, 72082, 72082, 72082, 72082, 72082} },
+-		{.cap = 427, .volt = 103125, .dyn_pwr = 174095,
++		{.cap = 435, .volt = 103125, .dyn_pwr = 174095,
+ 			.lkg_pwr = {76151, 76151, 76151, 76151, 76151, 76151} },
++		{.cap = 442, .volt = 109375, .dyn_pwr = 198000,
++			.lkg_pwr = {82000, 82000, 82000, 82000, 82000, 82000} },
++		{.cap = 448, .volt = 113750, .dyn_pwr = 218000,
++			.lkg_pwr = {88000, 88000, 88000, 88000, 88000, 88000} },
+ 	},
+ 	.lkg_idx = DEFAULT_LKG_IDX,
+ 	.row_num = UPOWER_OPP_NUM,
+@@ -321,37 +321,37 @@ struct upower_tbl upower_tbl_l_6785T = {
+ 
+ struct upower_tbl upower_tbl_cluster_l_6785T = {
+ 	.row = {
+-		{.cap = 124, .volt = 60000, .dyn_pwr = 0,
++		{.cap = 126, .volt = 60000, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 192, .volt = 67500, .dyn_pwr = 0,
++		{.cap = 195, .volt = 67500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 211, .volt = 70000, .dyn_pwr = 0,
++		{.cap = 242, .volt = 72500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 228, .volt = 72500, .dyn_pwr = 0,
++		{.cap = 264, .volt = 75000, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 250, .volt = 75000, .dyn_pwr = 0,
++		{.cap = 286, .volt = 77500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 271, .volt = 77500, .dyn_pwr = 0,
++		{.cap = 308, .volt = 80000, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 291, .volt = 80000, .dyn_pwr = 0,
++		{.cap = 342, .volt = 82500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 311, .volt = 82500, .dyn_pwr = 0,
++		{.cap = 364, .volt = 85625, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 335, .volt = 85625, .dyn_pwr = 0,
++		{.cap = 382, .volt = 90000, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 358, .volt = 87500, .dyn_pwr = 0,
++		{.cap = 394, .volt = 92500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 368, .volt = 90000, .dyn_pwr = 0,
++		{.cap = 406, .volt = 95000, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 380, .volt = 92500, .dyn_pwr = 0,
++		{.cap = 416, .volt = 98125, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 390, .volt = 95000, .dyn_pwr = 0,
++		{.cap = 426, .volt = 100625, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 404, .volt = 98125, .dyn_pwr = 0,
++		{.cap = 435, .volt = 103125, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 416, .volt = 100625, .dyn_pwr = 0,
++		{.cap = 442, .volt = 109375, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 427, .volt = 103125, .dyn_pwr = 0,
++		{.cap = 448, .volt = 113750, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+ 	},
+ 	.lkg_idx = DEFAULT_LKG_IDX,
+@@ -369,38 +369,38 @@ struct upower_tbl upower_tbl_cluster_l_6785T = {
+ 
+ struct upower_tbl upower_tbl_b_6785T = {
+ 	.row = {
+-		{.cap = 450, .volt = 67500, .dyn_pwr = 126720,
++		{.cap = 418, .volt = 67500, .dyn_pwr = 115000,
+ 		.lkg_pwr = {177757, 177757, 177757, 177757, 177757, 177757} },
+-		{.cap = 486, .volt = 69375, .dyn_pwr = 144408,
+-		.lkg_pwr = {184214, 184214, 184214, 184214, 184214, 184214} },
+-		{.cap = 528, .volt = 71875, .dyn_pwr = 170323,
+-		.lkg_pwr = {193892, 193892, 193892, 193892, 193892, 193892} },
+-		{.cap = 571, .volt = 74375, .dyn_pwr = 197699,
++		{.cap = 518, .volt = 74375, .dyn_pwr = 170000,
+ 		.lkg_pwr = {203926, 203926, 203926, 203926, 203926, 203926} },
+-		{.cap = 612, .volt = 77500, .dyn_pwr = 231091,
+-		.lkg_pwr = {216469, 216469, 216469, 216469, 216469, 216469} },
+-		{.cap = 651, .volt = 80000, .dyn_pwr = 263734,
++		{.cap = 588, .volt = 80000, .dyn_pwr = 225000,
+ 		.lkg_pwr = {226503, 226503, 226503, 226503, 226503, 226503} },
+-		{.cap = 717, .volt = 84375, .dyn_pwr = 325017,
++		{.cap = 648, .volt = 84375, .dyn_pwr = 280000,
+ 		.lkg_pwr = {245139, 245139, 245139, 245139, 245139, 245139} },
+-		{.cap = 771, .volt = 87500, .dyn_pwr = 376186,
++		{.cap = 696, .volt = 87500, .dyn_pwr = 335000,
+ 		.lkg_pwr = {258451, 258451, 258451, 258451, 258451, 258451} },
+-		{.cap = 817, .volt = 91250, .dyn_pwr = 437591,
++		{.cap = 744, .volt = 91250, .dyn_pwr = 390000,
+ 		.lkg_pwr = {275322, 275322, 275322, 275322, 275322, 275322} },
+-		{.cap = 872, .volt = 95625, .dyn_pwr = 519186,
++		{.cap = 800, .volt = 95625, .dyn_pwr = 460000,
+ 		.lkg_pwr = {297101, 297101, 297101, 297101, 297101, 297101} },
+-		{.cap = 897, .volt = 98125, .dyn_pwr = 564684,
+-		.lkg_pwr = {309546, 309546, 309546, 309546, 309546, 309546} },
+-		{.cap = 922, .volt = 101250, .dyn_pwr = 620182,
++		{.cap = 848, .volt = 101250, .dyn_pwr = 550000,
+ 		.lkg_pwr = {326261, 326261, 326261, 326261, 326261, 326261} },
+-		{.cap = 948, .volt = 103750, .dyn_pwr = 671188,
++		{.cap = 874, .volt = 103750, .dyn_pwr = 600000,
+ 		.lkg_pwr = {341023, 341023, 341023, 341023, 341023, 341023} },
+-		{.cap = 975, .volt = 106250, .dyn_pwr = 724349,
++		{.cap = 898, .volt = 106250, .dyn_pwr = 655000,
+ 		.lkg_pwr = {355786, 355786, 355786, 355786, 355786, 355786} },
+-		{.cap = 999, .volt = 109375, .dyn_pwr = 788990,
++		{.cap = 922, .volt = 109375, .dyn_pwr = 720000,
+ 		.lkg_pwr = {374239, 374239, 374239, 374239, 374239, 374239} },
+-		{.cap = 1024, .volt = 111875, .dyn_pwr = 847967,
++		{.cap = 946, .volt = 111875, .dyn_pwr = 780000,
+ 		.lkg_pwr = {392972, 392972, 392972, 392972, 392972, 392972} },
++		{.cap = 974, .volt = 113750, .dyn_pwr = 840000,
++		.lkg_pwr = {408000, 408000, 408000, 408000, 408000, 408000} },
++		{.cap = 996, .volt = 115625, .dyn_pwr = 900000,
++		.lkg_pwr = {424000, 424000, 424000, 424000, 424000, 424000} },
++		{.cap = 1010, .volt = 117500, .dyn_pwr = 945000,
++		.lkg_pwr = {440000, 440000, 440000, 440000, 440000, 440000} },
++		{.cap = 1024, .volt = 119375, .dyn_pwr = 990000,
++		.lkg_pwr = {456000, 456000, 456000, 456000, 456000, 456000} },
+ 	},
+ 	.lkg_idx = DEFAULT_LKG_IDX,
+ 	.row_num = UPOWER_OPP_NUM,
+@@ -417,37 +417,37 @@ struct upower_tbl upower_tbl_b_6785T = {
+ 
+ struct upower_tbl upower_tbl_cluster_b_6785T = {
+ 	.row = {
+-		{.cap = 450, .volt = 67500, .dyn_pwr = 0,
++		{.cap = 418, .volt = 67500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 486, .volt = 69375, .dyn_pwr = 0,
++		{.cap = 518, .volt = 74375, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 528, .volt = 71875, .dyn_pwr = 0,
++		{.cap = 588, .volt = 80000, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 571, .volt = 74375, .dyn_pwr = 0,
++		{.cap = 648, .volt = 84375, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 612, .volt = 77500, .dyn_pwr = 0,
++		{.cap = 696, .volt = 87500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 651, .volt = 80000, .dyn_pwr = 0,
++		{.cap = 744, .volt = 91250, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 717, .volt = 84375, .dyn_pwr = 0,
++		{.cap = 800, .volt = 95625, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 771, .volt = 87500, .dyn_pwr = 0,
++		{.cap = 848, .volt = 101250, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 817, .volt = 91250, .dyn_pwr = 0,
++		{.cap = 874, .volt = 103750, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 872, .volt = 95625, .dyn_pwr = 0,
++		{.cap = 898, .volt = 106250, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 897, .volt = 98125, .dyn_pwr = 0,
++		{.cap = 922, .volt = 109375, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 922, .volt = 101250, .dyn_pwr = 0,
++		{.cap = 946, .volt = 111875, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 948, .volt = 103750, .dyn_pwr = 0,
++		{.cap = 974, .volt = 113750, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 975, .volt = 106250, .dyn_pwr = 0,
++		{.cap = 996, .volt = 115625, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 999, .volt = 109375, .dyn_pwr = 0,
++		{.cap = 1010, .volt = 117500, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+-		{.cap = 1024, .volt = 111875, .dyn_pwr = 0,
++		{.cap = 1024, .volt = 119375, .dyn_pwr = 0,
+ 			.lkg_pwr = {0, 0, 0, 0, 0, 0} },
+ 	},
+ 	.lkg_idx = DEFAULT_LKG_IDX,
+@@ -469,8 +469,6 @@ struct upower_tbl upower_tbl_cci_6785T = {
+ 			.lkg_pwr = {48325, 48325, 48325, 48325, 48325, 48325} },
+ 		{.cap = 0, .volt = 67500, .dyn_pwr = 10360,
+ 			.lkg_pwr = {56298, 56298, 56298, 56298, 56298, 56298} },
+-		{.cap = 0, .volt = 69375, .dyn_pwr = 11960,
+-			.lkg_pwr = {58292, 58292, 58292, 58292, 58292, 58292} },
+ 		{.cap = 0, .volt = 71875, .dyn_pwr = 14306,
+ 			.lkg_pwr = {61148, 61148, 61148, 61148, 61148, 61148} },
+ 		{.cap = 0, .volt = 74375, .dyn_pwr = 16891,
+@@ -487,8 +485,6 @@ struct upower_tbl upower_tbl_cci_6785T = {
+ 			.lkg_pwr = {76707, 76707, 76707, 76707, 76707, 76707} },
+ 		{.cap = 0, .volt = 86250, .dyn_pwr = 33831,
+ 			.lkg_pwr = {79304, 79304, 79304, 79304, 79304, 79304} },
+-		{.cap = 0, .volt = 88750, .dyn_pwr = 36940,
+-			.lkg_pwr = {82768, 82768, 82768, 82768, 82768, 82768} },
+ 		{.cap = 0, .volt = 90625, .dyn_pwr = 39685,
+ 			.lkg_pwr = {85495, 85495, 85495, 85495, 85495, 85495} },
+ 		{.cap = 0, .volt = 95000, .dyn_pwr = 46174,
+@@ -496,7 +492,11 @@ struct upower_tbl upower_tbl_cci_6785T = {
+ 		{.cap = 0, .volt = 99375, .dyn_pwr = 53332,
+ 			.lkg_pwr = {99423, 99423, 99423, 99423, 99423, 99423} },
+ 		{.cap = 0, .volt = 103125, .dyn_pwr = 60455,
+-		.lkg_pwr = {107604, 107604, 107604, 107604, 107604, 107604} },
++			.lkg_pwr = {107604, 107604, 107604, 107604, 107604, 107604} },
++		{.cap = 0, .volt = 106875, .dyn_pwr = 68000,
++			.lkg_pwr = {115000, 115000, 115000, 115000, 115000, 115000} },
++		{.cap = 0, .volt = 110625, .dyn_pwr = 76000,
++			.lkg_pwr = {123000, 123000, 123000, 123000, 123000, 123000} },
+ 	},
+ 	.lkg_idx = DEFAULT_LKG_IDX,
+ 	.row_num = UPOWER_OPP_NUM,
+diff --git a/drivers/misc/mediatek/base/power/mt6785/mtk_gpufreq_core.c b/drivers/misc/mediatek/base/power/mt6785/mtk_gpufreq_core.c
+index 8efb60730..ea67e270f 100644
+--- a/drivers/misc/mediatek/base/power/mt6785/mtk_gpufreq_core.c
++++ b/drivers/misc/mediatek/base/power/mt6785/mtk_gpufreq_core.c
+@@ -1141,59 +1141,13 @@ void mt_gpufreq_low_batt_callback(LOW_BATTERY_LEVEL low_battery_level)
+  */
+ void mt_gpufreq_thermal_protect(unsigned int limited_power)
+ {
+-	int i = -1;
+-	unsigned int limited_freq;
+-
+ 	mutex_lock(&mt_gpufreq_power_lock);
+ 
+-	if (g_thermal_protect_limited_ignore_state) {
+-		gpufreq_pr_debug(
+-				"@%s: ignore Thermal protection\n",
+-				__func__);
+-		mutex_unlock(&mt_gpufreq_power_lock);
+-		return;
+-	}
+-
+-	if (limited_power == g_thermal_protect_power) {
+-		gpufreq_pr_debug(
+-				"@%s: limited_power(%d mW) not changed, skip it\n",
+-				__func__,
+-				limited_power);
+-		mutex_unlock(&mt_gpufreq_power_lock);
+-		return;
+-	}
+-
+-	g_thermal_protect_power = limited_power;
+-
+-#if MT_GPUFREQ_DYNAMIC_POWER_TABLE_UPDATE == 1
+-	__mt_update_gpufreqs_power_table();
+-#endif
+-
+-	if (limited_power == 0) {
+-		g_limited_idx_array[IDX_THERMAL_PROTECT_LIMITED] =
+-				g_segment_max_opp_idx;
+-		__mt_gpufreq_update_max_limited_idx();
+-	} else {
+-		limited_freq =
+-		__mt_gpufreq_get_limited_freq_by_power(limited_power);
+-		for (i = g_segment_max_opp_idx;
+-				i <= g_segment_min_opp_idx; i++) {
+-			if (g_opp_table[i].gpufreq_khz <= limited_freq) {
+-				g_limited_idx_array[
+-				IDX_THERMAL_PROTECT_LIMITED] = i;
+-				__mt_gpufreq_update_max_limited_idx();
+-				if (g_cur_opp_freq > g_opp_table[i].gpufreq_khz)
+-					mt_gpufreq_target(i, true);
+-				break;
+-			}
+-		}
+-	}
+-
+-	gpufreq_pr_debug(
+-			"@%s: limited power index = %d, limited power = %d\n",
+-			__func__,
+-			i,
+-			limited_power);
++	g_thermal_protect_limited_ignore_state = true;
++	g_limited_ignore_array[IDX_THERMAL_PROTECT_LIMITED] = true;
++	g_thermal_protect_power = 0;
++	g_limited_idx_array[IDX_THERMAL_PROTECT_LIMITED] = g_segment_max_opp_idx;
++	__mt_gpufreq_update_max_limited_idx();
+ 
+ 	mutex_unlock(&mt_gpufreq_power_lock);
+ }
+@@ -1201,52 +1155,13 @@ void mt_gpufreq_thermal_protect(unsigned int limited_power)
+ /* API : set limited OPP table index by PBM */
+ void mt_gpufreq_set_power_limit_by_pbm(unsigned int limited_power)
+ {
+-	int i = -1;
+-	unsigned int limited_freq;
+-
+ 	mutex_lock(&mt_gpufreq_power_lock);
+ 
+-	if (g_pbm_limited_ignore_state) {
+-		gpufreq_pr_debug(
+-				"@%s: ignore PBM Power limited\n",
+-				__func__);
+-		mutex_unlock(&mt_gpufreq_power_lock);
+-		return;
+-	}
+-
+-	if (limited_power == g_pbm_limited_power) {
+-		gpufreq_pr_debug(
+-				"@%s: limited_power(%d mW) not changed, skip it\n",
+-				__func__,
+-				limited_power);
+-		mutex_unlock(&mt_gpufreq_power_lock);
+-		return;
+-	}
+-
+-	g_pbm_limited_power = limited_power;
+-
+-	if (limited_power == 0) {
+-		g_limited_idx_array[IDX_PBM_LIMITED] = g_segment_max_opp_idx;
+-		__mt_gpufreq_update_max_limited_idx();
+-	} else {
+-		limited_freq =
+-				__mt_gpufreq_get_limited_freq_by_power(
+-				limited_power);
+-		for (i = g_segment_max_opp_idx;
+-				i <= g_segment_min_opp_idx; i++) {
+-			if (g_opp_table[i].gpufreq_khz <= limited_freq) {
+-				g_limited_idx_array[IDX_PBM_LIMITED] = i;
+-				__mt_gpufreq_update_max_limited_idx();
+-				break;
+-			}
+-		}
+-	}
+-
+-	gpufreq_pr_debug(
+-			"@%s: limited power index = %d, limited_power = %d\n",
+-			__func__,
+-			i,
+-			limited_power);
++	g_pbm_limited_ignore_state = true;
++	g_limited_ignore_array[IDX_PBM_LIMITED] = true;
++	g_pbm_limited_power = 0;
++	g_limited_idx_array[IDX_PBM_LIMITED] = g_segment_max_opp_idx;
++	__mt_gpufreq_update_max_limited_idx();
+ 
+ 	mutex_unlock(&mt_gpufreq_power_lock);
+ }
+@@ -1410,10 +1325,8 @@ static ssize_t mt_gpufreq_opp_stress_test_proc_write(
+ 	buf[len] = '\0';
+ 
+ 	if (!kstrtouint(buf, 10, &value)) {
+-		if (value >= 0 && value <= 2) {
+-			ret = 0;
+-			g_opp_stress_test_state = value;
+-		}
++		ret = 0;
++		g_opp_stress_test_state = 0;
+ 	}
+ 
+ out:
+@@ -1558,70 +1471,45 @@ if (sscanf(buf, cond_buf, &value) == 1) {
+ 	if (strncmp(array[i],
+ 		"pbm_limited_power",
+ 		strlen(array[i])) == 0)
+-		mt_gpufreq_set_power_limit_by_pbm(value);
++		mt_gpufreq_set_power_limit_by_pbm(0);
+ 	else if (strncmp(array[i],
+ 		"thermal_protect_power",
+ 		strlen(array[i])) == 0)
+-		mt_gpufreq_thermal_protect(value);
++		mt_gpufreq_thermal_protect(0);
+ #if MT_GPUFREQ_BATT_OC_PROTECT == 1
+ 	else if (strncmp(array[i],
+ 		"ignore_batt_oc",
+ 		strlen(array[i])) == 0) {
+-		if (!value || !(value-1)) {
+-			g_batt_oc_limited_ignore_state =
+-			(value) ? true : false;
+-			g_limited_ignore_array[
+-			IDX_BATT_OC_LIMITED] =
+-			g_batt_oc_limited_ignore_state;
+-		}
++		g_batt_oc_limited_ignore_state = true;
++		g_limited_ignore_array[IDX_BATT_OC_LIMITED] = true;
+ 	}
+ #endif
+ #if MT_GPUFREQ_BATT_PERCENT_PROTECT == 1
+ 	else if (strncmp(array[i],
+ 		"ignore_batt_percent",
+ 		strlen(array[i])) == 0) {
+-		if (!value || !(value-1)) {
+-			g_batt_percent_limited_ignore_state =
+-			(value) ? true : false;
+-			g_limited_ignore_array[
+-			IDX_BATT_PERCENT_LIMITED] =
+-			g_batt_percent_limited_ignore_state;
+-		}
++		g_batt_percent_limited_ignore_state = true;
++		g_limited_ignore_array[IDX_BATT_PERCENT_LIMITED] = true;
+ 	}
+ #endif
+ #if MT_GPUFREQ_LOW_BATT_VOLT_PROTECT == 1
+ 	else if (strncmp(array[i],
+ 		"ignore_low_batt",
+ 		strlen(array[i])) == 0) {
+-		if (!value || !(value-1)) {
+-			g_low_batt_limited_ignore_state =
+-			(value) ? true : false;
+-			g_limited_ignore_array[
+-			IDX_LOW_BATT_LIMITED] =
+-			g_low_batt_limited_ignore_state;
+-		}
++		g_low_batt_limited_ignore_state = true;
++		g_limited_ignore_array[IDX_LOW_BATT_LIMITED] = true;
+ 	}
+ #endif
+ 	else if (strncmp(array[i],
+ 		"ignore_thermal_protect",
+ 		strlen(array[i])) == 0) {
+-		if (!value || !(value-1)) {
+-			g_thermal_protect_limited_ignore_state =
+-			(value) ? true : false;
+-			g_limited_ignore_array[
+-					IDX_THERMAL_PROTECT_LIMITED] =
+-					g_thermal_protect_limited_ignore_state;
+-		}
++		g_thermal_protect_limited_ignore_state = true;
++		g_limited_ignore_array[IDX_THERMAL_PROTECT_LIMITED] = true;
+ 	} else if (strncmp(array[i],
+ 		"ignore_pbm_limited",
+ 		strlen(array[i])) == 0) {
+-		if (!value || !(value-1)) {
+-			g_pbm_limited_ignore_state =
+-			(value) ? true : false;
+-			g_limited_ignore_array[
+-			IDX_PBM_LIMITED] =
+-			g_pbm_limited_ignore_state;
+-		}
++		g_pbm_limited_ignore_state = true;
++		g_limited_ignore_array[IDX_PBM_LIMITED] = true;
+ 	}
+ 	break;
+ }
+@@ -1681,19 +1569,15 @@ static ssize_t mt_gpufreq_opp_freq_proc_write(struct file *file,
+ 
+ 	if (kstrtouint(buf, 10, &value) == 0) {
+ 		if (value == 0) {
++			ret = 0;
+ 			g_keep_opp_freq_state = false;
++		} else if (value == g_opp_table[g_segment_max_opp_idx].gpufreq_khz) {
++			ret = 0;
++			g_keep_opp_freq_idx = g_segment_max_opp_idx;
++			g_keep_opp_freq_state = true;
++			mt_gpufreq_target(g_segment_max_opp_idx, true);
+ 		} else {
+-			for (i = g_segment_max_opp_idx;
+-				i <= g_segment_min_opp_idx;
+-				i++) {
+-				if (value == g_opp_table[i].gpufreq_khz) {
+-					ret = 0;
+-					g_keep_opp_freq_idx = i;
+-					g_keep_opp_freq_state = true;
+-					mt_gpufreq_target(i, true);
+-					break;
+-				}
+-			}
++			ret = -EPERM;
+ 		}
+ 	}
+ 
+@@ -1741,39 +1625,9 @@ static ssize_t mt_gpufreq_fixed_freq_volt_proc_write(
+ 	buf[len] = '\0';
+ 
+ 	if (sscanf(buf, "%d %d", &fixed_freq, &fixed_volt) == 2) {
+-		ret = 0;
+-		if (fixed_volt > VGPU_MAX_VOLT) {
+-			gpufreq_pr_debug(
+-					"@%s: fixed volt(%d) is greater than VGPU_MAX_VOLT(%d)\n",
+-					__func__,
+-					fixed_volt,
+-					VGPU_MAX_VOLT);
+-			goto out;
+-		} else if (fixed_volt < VGPU_MIN_VOLT && fixed_volt > 0) {
+-			gpufreq_pr_debug(
+-					"@%s: fixed volt(%d) is lesser than VGPU_MIN_VOLT(%d)\n",
+-					__func__,
+-					fixed_volt,
+-					VGPU_MIN_VOLT);
+-			goto out;
+-		} else if (fixed_freq > POSDIV_4_MAX_FREQ) {
+-			gpufreq_pr_debug(
+-					"@%s: fixed freq(%d) is greater than POSDIV_4_MAX_FREQ(%d)\n",
+-					__func__,
+-					fixed_freq,
+-					POSDIV_4_MAX_FREQ);
+-			goto out;
+-		} else if (fixed_freq < POSDIV_8_MIN_FREQ && fixed_freq > 0) {
+-			gpufreq_pr_debug(
+-					"@%s: fixed freq(%d) is lesser than POSDIV_8_MIN_FREQ(%d)\n",
+-					__func__,
+-					fixed_freq,
+-					POSDIV_8_MIN_FREQ);
+-			goto out;
+-		}
+-
+-		mutex_lock(&mt_gpufreq_lock);
+ 		if ((fixed_freq == 0) && (fixed_volt == 0)) {
++			ret = 0;
++			mutex_lock(&mt_gpufreq_lock);
+ 			fixed_freq =
+ 				g_opp_table[g_segment_min_opp_idx].gpufreq_khz;
+ 			fixed_volt =
+@@ -1789,19 +1643,18 @@ static ssize_t mt_gpufreq_fixed_freq_volt_proc_write(
+ 			g_fixed_freq = 0;
+ 			g_fixed_vgpu = 0;
+ 			g_fixed_freq_volt_state = false;
++			mutex_unlock(&mt_gpufreq_lock);
+ 		} else {
+-			g_cur_opp_freq = __mt_gpufreq_get_cur_freq();
+-			fixed_volt = VOLT_NORMALIZATION(fixed_volt);
+-			if (fixed_freq > g_cur_opp_freq) {
+-				__mt_gpufreq_set_fixed_vgpu(fixed_volt);
+-				__mt_gpufreq_set_fixed_freq(fixed_freq);
+-			} else {
+-				__mt_gpufreq_set_fixed_freq(fixed_freq);
+-				__mt_gpufreq_set_fixed_vgpu(fixed_volt);
++			if (0 && fixed_volt <= VGPU_MAX_VOLT &&
++			    fixed_volt >= VGPU_MIN_VOLT &&
++			    fixed_freq <= POSDIV_4_MAX_FREQ &&
++			    fixed_freq >= POSDIV_8_MIN_FREQ) {
++				gpufreq_pr_debug(
++					"@%s: fixed_volt=%d fixed_freq=%d blocked\n",
++					__func__, fixed_volt, fixed_freq);
+ 			}
+-			g_fixed_freq_volt_state = true;
++			ret = -EPERM;
+ 		}
+-		mutex_unlock(&mt_gpufreq_lock);
+ 	}
+ 
+ out:
+@@ -1880,7 +1733,9 @@ void __mt_gpufreq_update_aging(bool apply_aging_setting)
+ 
+ 	if (apply_aging_setting) {
+ 		for (i = 0; i < g_max_opp_idx_num; i++) {
+-			if (i >= 0 && i <= 23)
++			if (i <= 5)
++				continue;
++			if (i >= 6 && i <= 23)
+ 				g_opp_table[i].gpufreq_volt -= 1875;
+ 			else if (i >= 24 && i <= 33)
+ 				g_opp_table[i].gpufreq_volt -= 1250;
+@@ -2760,6 +2615,9 @@ static void __mt_gpufreq_update_intepolating_volt(
+ 	for (i = 1; i < factor; i++) {
+ 		intepolating_volt =
+ 		((high * (factor - i)) + low * (i)) / factor;
++		if (idx + i <= 5 && VOLT_NORMALIZATION(intepolating_volt) <
++				g_opp_table_default[idx + i].gpufreq_volt)
++			continue;
+ 		g_opp_table[idx + i].gpufreq_volt =
+ 		VOLT_NORMALIZATION(intepolating_volt);
+ 		g_opp_table[idx + i].gpufreq_vsram =
+@@ -2871,12 +2729,9 @@ static void __mt_gpufreq_batt_oc_protect(unsigned int limited_idx)
+ {
+ 	mutex_lock(&mt_gpufreq_power_lock);
+ 
+-	gpufreq_pr_debug(
+-			"@%s: limited_idx = %d\n",
+-			__func__,
+-			limited_idx);
+-
+-	g_limited_idx_array[IDX_BATT_OC_LIMITED] = limited_idx;
++	g_batt_oc_limited_ignore_state = true;
++	g_limited_ignore_array[IDX_BATT_OC_LIMITED] = true;
++	g_limited_idx_array[IDX_BATT_OC_LIMITED] = g_segment_max_opp_idx;
+ 	__mt_gpufreq_update_max_limited_idx();
+ 
+ 	mutex_unlock(&mt_gpufreq_power_lock);
+@@ -2891,12 +2746,9 @@ static void __mt_gpufreq_batt_percent_protect(unsigned int limited_index)
+ {
+ 	mutex_lock(&mt_gpufreq_power_lock);
+ 
+-	gpufreq_pr_debug(
+-			"@%s: limited_index = %d\n",
+-			__func__,
+-			limited_index);
+-
+-	g_limited_idx_array[IDX_BATT_PERCENT_LIMITED] = limited_index;
++	g_batt_percent_limited_ignore_state = true;
++	g_limited_ignore_array[IDX_BATT_PERCENT_LIMITED] = true;
++	g_limited_idx_array[IDX_BATT_PERCENT_LIMITED] = g_segment_max_opp_idx;
+ 	__mt_gpufreq_update_max_limited_idx();
+ 
+ 	mutex_unlock(&mt_gpufreq_power_lock);
+@@ -2911,12 +2763,9 @@ static void __mt_gpufreq_low_batt_protect(unsigned int limited_index)
+ {
+ 	mutex_lock(&mt_gpufreq_power_lock);
+ 
+-	gpufreq_pr_debug(
+-			"@%s: limited_index = %d\n",
+-			__func__,
+-			limited_index);
+-
+-	g_limited_idx_array[IDX_LOW_BATT_LIMITED] = limited_index;
++	g_low_batt_limited_ignore_state = true;
++	g_limited_ignore_array[IDX_LOW_BATT_LIMITED] = true;
++	g_limited_idx_array[IDX_LOW_BATT_LIMITED] = g_segment_max_opp_idx;
+ 	__mt_gpufreq_update_max_limited_idx();
+ 
+ 	mutex_unlock(&mt_gpufreq_power_lock);
+@@ -3040,13 +2889,13 @@ static void __mt_gpufreq_setup_opp_table(
+ 	if (g_segment_id == MT6785U_SEGMENT)
+ 		g_segment_max_opp_idx = 0;
+ 	else if (g_segment_id == MT6785T_SEGMENT)
+-		g_segment_max_opp_idx = 15;
++		g_segment_max_opp_idx = 0;
+ 	else if (g_segment_id == MT6785_SEGMENT)
+-		g_segment_max_opp_idx = 21;
++		g_segment_max_opp_idx = 0;
+ 	else if (g_segment_id == MT6783_SEGMENT)
+ 		g_segment_max_opp_idx = 30;
+ 	else
+-		g_segment_max_opp_idx = 15;
++		g_segment_max_opp_idx = 0;
+ 
+ 	g_segment_min_opp_idx = NUM_OF_OPP_IDX - 1;
+ 
+diff --git a/drivers/misc/mediatek/base/power/mt6785/mtk_gpufreq_core.h b/drivers/misc/mediatek/base/power/mt6785/mtk_gpufreq_core.h
+index 2981b42cd..eb3423e36 100644
+--- a/drivers/misc/mediatek/base/power/mt6785/mtk_gpufreq_core.h
++++ b/drivers/misc/mediatek/base/power/mt6785/mtk_gpufreq_core.h
+@@ -17,14 +17,14 @@
+ /**************************************************
+  * GPU DVFS OPP Table Setting
+  **************************************************/
+-#define SEG_GPU_DVFS_FREQ0		(900000)	/* KHz */
+-#define SEG_GPU_DVFS_FREQ1		(897000)	/* KHz */
+-#define SEG_GPU_DVFS_FREQ2		(892000)	/* KHz */
+-#define SEG_GPU_DVFS_FREQ3		(888000)	/* KHz */
+-#define SEG_GPU_DVFS_FREQ4		(884000)	/* KHz */
+-#define SEG_GPU_DVFS_FREQ5		(880000)	/* KHz */
+-#define SEG_GPU_DVFS_FREQ6		(875000)	/* KHz */
+-#define SEG_GPU_DVFS_FREQ7		(871000)	/* KHz */
++#define SEG_GPU_DVFS_FREQ0		(950000)	/* KHz */
++#define SEG_GPU_DVFS_FREQ1		(935000)	/* KHz */
++#define SEG_GPU_DVFS_FREQ2		(920000)	/* KHz */
++#define SEG_GPU_DVFS_FREQ3		(908000)	/* KHz */
++#define SEG_GPU_DVFS_FREQ4		(900000)	/* KHz */
++#define SEG_GPU_DVFS_FREQ5		(888000)	/* KHz */
++#define SEG_GPU_DVFS_FREQ6		(880000)	/* KHz */
++#define SEG_GPU_DVFS_FREQ7		(875000)	/* KHz */
+ #define SEG_GPU_DVFS_FREQ8		(867000)	/* KHz */
+ #define SEG_GPU_DVFS_FREQ9		(862000)	/* KHz */
+ #define SEG_GPU_DVFS_FREQ10		(858000)	/* KHz */
+@@ -61,12 +61,12 @@
+ #define SEG_GPU_DVFS_FREQ41		(295000)	/* KHz */
+ #define SEG_GPU_DVFS_FREQ42		(270000)	/* KHz */
+ 
+-#define SEG_GPU_DVFS_VOLT0		(87500)		/* mV x 100 */
+-#define SEG_GPU_DVFS_VOLT1		(86875)		/* mV x 100 */
+-#define SEG_GPU_DVFS_VOLT2		(86250)		/* mV x 100 */
+-#define SEG_GPU_DVFS_VOLT3		(85625)		/* mV x 100 */
+-#define SEG_GPU_DVFS_VOLT4		(85000)		/* mV x 100 */
+-#define SEG_GPU_DVFS_VOLT5		(84375)		/* mV x 100 */
++#define SEG_GPU_DVFS_VOLT0		(95000)		/* mV x 100 */
++#define SEG_GPU_DVFS_VOLT1		(93750)		/* mV x 100 */
++#define SEG_GPU_DVFS_VOLT2		(91875)		/* mV x 100 */
++#define SEG_GPU_DVFS_VOLT3		(90000)		/* mV x 100 */
++#define SEG_GPU_DVFS_VOLT4		(88125)		/* mV x 100 */
++#define SEG_GPU_DVFS_VOLT5		(86250)		/* mV x 100 */
+ #define SEG_GPU_DVFS_VOLT6		(83750)		/* mV x 100 */
+ #define SEG_GPU_DVFS_VOLT7		(83125)		/* mV x 100 */
+ #define SEG_GPU_DVFS_VOLT8		(82500)		/* mV x 100 */
+@@ -105,12 +105,12 @@
+ #define SEG_GPU_DVFS_VOLT41		(61875)		/* mV x 100 */
+ #define SEG_GPU_DVFS_VOLT42		(61250)		/* mV x 100 */
+ 
+-#define SEG_GPU_DVFS_VSRAM0		(97500)		/* mV x 100 */
+-#define SEG_GPU_DVFS_VSRAM1		(96875)		/* mV x 100 */
+-#define SEG_GPU_DVFS_VSRAM2		(96250)		/* mV x 100 */
+-#define SEG_GPU_DVFS_VSRAM3		(95625)		/* mV x 100 */
+-#define SEG_GPU_DVFS_VSRAM4		(95000)		/* mV x 100 */
+-#define SEG_GPU_DVFS_VSRAM5		(94375)		/* mV x 100 */
++#define SEG_GPU_DVFS_VSRAM0		(105000)	/* mV x 100 */
++#define SEG_GPU_DVFS_VSRAM1		(103750)	/* mV x 100 */
++#define SEG_GPU_DVFS_VSRAM2		(101875)	/* mV x 100 */
++#define SEG_GPU_DVFS_VSRAM3		(100000)	/* mV x 100 */
++#define SEG_GPU_DVFS_VSRAM4		(98125)		/* mV x 100 */
++#define SEG_GPU_DVFS_VSRAM5		(96250)		/* mV x 100 */
+ #define SEG_GPU_DVFS_VSRAM6		(93750)		/* mV x 100 */
+ #define SEG_GPU_DVFS_VSRAM7		(93125)		/* mV x 100 */
+ #define SEG_GPU_DVFS_VSRAM8		(92500)		/* mV x 100 */
+@@ -142,9 +142,9 @@
+ #define VGPU_OPP_MIN_VOLT		(SEG_GPU_DVFS_VOLT42)
+ #define VSRAM_GPU_OPP_MAX_VOLT	(SEG_GPU_DVFS_VSRAM0)
+ #define VSRAM_GPU_OPP_MIN_VOLT	(SEG_GPU_DVFS_VSRAM20)
+-#define VGPU_MAX_VOLT			(95000)	/* mV x 100 */
++#define VGPU_MAX_VOLT			(105000)/* mV x 100 */
+ #define VGPU_MIN_VOLT			(57500)	/* mV x 100 */
+-#define VSRAM_GPU_MAX_VOLT		(105000)/* mV x 100 */
++#define VSRAM_GPU_MAX_VOLT		(115000)/* mV x 100 */
+ #define VSRAM_GPU_MIN_VOLT		(85000)	/* mV x 100 */
+ #define PMIC_STEP				(625)	/* mV x 100 */
+ #define BUCK_DIFF_MAX			(35000)	/* mV x 100 */
+diff --git a/drivers/misc/mediatek/base/power/pbm_v4/mtk_pbm.c b/drivers/misc/mediatek/base/power/pbm_v4/mtk_pbm.c
+index 563eca5c5..b772d7371 100644
+--- a/drivers/misc/mediatek/base/power/pbm_v4/mtk_pbm.c
++++ b/drivers/misc/mediatek/base/power/pbm_v4/mtk_pbm.c
+@@ -30,6 +30,10 @@
+ #include <mtk_pbm_common.h>
+ #include <mtk_pbm_data.h>
+ 
++#ifndef DISABLE_PBM_FEATURE
++#define DISABLE_PBM_FEATURE
++#endif
++
+ #ifndef DISABLE_PBM_FEATURE
+ #include <mach/upmu_sw.h>
+ #include <mt-plat/upmu_common.h>
+diff --git a/drivers/misc/mediatek/base/power/power_throttling/mtk_md_power_throttling.c b/drivers/misc/mediatek/base/power/power_throttling/mtk_md_power_throttling.c
+index 2d5d83f08..47aeecf5a 100644
+--- a/drivers/misc/mediatek/base/power/power_throttling/mtk_md_power_throttling.c
++++ b/drivers/misc/mediatek/base/power/power_throttling/mtk_md_power_throttling.c
+@@ -17,6 +17,16 @@
+ #include <mtk_md_power_throttling.h>
+ #include <mach/mtk_pmic.h>
+ 
++#ifndef DISABLE_LOW_BATTERY_PROTECT
++#define DISABLE_LOW_BATTERY_PROTECT
++#endif
++#ifndef DISABLE_BATTERY_OC_PROTECT
++#define DISABLE_BATTERY_OC_PROTECT
++#endif
++#ifndef DISABLE_BATTERY_PERCENT_PROTECT
++#define DISABLE_BATTERY_PERCENT_PROTECT
++#endif
++
+ #ifndef DISABLE_LOW_BATTERY_PROTECT
+ static void md_pt_low_battery_cb(enum LOW_BATTERY_LEVEL_TAG level)
+ {
+diff --git a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_interface.c b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_interface.c
+index b7036780f..718a51f03 100644
+--- a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_interface.c
++++ b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_interface.c
+@@ -126,32 +126,7 @@ static ssize_t ppm_enabled_proc_write(struct file *file,
+ 	ppm_lock(&ppm_main_info.lock);
+ 
+ 	if (!kstrtouint(buf, 10, &enabled)) {
+-		ppm_main_info.is_enabled = (enabled) ? true : false;
+-		if (!ppm_main_info.is_enabled) {
+-			int i;
+-			struct ppm_client_req *c_req =
+-				&(ppm_main_info.client_req);
+-			struct ppm_client_req *last_req =
+-				&(ppm_main_info.last_req);
+-
+-			/* send default limit to client */
+-			ppm_main_clear_client_req(c_req);
+-#ifdef PPM_SSPM_SUPPORT
+-			/* update limit to SSPM first */
+-			ppm_ipi_update_limit(*c_req);
+-#endif
+-			for_each_ppm_clients(i) {
+-				if (!ppm_main_info.client_info[i].limit_cb)
+-					continue;
+-
+-				ppm_main_info.client_info[i].limit_cb(*c_req);
+-			}
+-			memcpy(last_req->cpu_limit, c_req->cpu_limit,
+-				ppm_main_info.cluster_num *
+-				sizeof(*c_req->cpu_limit));
+-
+-			ppm_info("PPM disabled, send no limit to clinet!\n");
+-		}
++		ppm_main_info.is_enabled = true;
+ 	} else
+ 		ppm_err("echo [0/1] > /proc/ppm/enabled\n");
+ 
+diff --git a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_dlpt.c b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_dlpt.c
+index c6b3ac0c1..b05c1a36e 100644
+--- a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_dlpt.c
++++ b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_dlpt.c
+@@ -95,35 +95,19 @@ void mt_ppm_dlpt_kick_PBM(struct ppm_cluster_status *cluster_status,
+ 
+ void mt_ppm_dlpt_set_limit_by_pbm(unsigned int limited_power)
+ {
+-	unsigned int budget;
+-
+ 	FUNC_ENTER(FUNC_LV_POLICY);
+ 
+-	budget = ppm_dlpt_pwr_budget_preprocess(limited_power);
+-
+-	ppm_dbg(DLPT, "Get PBM notifier => budget = %d(%d)\n",
+-		budget, limited_power);
+-
+ 	ppm_lock(&dlpt_policy.lock);
+-
+-	if (!dlpt_policy.is_enabled) {
+-		ppm_warn("@%s: dlpt policy is not enabled!\n", __func__);
+-		ppm_unlock(&dlpt_policy.lock);
+-		goto end;
+-	}
+-
+-	dlpt_policy.req.power_budget = budget;
+-	dlpt_policy.is_activated = (budget) ? true : false;
+-
++	dlpt_policy.req.power_budget = 0;
++	dlpt_policy.is_activated = false;
+ 	ppm_unlock(&dlpt_policy.lock);
+ 
+ 	mt_ppm_main();
+ 
+-end:
+ 	FUNC_EXIT(FUNC_LV_POLICY);
+ }
+ 
+-static unsigned int ppm_dlpt_pwr_budget_preprocess(unsigned int budget)
++static __maybe_unused unsigned int ppm_dlpt_pwr_budget_preprocess(unsigned int budget)
+ {
+ 	unsigned int percentage = dlpt_percentage_to_real_power;
+ 
+diff --git a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_force_limit.c b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_force_limit.c
+index 4616575bc..845f4d22b 100644
+--- a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_force_limit.c
++++ b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_force_limit.c
+@@ -102,7 +102,8 @@ unsigned int mt_ppm_forcelimit_cpu_core(unsigned int cluster_num,
+ 
+ 	for (i = 0; i < cluster_num; i++) {
+ 		min_core = data[i].min;
+-		max_core = data[i].max;
++		data[i].max = -1;
++		max_core = -1;
+ 
+ 		/* invalid input check */
+ 		if (min_core != -1
+@@ -111,20 +112,10 @@ unsigned int mt_ppm_forcelimit_cpu_core(unsigned int cluster_num,
+ 				i, min_core);
+ 			return -1;
+ 		}
+-		if (max_core != -1
+-			&& max_core > (int)get_cluster_max_cpu_core(i)) {
+-			ppm_err("Invalid input! max_core for cluster%d = %d\n",
+-				i, max_core);
+-			return -1;
+-		}
+ 
+ 		/* check is all limit clear or not */
+-		if (min_core != -1 || max_core != -1)
++		if (min_core != -1)
+ 			is_limit = true;
+-
+-		/* sync to max_core if min > max */
+-		if (min_core != -1 && max_core != -1 && min_core > max_core)
+-			data[i].min = data[i].max;
+ 	}
+ 
+ 	ppm_lock(&forcelimit_policy.lock);
+diff --git a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_hard_user_limit.c b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_hard_user_limit.c
+index afba7e279..b19acfd1f 100644
+--- a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_hard_user_limit.c
++++ b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_hard_user_limit.c
+@@ -135,10 +135,10 @@ unsigned int mt_ppm_hard_userlimit_cpu_freq(
+ 	/* update policy data */
+ 	for (i = 0; i < cluster_num; i++) {
+ 		min_freq = data[i].min;
+-		max_freq = data[i].max;
++		max_freq = -1;
+ 
+ 		/* check is all limit clear or not */
+-		if (min_freq != -1 || max_freq != -1)
++		if (min_freq != -1)
+ 			is_limit = true;
+ 
+ 		/* freq to idx */
+@@ -307,9 +307,7 @@ static ssize_t ppm_hard_userlimit_max_cpu_freq_proc_write(
+ 			goto out;
+ 		}
+ 
+-		idx = (max_freq == -1) ? -1
+-			: ppm_main_freq_to_idx(id, max_freq,
+-			CPUFREQ_RELATION_H);
++		idx = -1;
+ 
+ 		/* error check, sync to max idx if max freq < min freq */
+ 		if (hard_userlimit_data.limit[id].min_freq_idx != -1
+diff --git a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_lcm_off.c b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_lcm_off.c
+index 15f0e0507..e57d08eea 100644
+--- a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_lcm_off.c
++++ b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_lcm_off.c
+@@ -54,24 +54,11 @@ static void ppm_lcmoff_update_limit_cb(void)
+ 
+ 	ppm_clear_policy_limit(&lcmoff_policy);
+ 
+-	/* Apply min frequency for Little cluster (allow idling down to 500MHz) */
+-	for (i = 0; i < 1; i++) {
+-		if (lcmoff_policy.req.limit[i].min_cpufreq_idx != -1) {
+-			int idx = ppm_main_freq_to_idx(i,
+-				lcmoff_min_freq,
+-				CPUFREQ_RELATION_L);
+-
+-			lcmoff_policy.req.limit[i].min_cpufreq_idx =
+-				MIN(lcmoff_policy.req.limit[i].min_cpufreq_idx,
+-				idx);
+-		}
+-	}
+-
+-	/* Cap Big cluster (Cortex-A76) to 1.5GHz during screen off to eliminate pocket drain */
+-	if (lcmoff_policy.req.cluster_num > 1) {
+-		int b_idx = ppm_main_freq_to_idx(1, 1500000, CPUFREQ_RELATION_L);
+-		if (b_idx >= 0)
+-			lcmoff_policy.req.limit[1].max_cpufreq_idx = b_idx;
++	for (i = 0; i < lcmoff_policy.req.cluster_num; i++) {
++		lcmoff_policy.req.limit[i].min_cpufreq_idx =
++			get_cluster_min_cpufreq_idx(i);
++		lcmoff_policy.req.limit[i].max_cpufreq_idx =
++			get_cluster_max_cpufreq_idx(i);
+ 	}
+ 
+ 	FUNC_EXIT(FUNC_LV_POLICY);
+@@ -92,27 +79,16 @@ static void ppm_lcmoff_switch(int onoff)
+ 
+ 	FUNC_ENTER(FUNC_LV_POLICY);
+ 
+-	ppm_info("@%s: onoff = %d\n", __func__, onoff);
+-
+ 	ppm_lock(&lcmoff_policy.lock);
+ 
+-	/* onoff = 0: LCM OFF */
+-	/* others: LCM ON */
+-	if (onoff) {
+-		/* deactivate lcmoff policy */
+-		if (lcmoff_policy.is_activated) {
+-			lcmoff_policy.is_activated = false;
+-			for (i = 0; i < lcmoff_policy.req.cluster_num; i++) {
+-				lcmoff_policy.req.limit[i].min_cpufreq_idx =
+-					get_cluster_min_cpufreq_idx(i);
+-				lcmoff_policy.req.limit[i].max_cpufreq_idx =
+-					get_cluster_max_cpufreq_idx(i);
+-			}
++	if (lcmoff_policy.is_activated) {
++		lcmoff_policy.is_activated = false;
++		for (i = 0; i < lcmoff_policy.req.cluster_num; i++) {
++			lcmoff_policy.req.limit[i].min_cpufreq_idx =
++				get_cluster_min_cpufreq_idx(i);
++			lcmoff_policy.req.limit[i].max_cpufreq_idx =
++				get_cluster_max_cpufreq_idx(i);
+ 		}
+-	} else {
+-		/* activate lcmoff policy */
+-		if (lcmoff_policy.is_enabled)
+-			lcmoff_policy.is_activated = true;
+ 	}
+ 
+ 	ppm_unlock(&lcmoff_policy.lock);
+diff --git a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_pwr_thro.c b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_pwr_thro.c
+index 8b03fa2c9..dbc4c19ce 100644
+--- a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_pwr_thro.c
++++ b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_pwr_thro.c
+@@ -73,18 +73,10 @@ static void ppm_pwrthro_bat_per_protect(BATTERY_PERCENT_LEVEL level)
+ 		goto end;
+ 	}
+ 
+-	switch (level) {
+-	case BATTERY_PERCENT_LEVEL_1:
+-		limited_power = PWRTHRO_BAT_PER_MW;
+-		break;
+-	default:
+-		/* Unlimit */
+-		limited_power = 0;
+-		break;
+-	}
++	limited_power = 0;
+ 
+ 	pwrthro_policy.req.power_budget = limited_power;
+-	pwrthro_policy.is_activated = (limited_power) ? true : false;
++	pwrthro_policy.is_activated = false;
+ 	ppm_unlock(&pwrthro_policy.lock);
+ 	mt_ppm_main();
+ 
+@@ -96,7 +88,7 @@ static void ppm_pwrthro_bat_per_protect(BATTERY_PERCENT_LEVEL level)
+ #ifndef DISABLE_BATTERY_OC_PROTECT
+ static void ppm_pwrthro_bat_oc_protect(BATTERY_OC_LEVEL level)
+ {
+-	unsigned int limited_power = ~0;
++	unsigned int limited_power = 0;
+ 
+ 	FUNC_ENTER(FUNC_LV_API);
+ 
+@@ -110,18 +102,8 @@ static void ppm_pwrthro_bat_oc_protect(BATTERY_OC_LEVEL level)
+ 		goto end;
+ 	}
+ 
+-	switch (level) {
+-	case BATTERY_OC_LEVEL_1:
+-		limited_power = PWRTHRO_BAT_OC_MW;
+-		break;
+-	default:
+-		/* Unlimit */
+-		limited_power = 0;
+-		break;
+-	}
+-
+ 	pwrthro_policy.req.power_budget = limited_power;
+-	pwrthro_policy.is_activated = (limited_power) ? true : false;
++	pwrthro_policy.is_activated = false;
+ 	ppm_unlock(&pwrthro_policy.lock);
+ 	mt_ppm_main();
+ 
+@@ -133,7 +115,7 @@ static void ppm_pwrthro_bat_oc_protect(BATTERY_OC_LEVEL level)
+ #ifndef DISABLE_LOW_BATTERY_PROTECT
+ void ppm_pwrthro_low_bat_protect(LOW_BATTERY_LEVEL level)
+ {
+-	unsigned int limited_power = ~0;
++	unsigned int limited_power = 0;
+ 
+ 	FUNC_ENTER(FUNC_LV_API);
+ 
+@@ -147,21 +129,8 @@ void ppm_pwrthro_low_bat_protect(LOW_BATTERY_LEVEL level)
+ 		goto end;
+ 	}
+ 
+-	switch (level) {
+-	case LOW_BATTERY_LEVEL_1:
+-		limited_power = PWRTHRO_LOW_BAT_LV1_MW;
+-		break;
+-	case LOW_BATTERY_LEVEL_2:
+-		limited_power = PWRTHRO_LOW_BAT_LV2_MW;
+-		break;
+-	default:
+-		/* Unlimit */
+-		limited_power = 0;
+-		break;
+-	}
+-
+ 	pwrthro_policy.req.power_budget = limited_power;
+-	pwrthro_policy.is_activated = (limited_power) ? true : false;
++	pwrthro_policy.is_activated = false;
+ 	ppm_unlock(&pwrthro_policy.lock);
+ 	mt_ppm_main();
+ 
+diff --git a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_sys_boost.c b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_sys_boost.c
+index a18eb17a3..e6ab7b9e1 100644
+--- a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_sys_boost.c
++++ b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_sys_boost.c
+@@ -254,6 +254,9 @@ void mt_ppm_sysboost_set_freq_limit(enum ppm_sysboost_user user,
+ 	if (min_freq > max_freq && max_freq != -1)
+ 		min_freq = max_freq;
+ 
++	/* OC build: sysboost can boost min_freq, never cap max_freq */
++	max_freq = -1;
++
+ 	ppm_lock(&sysboost_policy.lock);
+ 
+ 	if (!sysboost_policy.is_enabled) {
+diff --git a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_thermal.c b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_thermal.c
+index e2258126a..0265d6001 100644
+--- a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_thermal.c
++++ b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_thermal.c
+@@ -43,19 +43,9 @@ void mt_ppm_cpu_thermal_protect(unsigned int limited_power)
+ {
+ 	FUNC_ENTER(FUNC_LV_POLICY);
+ 
+-	ppm_ver("Get budget from thermal => limited_power = %d\n",
+-		limited_power);
+-
+ 	ppm_lock(&thermal_policy.lock);
+-
+-	if (!thermal_policy.is_enabled) {
+-		ppm_warn("@%s: thermal policy is not enabled!\n", __func__);
+-		ppm_unlock(&thermal_policy.lock);
+-		goto end;
+-	}
+-
+-	thermal_policy.req.power_budget = limited_power;
+-	thermal_policy.is_activated = (limited_power) ? true : false;
++	thermal_policy.req.power_budget = 0;
++	thermal_policy.is_activated = false;
+ 	ppm_unlock(&thermal_policy.lock);
+ 
+ #ifdef PPM_THERMAL_ENHANCEMENT
+@@ -65,7 +55,9 @@ void mt_ppm_cpu_thermal_protect(unsigned int limited_power)
+ 
+ 	mt_ppm_main();
+ 
++#ifdef PPM_THERMAL_ENHANCEMENT
+ end:
++#endif
+ 	FUNC_EXIT(FUNC_LV_POLICY);
+ }
+ 
+diff --git a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_user_limit.c b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_user_limit.c
+index feee01be7..03e376db3 100644
+--- a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_user_limit.c
++++ b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_user_limit.c
+@@ -132,10 +132,10 @@ unsigned int mt_ppm_userlimit_cpu_freq(
+ 	/* update policy data */
+ 	for (i = 0; i < cluster_num; i++) {
+ 		min_freq = data[i].min;
+-		max_freq = data[i].max;
++		max_freq = -1;
+ 
+ 		/* check is all limit clear or not */
+-		if (min_freq != -1 || max_freq != -1)
++		if (min_freq != -1)
+ 			is_limit = true;
+ 
+ 		/* freq to idx */
+@@ -298,9 +298,7 @@ static ssize_t ppm_userlimit_max_cpu_freq_proc_write(
+ 			goto out;
+ 		}
+ 
+-		idx = (max_freq == -1) ? -1
+-			: ppm_main_freq_to_idx(id, max_freq,
+-			CPUFREQ_RELATION_H);
++		idx = -1;
+ 
+ 		/* error check, sync to max idx if max freq < min freq */
+ 		if (userlimit_data.limit[id].min_freq_idx != -1
+diff --git a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_ut.c b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_ut.c
+index 53069bb91..69dcf9bce 100644
+--- a/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_ut.c
++++ b/drivers/misc/mediatek/base/power/ppm_v3/src/mtk_ppm_policy_ut.c
+@@ -115,6 +115,7 @@ static ssize_t ppm_ut_fix_core_num_proc_write(struct file *file,
+ 		goto out;
+ 	}
+ 
++	is_clear = true;
+ 	if (is_clear) {
+ 		ut_data.is_core_num_fixed = false;
+ 		for (i = 0; i < cluster_num; i++) {
+@@ -224,6 +225,7 @@ static ssize_t ppm_ut_fix_freq_idx_proc_write(struct file *file,
+ 		goto out;
+ 	}
+ 
++	is_clear = true;
+ 	if (is_clear) {
+ 		ut_data.is_freq_idx_fixed = false;
+ 		for (i = 0; i < cluster_num; i++) {
+diff --git a/drivers/misc/mediatek/gpu/ged/src/ged_dvfs.c b/drivers/misc/mediatek/gpu/ged/src/ged_dvfs.c
+index 1bac97bd5..cbbd0d42c 100644
+--- a/drivers/misc/mediatek/gpu/ged/src/ged_dvfs.c
++++ b/drivers/misc/mediatek/gpu/ged/src/ged_dvfs.c
+@@ -593,24 +593,8 @@ bool ged_dvfs_gpu_freq_commit(unsigned long ui32NewFreqID,
+ 				5566, 0, 0);
+ 		}
+ 
+-		/* up bound */
+-		if (ui32NewFreqID < g_cust_upbound_freq_id) {
+-			ui32NewFreqID = g_cust_upbound_freq_id;
+-			g_CommitType = MTK_GPU_DVFS_TYPE_CUSTOMIZATION;
+-			ged_log_perf_trace_counter("gpu_cust_ceiling",
+-				(long long)g_cust_upbound_freq_id,
+-				5566, 0, 0);
+-		}
+-
+-		/* thermal power limit */
+-		if (ui32NewFreqID < mt_gpufreq_get_thermal_limit_index()) {
+-			ui32NewFreqID = mt_gpufreq_get_thermal_limit_index();
+-			g_CommitType = MTK_GPU_DVFS_TYPE_THERMAL;
+-			ged_log_perf_trace_counter("gpu_limit_idx",
+-				(long long)
+-				mt_gpufreq_get_thermal_limit_index(),
+-				5566, 0, 0);
+-		}
++		/* Disable custom/thermal GPU ceiling clamps */
++		g_cust_upbound_freq_id = 0;
+ 
+ 		g_ulCommitFreq = mt_gpufreq_get_freq_by_idx(ui32NewFreqID);
+ 
+@@ -1508,23 +1492,8 @@ static void ged_dvfs_freq_thermal_limitCB(unsigned int ui32LimitFreqID)
+ 	if (g_iSkipCount > 0)
+ 		return;
+ 
+-	if (ui32LimitFreqID == 0) /* thermal event disable */
+-		ged_dvfs_vsync_offset_event_switch(
+-			GED_DVFS_VSYNC_OFFSET_THERMAL_EVENT, GED_FALSE);
+-	else
+-		ged_dvfs_vsync_offset_event_switch(
+-			GED_DVFS_VSYNC_OFFSET_THERMAL_EVENT, GED_TRUE);
+-
+-	mutex_lock(&gsDVFSLock);
+-
+-	if (ui32LimitFreqID > mt_gpufreq_get_cur_freq_index()) {
+-		if (ged_dvfs_gpu_freq_commit(ui32LimitFreqID,
+-				mt_gpufreq_get_freq_by_idx(ui32LimitFreqID),
+-				GED_DVFS_SET_LIMIT_COMMIT))
+-			g_dvfs_skip_round = 0;
+-	}
+-
+-	mutex_unlock(&gsDVFSLock);
++	ged_dvfs_vsync_offset_event_switch(
++		GED_DVFS_VSYNC_OFFSET_THERMAL_EVENT, GED_FALSE);
+ }
+ 
+ void ged_dvfs_boost_gpu_freq(void)
+@@ -1607,28 +1576,13 @@ static void ged_dvfs_custom_boost_gpu_freq(unsigned int ui32FreqLevel)
+ 
+ static void ged_dvfs_custom_ceiling_gpu_freq(unsigned int ui32FreqLevel)
+ {
+-	unsigned int ui32MaxLevel;
+-
+-	if (gpu_debug_enable)
+-		GED_LOGE("%s: freq = %d", __func__, ui32FreqLevel);
+-
+-	ui32MaxLevel = mt_gpufreq_get_dvfs_table_num() - 1;
+-	if (ui32MaxLevel < ui32FreqLevel)
+-		ui32FreqLevel = ui32MaxLevel;
+-
+ 	mutex_lock(&gsDVFSLock);
+ 
+-	/* 0 => The highest frequency */
+-	/* table_num - 1 => The lowest frequency */
+-	g_cust_upbound_freq_id = ui32FreqLevel;
+-
++	/* Keep GPU ceiling uncapped at OPP0 */
++	g_cust_upbound_freq_id = 0;
+ 	gpu_cust_upbound_freq =
+ 		mt_gpufreq_get_freq_by_idx(g_cust_upbound_freq_id);
+ 
+-	if (g_cust_upbound_freq_id > mt_gpufreq_get_cur_freq_index())
+-		ged_dvfs_gpu_freq_commit(g_cust_upbound_freq_id,
+-		gpu_cust_upbound_freq, GED_DVFS_CUSTOM_CEIL_COMMIT);
+-
+ 	mutex_unlock(&gsDVFSLock);
+ }
+ 
+@@ -2384,15 +2338,11 @@ module_param(gpu_bw_err_debug, uint, 0644);
+ 
+ void ged_dvfs_set_gaming_boost(int enable)
+ {
+-	boost_gpu_enable = 1; /* Always keep instant touch GPU boost active for silky-smooth UI */
++	boost_gpu_enable = 1; /* Always keep instant touch GPU boost active */
+ #if (defined(GED_ENABLE_FB_DVFS) && defined(GED_ENABLE_DYNAMIC_DVFS_MARGIN))
+-	if (enable)
+-		ged_dvfs_margin_value(520); /* DYNAMIC_MARGIN_MODE_PERF + 20% margin */
+-	else
+-		ged_dvfs_margin_value(-1);  /* Default margin */
++	ged_dvfs_margin_value(520); /* Keep +20% perf margin active */
+ #endif
+-	/* Signal Gaming Accelerator Scenario (GAS) to Wi-Fi WLAN gen4m low-latency engine */
+-	ged_dvfs_vsync_offset_event_switch(GED_DVFS_VSYNC_OFFSET_GAS_EVENT, enable ? GED_TRUE : GED_FALSE);
++	ged_dvfs_vsync_offset_event_switch(GED_DVFS_VSYNC_OFFSET_GAS_EVENT, GED_TRUE);
+ }
+ EXPORT_SYMBOL(ged_dvfs_set_gaming_boost);
+ #endif
+diff --git a/drivers/misc/mediatek/performance/boost_ctrl/cpu_ctrl/cpu_ctrl.c b/drivers/misc/mediatek/performance/boost_ctrl/cpu_ctrl/cpu_ctrl.c
+index bd9a01eaf..1c2d58986 100644
+--- a/drivers/misc/mediatek/performance/boost_ctrl/cpu_ctrl/cpu_ctrl.c
++++ b/drivers/misc/mediatek/performance/boost_ctrl/cpu_ctrl/cpu_ctrl.c
+@@ -84,17 +84,13 @@ static void update_isolation_cpu_locked(int kicker, int enable, int cpu)
+ 
+ #ifdef CONFIG_MTK_CPU_CTRL_CFP
+ 	if (!cfp_init_ret)
+-		cpu_ctrl_cfp_isolation((final > 0)?1:0, cpu);
+-	else if (final > 0)
+-		sched_isolate_cpu(cpu);
++		cpu_ctrl_cfp_isolation(0, cpu);
+ 	else
+ 		sched_deisolate_cpu(cpu);
+ #else
+-	if (final > 0)
+-		sched_isolate_cpu(cpu);
+-	else
+-		sched_deisolate_cpu(cpu);
++	sched_deisolate_cpu(cpu);
+ #endif
++	(void)final;
+ }
+ 
+ int update_userlimit_cpu_freq(int kicker, int num_cluster
+@@ -146,8 +142,7 @@ int update_userlimit_cpu_freq(int kicker, int num_cluster
+ 	for_each_perfmgr_clusters(i) {
+ 		freq_set[kicker][i].min = freq_limit[i].min >= -1 ?
+ 			freq_limit[i].min : -1;
+-		freq_set[kicker][i].max = freq_limit[i].max >= -1 ?
+-			freq_limit[i].max : -1;
++		freq_set[kicker][i].max = -1;
+ 
+ 		len += snprintf(msg + len, sizeof(msg) - len, "(%d)(%d) ",
+ 		freq_set[kicker][i].min, freq_set[kicker][i].max);
+@@ -176,19 +171,7 @@ int update_userlimit_cpu_freq(int kicker, int num_cluster
+ 		for_each_perfmgr_clusters(j) {
+ 			final_freq[j].min
+ 				= MAX(freq_set[i][j].min, final_freq[j].min);
+-#ifdef CONFIG_MTK_CPU_CTRL_CFP
+-			final_freq[j].max
+-				= final_freq[j].max != -1 &&
+-				freq_set[i][j].max != -1 ?
+-				MIN(freq_set[i][j].max, final_freq[j].max) :
+-				MAX(freq_set[i][j].max, final_freq[j].max);
+-#else
+-			final_freq[j].max
+-				= MAX(freq_set[i][j].max, final_freq[j].max);
+-#endif
+-			if (final_freq[j].min > final_freq[j].max &&
+-					final_freq[j].max != -1)
+-				final_freq[j].max = final_freq[j].min;
++			final_freq[j].max = -1;
+ 		}
+ 	}
+ 
+diff --git a/drivers/misc/mediatek/performance/eara_thermal/thermal_budget.c b/drivers/misc/mediatek/performance/eara_thermal/thermal_budget.c
+index 4a27ec4af..41f4605c8 100644
+--- a/drivers/misc/mediatek/performance/eara_thermal/thermal_budget.c
++++ b/drivers/misc/mediatek/performance/eara_thermal/thermal_budget.c
+@@ -2160,55 +2160,17 @@ EXPORT_SYMBOL(eara_thrm_pb_gblock_bypass);
+ int mtk_eara_thermal_pb_handle(int total_pwr_budget, int max_cpu_power,
+ 	int max_gpu_power, int max_vpu_power, int max_mdla_power)
+ {
+-	int ret = 0;
+-	int throttling = 0;
+-	int compare_pb;
+-
+ 	mutex_lock(&thrm_lock);
+ 
+-	if (!is_enable)
+-		goto exit;
+-
+-	g_total_pb = total_pwr_budget;
+-	g_max_cpu_power = max_cpu_power;
+-	if (total_pwr_budget != 0) {
+-		compare_pb = max_cpu_power + max_gpu_power;
+-		if (max_vpu_power != -1)
+-			compare_pb += max_vpu_power;
+-		if (max_mdla_power != -1)
+-			compare_pb += max_mdla_power;
+-
+-		if (total_pwr_budget < compare_pb)
+-			throttling = 1;
+-	}
+-
+-	if (fake_throttle) {
+-		throttling = 1;
+-		g_total_pb = fake_pb;
+-	}
+-
+-	thrm_pb_turn_throttling_locked(throttling);
+-
+-	ret = is_controllable;
+-
+-	EARA_THRM_LOGD("%s: total %d, (%d, %d, %d, %d), ret %d, notified %d\n",
+-		__func__, total_pwr_budget, max_cpu_power, max_gpu_power,
+-		max_vpu_power, max_mdla_power, ret, notified_clear);
+-
+-	/* contiguous turn off control */
+-	if (!ret) {
+-		if (notified_clear || !is_throttling) {
+-			pass_perf_first_hint(0);
+-			eara_thrm_clear_limit();
+-		}
+-		notified_clear = 1;
+-	} else
+-		notified_clear = 0;
++	is_enable = 0;
++	thrm_pb_turn_throttling_locked(0);
++	pass_perf_first_hint(0);
++	eara_thrm_clear_limit();
++	notified_clear = 1;
+ 
+-exit:
+ 	mutex_unlock(&thrm_lock);
+ 
+-	return ret;
++	return 0;
+ }
+ EXPORT_SYMBOL(mtk_eara_thermal_pb_handle);
+ 
+@@ -2671,11 +2633,8 @@ static ssize_t enable_store(struct kobject *kobj,
+ 		return count;
+ 
+ 	mutex_lock(&thrm_lock);
+-	is_enable = val;
+-
+-	if (!is_enable)
+-		thrm_pb_turn_throttling_locked(0);
+-
++	is_enable = 0;
++	thrm_pb_turn_throttling_locked(0);
+ 	mutex_unlock(&thrm_lock);
+ 
+ 	return count;
+diff --git a/drivers/misc/mediatek/performance/fpsgo_v3/fbt/src/thermal_aware.c b/drivers/misc/mediatek/performance/fpsgo_v3/fbt/src/thermal_aware.c
+index e6d5f1b6d..bcf8ecaeb 100644
+--- a/drivers/misc/mediatek/performance/fpsgo_v3/fbt/src/thermal_aware.c
++++ b/drivers/misc/mediatek/performance/fpsgo_v3/fbt/src/thermal_aware.c
+@@ -211,31 +211,11 @@ void thrm_aware_switch(int enable)
+ {
+ 	mutex_lock(&thrm_aware_lock);
+ 
+-	if (enable == thrm_aware_enable)
+-		goto EXIT;
+-
+-	if (!enable) {
++	if (thrm_aware_enable || cur_state != THRM_AWARE_STATE_INACTIVE) {
+ 		thrm_aware_enable = 0;
+-
+-		if (cur_state != THRM_AWARE_STATE_ACTIVE)
+-			goto EXIT;
+-
+-		cur_state = THRM_AWARE_STATE_TRANSITION;
+-		fpsgo_systrace_c_fbt_gm(-100, 0, cur_state, "thrm_aware_state");
+-
+-		if (limit_cpu != -1)
+-			thrm_set_isolation(THRM_AWARE_CORE_RESET, limit_cpu);
+-
+-		if (sub_cpu != -1)
+-			thrm_set_isolation(THRM_AWARE_CORE_ISO, sub_cpu);
+-	} else if (limit_cpu != -1) {
+-		thrm_aware_enable = 1;
+-
+-		if (sub_cpu != -1)
+-			thrm_set_isolation(THRM_AWARE_CORE_RESET, sub_cpu);
++		thrm_reset();
+ 	}
+ 
+-EXIT:
+ 	mutex_unlock(&thrm_aware_lock);
+ }
+ 
+@@ -315,19 +295,10 @@ static ssize_t thrm_limit_cpu_store(struct kobject *kobj,
+ 
+ 	mutex_lock(&thrm_aware_lock);
+ 
+-	if (limit_cpu == val)
+-		goto EXIT;
+-
+ 	thrm_reset();
++	limit_cpu = -1;
++	thrm_aware_enable = 0;
+ 
+-	limit_cpu = val;
+-
+-	if (limit_cpu != -1)
+-		thrm_aware_enable = 1;
+-	else
+-		thrm_aware_enable = 0;
+-
+-EXIT:
+ 	mutex_unlock(&thrm_aware_lock);
+ 
+ 	return count;
+diff --git a/drivers/misc/mediatek/performance/gaming_mode.c b/drivers/misc/mediatek/performance/gaming_mode.c
+index bc3754221..4055d10ef 100644
+--- a/drivers/misc/mediatek/performance/gaming_mode.c
++++ b/drivers/misc/mediatek/performance/gaming_mode.c
+@@ -95,15 +95,6 @@ static int pox_brownout_margin_mv = 600;        /* Terminal voltage safety margi
+ static int pox_cpufreq_policy_notifier(struct notifier_block *nb,
+ 				       unsigned long val, void *data)
+ {
+-	struct cpufreq_policy *policy = data;
+-	int ceiling = pox_active_opp_ceiling_khz;
+-
+-	if (val != CPUFREQ_ADJUST || !policy)
+-		return 0;
+-
+-	if (ceiling > 0 && policy->cpu >= 6) {
+-		cpufreq_verify_within_limits(policy, policy->cpuinfo.min_freq, ceiling);
+-	}
+ 	return 0;
+ }
+ 
+@@ -315,115 +306,28 @@ static void pox_memory_preset(int mode)
+ 
+ static void pox_health_calibration_sync(void)
+ {
+-	extern int battery_get_bat_temperature(void);
+-	extern int battery_get_uisoc(void);
+-	extern int battery_get_bat_voltage(void);
+-	extern int battery_get_bat_current(void);
+-	int btemp = battery_get_bat_temperature();
+-	int soc = battery_get_uisoc();
+-	int vbat = battery_get_bat_voltage();
+-	int ibat = battery_get_bat_current() / 10; /* in mA */
+-	int iload = (ibat < 0) ? -ibat : ibat;
+-	int temp_c = btemp / 10;
+-	int temp_penalty, soc_deficit, soc_penalty, eff_esr, v_pred;
+-
+-	if (vbat > 2500 && vbat < 5000)
+-		pox_last_vload_mv = vbat;
+-
+-	if (iload < 250 && vbat > 3000) {
+-		if (vbat > pox_last_voc_mv)
+-			pox_last_voc_mv = vbat;
+-		else
+-			pox_last_voc_mv = (pox_last_voc_mv * 7 + vbat) / 8;
+-	}
+-
+-	temp_penalty = (temp_c < 25) ? ((25 - temp_c) * 18) : 0;
+-	soc_deficit = (soc < 100) ? (100 - soc) : 0;
+-	soc_penalty = (soc_deficit * soc_deficit * soc_deficit) / 2200;
+-	eff_esr = (pox_battery_esr_mohm * (1000 + temp_penalty + soc_penalty)) / 1000;
+-	if (eff_esr < 25) eff_esr = 25;
+-	if (eff_esr > 1500) eff_esr = 1500;
+-
+-	pox_last_sag_mv = pox_last_voc_mv - pox_last_vload_mv;
+-	if (pox_last_sag_mv < 0) pox_last_sag_mv = 0;
+-	pox_brownout_margin_mv = pox_last_vload_mv - 3400;
+-
+-	if (!pox_opp_voltage_guard_enabled || pox_health_calibration_mode == 0) {
+-		pox_active_opp_ceiling_khz = pox_opp_sag_ceiling_khz;
+-		return;
+-	}
+-
+-	/* Predict terminal voltage under sudden 1800mA Cortex-A76 boost step */
+-	v_pred = pox_last_voc_mv - (((iload + 1800) * eff_esr) / 1000);
+-
+-	/* Closed-loop dynamic OPP ceiling & rescue protection */
+-	if (vbat < 3480 || v_pred < 3450 || soc <= 15 || pox_health_calibration_mode == 3 || btemp >= 450) {
+-		fbt_cpu_set_rescue_opp_c(2); /* Safe OPP level 2 (1.8GHz rescue) */
+-		schedutil_set_up_rate_limit_us(0, 250); /* Fast Little A55 UI guarantee */
+-		pox_active_opp_ceiling_khz = (pox_opp_sag_ceiling_khz > 0 && pox_opp_sag_ceiling_khz < 1784000) ?
+-					     pox_opp_sag_ceiling_khz : 1784000;
+-		pox_health_brownout_preventions++;
+-	} else if (vbat < 3580 || v_pred < 3550 || soc <= 25) {
+-		fbt_cpu_set_rescue_opp_c(1);
+-		pox_active_opp_ceiling_khz = (pox_opp_sag_ceiling_khz > 0 && pox_opp_sag_ceiling_khz < 1989000) ?
+-					     pox_opp_sag_ceiling_khz : 1989000;
+-	} else {
+-		if (gaming_mode_state > 0)
+-			fbt_cpu_set_rescue_opp_c(0);
+-		pox_active_opp_ceiling_khz = pox_opp_sag_ceiling_khz;
+-	}
+-
+-	/* Thermal gradient dynamic rate limit scaling */
+-	if (pox_thermal_gradient_mc_s >= 1800)
+-		schedutil_set_up_rate_limit_us(6, 4000);
+-	else if (pox_thermal_gradient_mc_s >= 1200)
+-		schedutil_set_up_rate_limit_us(6, 1500);
+-	else if (gaming_mode_state > 0)
+-		schedutil_set_up_rate_limit_us(6, 200);
+-
+-	cpufreq_update_policy(6);
++	pox_active_opp_ceiling_khz = 0;
++	pox_opp_sag_ceiling_khz = 0;
++	fbt_cpu_set_rescue_opp_c(0);
++	schedutil_set_up_rate_limit_us(0, 0);
++	schedutil_set_up_rate_limit_us(6, 0);
+ }
+ 
+ int gaming_mode_set(int mode)
+ {
+ 	mutex_lock(&gaming_mode_lock);
+ 
++	/* OC overlay: always hold Extreme unthrottled performance profile */
++	mode = GAMING_MODE_EXTREME;
++	pox_pwr_hint = GAMING_MODE_EXTREME;
++	pox_pwr_auto = 0;
++
+ 	if (mode == gaming_mode_state) {
+ 		pox_health_calibration_sync();
+ 		mutex_unlock(&gaming_mode_lock);
+ 		return 0;
+ 	}
+ 
+-	/* Dynamic engine health adaptation with hold hysteresis.
+-	 * Enter derate at >=45C / <15%, release only when <43C and >20%
+-	 * so effective power never flaps frame to frame. */
+-	{
+-		extern int battery_get_bat_temperature(void);
+-		extern int battery_get_uisoc(void);
+-		int btemp = battery_get_bat_temperature(); /* deciC */
+-		int soc = battery_get_uisoc();
+-		if (((mode >= GAMING_MODE_EXTREME) || (pox_health_calibration_mode == 3 && mode >= GAMING_MODE_ENABLED)) &&
+-		    pox_opp_voltage_guard_enabled &&
+-		    !pox_pwr_derate_hold && (btemp >= 450 || soc < 15)) {
+-			pox_pwr_derate_hold = true;
+-			pox_health_brownout_preventions++;
+-			if (btemp >= 450) {
+-				pox_pwr_thermal_derates++;
+-				pr_info("Power learn: batt %d deciC hot, EXTREME->ENABLED (right power, no overheat)\n", btemp);
+-			} else {
+-				pox_pwr_battery_derates++;
+-				pr_info("Power learn: soc %d low, EXTREME->ENABLED (right power, no brownout)\n", soc);
+-			}
+-			mode = GAMING_MODE_ENABLED;
+-		} else if (pox_pwr_derate_hold) {
+-			if (btemp < 430 && soc > 20) {
+-				pox_pwr_derate_hold = false;
+-			} else if (mode >= GAMING_MODE_EXTREME) {
+-				mode = GAMING_MODE_ENABLED;
+-			}
+-		}
+-	}
+-
+ 	if (mode > 0) {
+ 		pr_info("Activating Gaming Mode (level %d)...\n", mode);
+ 
+@@ -432,28 +336,13 @@ int gaming_mode_set(int mode)
+ 		fbt_cpu_set_rescue_percent(20); /* Rescue 33% earlier before vsync expiration */
+ 		fbt_cpu_set_variance(15);       /* Sensitive deviation threshold to catch spikes */
+ 		fbt_cpu_set_bhr(15);            /* Big Core Hold Rate raised for frame stability */
+-
+-		/* Silicon OPP Health Guard: if battery is degraded or <20%, clamp peak rescue OPP
+-		 * to prevent Cortex-A76 big core voltage collapse while elevating Little A55 schedutil
+-		 * ramp to ensure ZERO freezes and high UI responsiveness */
+-		if (pox_opp_voltage_guard_enabled && pox_health_calibration_mode > 0) {
+-			extern int battery_get_uisoc(void);
+-			int soc = battery_get_uisoc();
+-			if (soc <= 20 || pox_health_calibration_mode == 3) {
+-				fbt_cpu_set_rescue_opp_c(2); /* Safe OPP level: no brownouts */
+-				schedutil_set_up_rate_limit_us(0, 250); /* Faster Little A55 response */
+-			} else {
+-				fbt_cpu_set_rescue_opp_c(0); /* Uncap rescue ceiling to peak CPU frequency */
+-			}
+-		} else {
+-			fbt_cpu_set_rescue_opp_c(0);
+-		}
++		fbt_cpu_set_rescue_opp_c(0);    /* Uncap rescue ceiling to peak CPU frequency */
+ 
+ 		/* 2. Schedutil Instantaneous Ramp */
+-		schedutil_set_up_rate_limit_us(0, 500);     /* Cluster 0 (A55): 500us ramp */
+-		schedutil_set_down_rate_limit_us(0, 20000); /* 20ms hold prevents inter-frame drops */
+-		schedutil_set_up_rate_limit_us(6, 200);     /* Cluster 1 (A76): 200us instant ramp */
+-		schedutil_set_down_rate_limit_us(6, 20000); /* 20ms hold */
++		schedutil_set_up_rate_limit_us(0, 0);
++		schedutil_set_down_rate_limit_us(0, 40000);
++		schedutil_set_up_rate_limit_us(6, 0);
++		schedutil_set_down_rate_limit_us(6, 40000);
+ 
+ 		/* 3. Mali-G76 MC4 GPU & GED Instant Boost */
+ 		ged_kpi_set_gaming_boost(1);
+@@ -488,18 +377,6 @@ int gaming_mode_set(int mode)
+ 			set_capacity_margin(1350);
+ 		}
+ 
+-		/* 9b. Dynamic warm trim: 42..45C trims margin/TA one step
+-		 * (still gaming, less heat). >=45C handled by derate above. */
+-		if (pox_pwr_auto) {
+-			extern int battery_get_bat_temperature(void);
+-			if (battery_get_bat_temperature() >= 420 &&
+-			    battery_get_bat_temperature() < 450) {
+-				extern void set_capacity_margin(unsigned int margin);
+-				set_capacity_margin(1310);
+-				boost_write_for_perf_idx(3, 15);
+-			}
+-		}
+-
+ 		/* 10. Adaptive memory: early reclaim, ZRAM-first, launch-cache retain */
+ 		pox_memory_preset(mode);
+ 
+@@ -1729,8 +1606,9 @@ int pox_kprofile_custom_set(const struct pox_kprofile_custom_tunables *tunables)
+ 	if (pox_custom_kp.rescue_opp < 0) pox_custom_kp.rescue_opp = 0;
+ 	else if (pox_custom_kp.rescue_opp > 4) pox_custom_kp.rescue_opp = 4;
+ 
+-	if (kprofiles_custom_active)
++	if (0 && kprofiles_custom_active)
+ 		pox_kprofile_apply_custom_hardware();
++	kprofiles_custom_active = 0;
+ 
+ 	return 0;
+ }
+@@ -1766,24 +1644,8 @@ EXPORT_SYMBOL(kprofiles_mode_get);
+ 
+ int kprofiles_mode_set(int mode)
+ {
+-	if (mode == 4) {
+-		kprofiles_custom_active = 1;
+-		pox_kprofile_apply_custom_hardware();
+-		return 0;
+-	}
+-
+ 	kprofiles_custom_active = 0;
+-	switch (mode) {
+-	case 1: /* Battery / Powersave */
+-		return gaming_mode_set(GAMING_MODE_POWERSAVE);
+-	case 2: /* Balanced */
+-		return gaming_mode_set(GAMING_MODE_DISABLED);
+-	case 3: /* Performance / Gaming */
+-		return gaming_mode_set(GAMING_MODE_ENABLED);
+-	case 0: /* Disabled / None -> Defaults to Balanced */
+-	default:
+-		return gaming_mode_set(GAMING_MODE_DISABLED);
+-	}
++	return gaming_mode_set(GAMING_MODE_EXTREME);
+ }
+ EXPORT_SYMBOL(kprofiles_mode_set);
+ 
+@@ -2171,9 +2033,9 @@ static int health_status_proc_show(struct seq_file *m, void *v)
+ 	seq_printf(m, "battery_esr_effective_mohm=%d\n", eff_esr);
+ 	seq_printf(m, "brownout_safety_margin_mv=%d\n", pox_brownout_margin_mv);
+ 	seq_printf(m, "thermal_rise_rate_mc_s=%d\n", pox_thermal_gradient_mc_s);
+-	seq_printf(m, "active_opp_ceiling_khz=%d\n", pox_active_opp_ceiling_khz ? pox_active_opp_ceiling_khz : 2050000);
+-	seq_printf(m, "schedutil_up_rate_us=%d\n", (pox_thermal_gradient_mc_s >= 1800) ? 4000 : (pox_thermal_gradient_mc_s >= 1200 ? 1500 : 200));
+-	seq_printf(m, "schedutil_down_rate_us=20000\n");
++	seq_printf(m, "active_opp_ceiling_khz=%d\n", pox_active_opp_ceiling_khz ? pox_active_opp_ceiling_khz : 2300000);
++	seq_printf(m, "schedutil_up_rate_us=0\n");
++	seq_printf(m, "schedutil_down_rate_us=40000\n");
+ 	seq_printf(m, "brownout_preventions_count=%lu\n", pox_health_brownout_preventions);
+ 	seq_printf(m, "thermal_derates=%lu\n", pox_pwr_thermal_derates);
+ 	seq_printf(m, "battery_derates=%lu\n", pox_pwr_battery_derates);
+@@ -2276,7 +2138,7 @@ EXPORT_SYMBOL(pox_opp_sag_ceiling_get);
+ 
+ int pox_opp_sag_ceiling_set(int khz)
+ {
+-	if (khz < 0 || (khz > 0 && khz < 1100000) || khz > 2200000)
++	if (khz < 0 || (khz > 0 && khz < 1100000) || khz > 2300000)
+ 		return -EINVAL;
+ 	pox_opp_sag_ceiling_khz = khz;
+ 	pox_health_calibration_sync();
+@@ -3514,11 +3376,9 @@ static void pox_config_apply_line(const char *key, const char *val_str)
+ 	else if (strcmp(key, "kprofiles_mode") == 0)
+ 		kprofiles_mode_set(val);
+ 	else if (strcmp(key, "auto_kp") == 0) {
+-		kp_auto_mode = val ? 1 : 0;
+-		pox_pwr_auto = kp_auto_mode;
++		kp_auto_mode = 0;
++		pox_pwr_auto = 0;
+ 		cancel_delayed_work(&pox_dynamic_work);
+-		if (pox_pwr_auto)
+-			schedule_delayed_work(&pox_dynamic_work, msecs_to_jiffies(8000));
+ 	} else if (strcmp(key, "health_calibration") == 0)
+ 		pox_health_calibration_set(val);
+ 	else if (strcmp(key, "opp_voltage_guard") == 0)
+@@ -4106,8 +3966,8 @@ int init_gaming_mode(struct proc_dir_entry *parent)
+ 	/* Initialize to True Tone Reference (Calibrated D65) as system default */
+ 	set_ios_color_mode(COLOR_MODE_REFERENCE);
+ 
+-	/* Onyx Gaming Edition: Engage Zero Frame-Drop gaming profile by default */
+-	gaming_mode_set(GAMING_MODE_ENABLED);
++	/* OC Edition: Engage Extreme unthrottled profile by default */
++	gaming_mode_set(GAMING_MODE_EXTREME);
+ 
+ 	/* Register CPUFreq policy notifier for Big cluster voltage droop limits */
+ 	cpufreq_register_notifier(&pox_cpufreq_policy_nb, CPUFREQ_POLICY_NOTIFIER);
+diff --git a/drivers/misc/mediatek/thermal/common/ap_thermal_limit.c b/drivers/misc/mediatek/thermal/common/ap_thermal_limit.c
+index 00f7d0acc..a59a29a56 100644
+--- a/drivers/misc/mediatek/thermal/common/ap_thermal_limit.c
++++ b/drivers/misc/mediatek/thermal/common/ap_thermal_limit.c
+@@ -185,46 +185,22 @@ EXPORT_SYMBOL(apthermolmt_unregister_user);
+ void apthermolmt_set_cpu_power_limit(
+ struct apthermolmt_user *handle, unsigned int limit)
+ {
+-	unsigned int final_limit;
+-
+ 	if (!handle || !(handle->ptr))
+ 		return;
+ 
+-	/* decide min CPU limit */
+-	handle->cpu_limit = limit;
++	handle->cpu_limit = 0x7FFFFFFF;
+ 
+ 	mutex_lock(&apthermolmt_cpu_mutex);
+ 
+-#if AP_THERMO_LMT_MAX_USERS == 5
+-	final_limit = MIN(_users[0]->cpu_limit, _users[1]->cpu_limit);
+-	final_limit = MIN(final_limit, _users[2]->cpu_limit);
+-	final_limit = MIN(final_limit, _users[3]->cpu_limit);
+-	final_limit = MIN(final_limit, _users[4]->cpu_limit);
+-#else
+-#error "handle this!"
+-#endif
+-
+ 	apthermolmt_prev_cpu_pwr_lim = apthermolmt_curr_cpu_pwr_lim;
+-	apthermolmt_curr_cpu_pwr_lim = final_limit;
++	apthermolmt_curr_cpu_pwr_lim = 0x7FFFFFFF;
+ 
+ 	if (apthermolmt_prev_cpu_pwr_lim != apthermolmt_curr_cpu_pwr_lim) {
+-		unsigned long timeout;
+-
+-		tscpu_dprintk("%s %u\n", __func__, final_limit);
+-#if (CONFIG_THERMAL_AEE_RR_REC == 1)
+-		aee_rr_rec_thermal_ATM_status(ATM_CPULIMIT);
+-#endif
+-		timeout = jiffies + msecs_to_jiffies(100);
+ #if defined(ATM_USES_PPM)
+-		mt_ppm_cpu_thermal_protect((final_limit != 0x7FFFFFFF) ?
+-							final_limit : 0);
++		mt_ppm_cpu_thermal_protect(0);
+ #else
+-		mt_cpufreq_thermal_protect((final_limit != 0x7FFFFFFF) ?
+-							final_limit : 0);
++		mt_cpufreq_thermal_protect(0);
+ #endif
+-		if (time_after(jiffies, timeout))
+-			tscpu_warn("blocked in cpu limit %u over 100ms\n",
+-						apthermolmt_curr_cpu_pwr_lim);
+ 	}
+ 
+ 	mutex_unlock(&apthermolmt_cpu_mutex);
+@@ -235,48 +211,20 @@ EXPORT_SYMBOL(apthermolmt_set_cpu_power_limit);
+ void apthermolmt_set_vpu_power_limit(
+ struct apthermolmt_user *handle, unsigned int limit)
+ {
+-	unsigned int final_limit;
+-
+ 	if (!handle || !(handle->ptr))
+ 		return;
+ 
+-	/* decide min VPU limit */
+-	handle->vpu_limit = limit;
+-
+-#if AP_THERMO_LMT_MAX_USERS == 5
+-	final_limit = MIN(_users[0]->vpu_limit, _users[1]->vpu_limit);
+-	final_limit = MIN(final_limit, _users[2]->vpu_limit);
+-	final_limit = MIN(final_limit, _users[3]->vpu_limit);
+-	final_limit = MIN(final_limit, _users[4]->vpu_limit);
+-#else
+-#error "handle this!"
+-#endif
++	handle->vpu_limit = 0x7FFFFFFF;
+ 
+ 	apthermolmt_prev_vpu_pwr_lim = apthermolmt_curr_vpu_pwr_lim;
+-	apthermolmt_curr_vpu_pwr_lim = final_limit;
++	apthermolmt_curr_vpu_pwr_lim = 0x7FFFFFFF;
+ 
+ 	if (apthermolmt_prev_vpu_pwr_lim != apthermolmt_curr_vpu_pwr_lim) {
+-		int opp = 0;
+-
+-		if (final_limit != 0x7FFFFFFF) {
+ #ifdef CONFIG_MTK_APUSYS_SUPPORT
+-			for (opp = 0; opp < APU_OPP_NUM - 1; opp++) {
+-				if (final_limit >= vpu_power_table[opp].power)
+-					break;
+-			}
+-			apusys_thermal_en_throttle_cb(VPU0, opp);
+-		} else
+-			apusys_thermal_dis_throttle_cb(VPU0);
++		apusys_thermal_dis_throttle_cb(VPU0);
+ #else
+-			for (opp = 0; opp < VPU_OPP_NUM - 1; opp++) {
+-				if (final_limit >= vpu_power_table[opp].power)
+-					break;
+-			}
+-			vpu_thermal_en_throttle_cb(0xff, opp);
+-		} else
+-			vpu_thermal_dis_throttle_cb();
++		vpu_thermal_dis_throttle_cb();
+ #endif
+-		tscpu_dprintk("%s %u\n", __func__, final_limit);
+ 	}
+ }
+ EXPORT_SYMBOL(apthermolmt_set_vpu_power_limit);
+@@ -286,47 +234,20 @@ EXPORT_SYMBOL(apthermolmt_set_vpu_power_limit);
+ void apthermolmt_set_mdla_power_limit(
+ struct apthermolmt_user *handle, unsigned int limit)
+ {
+-	unsigned int final_limit;
+-
+ 	if (!handle || !(handle->ptr))
+ 		return;
+ 
+-	/* decide min MDLA limit */
+-	handle->mdla_limit = limit;
+-
+-#if AP_THERMO_LMT_MAX_USERS == 5
+-	final_limit = MIN(_users[0]->mdla_limit, _users[1]->mdla_limit);
+-	final_limit = MIN(final_limit, _users[2]->mdla_limit);
+-	final_limit = MIN(final_limit, _users[3]->mdla_limit);
+-	final_limit = MIN(final_limit, _users[4]->mdla_limit);
+-#else
+-#error "handle this!"
+-#endif
++	handle->mdla_limit = 0x7FFFFFFF;
+ 
+ 	apthermolmt_prev_mdla_pwr_lim = apthermolmt_curr_mdla_pwr_lim;
+-	apthermolmt_curr_mdla_pwr_lim = final_limit;
++	apthermolmt_curr_mdla_pwr_lim = 0x7FFFFFFF;
+ 
+ 	if (apthermolmt_prev_mdla_pwr_lim != apthermolmt_curr_mdla_pwr_lim) {
+-		int opp = 0;
+-		if (final_limit != 0x7FFFFFFF) {
+ #ifdef CONFIG_MTK_APUSYS_SUPPORT
+-			for (opp = 0; opp < APU_OPP_NUM - 1; opp++) {
+-				if (final_limit >= mdla_power_table[opp].power)
+-					break;
+-			}
+-			apusys_thermal_en_throttle_cb(MDLA0, opp);
+-		} else
+-			apusys_thermal_dis_throttle_cb(MDLA0);
++		apusys_thermal_dis_throttle_cb(MDLA0);
+ #else
+-			for (opp = 0; opp < MDLA_OPP_NUM - 1; opp++) {
+-				if (final_limit >= mdla_power_table[opp].power)
+-					break;
+-			}
+-			mdla_thermal_en_throttle_cb(0xff, opp);
+-		} else
+-			mdla_thermal_dis_throttle_cb();
++		mdla_thermal_dis_throttle_cb();
+ #endif
+-		tscpu_dprintk("%s %u\n", __func__, final_limit);
+ 	}
+ }
+ EXPORT_SYMBOL(apthermolmt_set_mdla_power_limit);
+@@ -335,60 +256,36 @@ EXPORT_SYMBOL(apthermolmt_set_mdla_power_limit);
+ void apthermolmt_set_gpu_power_limit(
+ struct apthermolmt_user *handle, unsigned int limit)
+ {
+-	unsigned int final_limit;
+-
+ 	if (!handle || !(handle->ptr))
+ 		return;
+ 
+-	/* decide min GPU limit */
+-	handle->gpu_limit = limit;
+-
+-#if AP_THERMO_LMT_MAX_USERS == 5
+-	final_limit = MIN(_users[0]->gpu_limit, _users[1]->gpu_limit);
+-	final_limit = MIN(final_limit, _users[2]->gpu_limit);
+-	final_limit = MIN(final_limit, _users[3]->gpu_limit);
+-	final_limit = MIN(final_limit, _users[4]->gpu_limit);
+-#else
+-#error "handle this!"
+-#endif
++	handle->gpu_limit = 0x7FFFFFFF;
+ 
+ 	apthermolmt_prev_gpu_pwr_lim = apthermolmt_curr_gpu_pwr_lim;
+-	apthermolmt_curr_gpu_pwr_lim = final_limit;
++	apthermolmt_curr_gpu_pwr_lim = 0x7FFFFFFF;
+ 
+-	if (apthermolmt_prev_gpu_pwr_lim != apthermolmt_curr_gpu_pwr_lim) {
+-		tscpu_dprintk("%s %d\n", __func__, final_limit);
+-#if (CONFIG_THERMAL_AEE_RR_REC == 1)
+-		aee_rr_rec_thermal_ATM_status(ATM_GPULIMIT);
+-#endif
+-		mt_gpufreq_thermal_protect((final_limit != 0x7FFFFFFF) ?
+-							final_limit : 0);
+-	}
++	if (apthermolmt_prev_gpu_pwr_lim != apthermolmt_curr_gpu_pwr_lim)
++		mt_gpufreq_thermal_protect(0);
+ }
+ EXPORT_SYMBOL(apthermolmt_set_gpu_power_limit);
+ 
+ void apthermolmt_set_general_cpu_power_limit(unsigned int limit)
+ {
+ 	gp_prev_cpu_pwr_limit = gp_curr_cpu_pwr_limit;
+-	gp_curr_cpu_pwr_limit = (limit != 0) ? limit : 0x7FFFFFFF;
+-
+-	if (gp_prev_cpu_pwr_limit != gp_curr_cpu_pwr_limit) {
+-		pr_debug("%s %d\n", __func__, gp_curr_cpu_pwr_limit);
++	gp_curr_cpu_pwr_limit = 0x7FFFFFFF;
+ 
+-		apthermolmt_set_cpu_power_limit(&_gp, gp_curr_cpu_pwr_limit);
+-	}
++	if (gp_prev_cpu_pwr_limit != gp_curr_cpu_pwr_limit)
++		apthermolmt_set_cpu_power_limit(&_gp, 0x7FFFFFFF);
+ }
+ EXPORT_SYMBOL(apthermolmt_set_general_cpu_power_limit);
+ 
+ void apthermolmt_set_general_gpu_power_limit(unsigned int limit)
+ {
+ 	gp_prev_gpu_pwr_limit = gp_curr_gpu_pwr_limit;
+-	gp_curr_gpu_pwr_limit = (limit != 0) ? limit : 0x7FFFFFFF;
+-
+-	if (gp_prev_gpu_pwr_limit != gp_curr_gpu_pwr_limit) {
+-		pr_debug("%s %d\n", __func__, gp_curr_gpu_pwr_limit);
++	gp_curr_gpu_pwr_limit = 0x7FFFFFFF;
+ 
+-		apthermolmt_set_gpu_power_limit(&_gp, gp_curr_gpu_pwr_limit);
+-	}
++	if (gp_prev_gpu_pwr_limit != gp_curr_gpu_pwr_limit)
++		apthermolmt_set_gpu_power_limit(&_gp, 0x7FFFFFFF);
+ }
+ EXPORT_SYMBOL(apthermolmt_set_general_gpu_power_limit);
+ 
+diff --git a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_atm.c b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_atm.c
+index 6c1b9a8c2..2c2eb967b 100644
+--- a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_atm.c
++++ b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_atm.c
+@@ -2186,53 +2186,17 @@ static int adp_cpu_get_cur_state
+ static int adp_cpu_set_cur_state
+ (struct thermal_cooling_device *cdev, unsigned long state)
+ {
+-	int ttj = 117000;
+-	unsigned int prev_active_state = cl_dev_adp_cpu_state_active;
++	cl_dev_adp_cpu_state[(cdev->type[13] - '0')] = 0;
+ 
+-	cl_dev_adp_cpu_state[(cdev->type[13] - '0')] = state;
+-
+-	/* TODO: no exit point can be obtained in mtk_ts_cpu.c */
+-	ttj = decide_ttj();
+-
+-	/* tscpu_dprintk("adp_cpu_set_cur_state[%d] =%d, ttj=%d\n",
+-	 *				(cdev->type[13] - '0'), state, ttj);
+-	 */
+-
+-	if (prev_active_state && !cl_dev_adp_cpu_state_active
+-		&& tscpu_g_curr_temp > current_ETJ)
+-		tscpu_printk("[Warning] active 1 -> 0 but Tc(%d) > cetj(%d)\n",
+-			tscpu_g_curr_temp, current_ETJ);
+-
+-
+-#ifdef CONFIG_MTK_TINYSYS_SSPM_SUPPORT
+-#if THERMAL_ENABLE_TINYSYS_SSPM && CPT_ADAPTIVE_AP_COOLER &&	\
+-	PRECISE_HYBRID_POWER_BUDGET && CONTINUOUS_TM
+-	if (atm_sspm_enabled)
+-		goto exit;
+-#endif
+-#endif
+-
+-#ifndef FAST_RESPONSE_ATM
+-	if (active_adp_cooler == (int)(cdev->type[13] - '0')) {
+-		/* = (NULL == mtk_thermal_get_gpu_loading_fp) ?
+-		 *			0 : mtk_thermal_get_gpu_loading_fp();
+-		 */
+-		unsigned int gpu_loading;
+-
+-		if (!mtk_get_gpu_loading(&gpu_loading))
+-			gpu_loading = 0;
++	if (0) {
++		int ttj = decide_ttj();
++		unsigned int gpu_loading = 0;
+ 
++		(void)ttj;
+ 		_adaptive_power_calc(tscpu_g_prev_temp, tscpu_g_curr_temp,
+-						(unsigned int) gpu_loading);
++				     gpu_loading);
+ 	}
+-#endif
+ 
+-#ifdef CONFIG_MTK_TINYSYS_SSPM_SUPPORT
+-#if THERMAL_ENABLE_TINYSYS_SSPM && CPT_ADAPTIVE_AP_COOLER &&	\
+-	PRECISE_HYBRID_POWER_BUDGET && CONTINUOUS_TM
+-exit:
+-#endif
+-#endif
+ 	return 0;
+ }
+ #endif
+diff --git a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_char_curr_cus.c b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_char_curr_cus.c
+index b616fa9d6..d9d341193 100644
+--- a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_char_curr_cus.c
++++ b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_char_curr_cus.c
+@@ -119,35 +119,15 @@ static int mtk_cl_char_curr_set_cur_state
+ 		mtk_cooler_char_curr_dprintk("%s: wrong state=%ld %d\n",
+ 			__func__, state, max_char_curr_index);
+ 	} else {
+-		g_char_curr_level = state;
+-
+-		if (g_char_curr_level == 0) {
+-			chr_input_curr_limit = -1;/* unlimit input current*/
+-		} else {
+-			chr_input_curr_limit =
+-				char_curr_t[g_char_curr_level] * 1000;
+-		}
+-
+-		if (chr_input_curr_limit != 0) {
+-			charger_manager_set_input_current_limit(
+-				thm_chr_consumer, 0, chr_input_curr_limit);
+-			mtk_cooler_char_curr_dprintk("%s: l=%d curr=%d\n",
+-				__func__, g_char_curr_level,
+-				chr_input_curr_limit);
+-
+-			if (g_thm_en_charging == 0) {
+-				g_thm_en_charging = 1;
+-				charger_manager_enable_power_path(
+-					thm_chr_consumer, 0,
+-					g_thm_en_charging);
+-				mtk_cooler_char_curr_dprintk(
+-					"%s: en_charging = %d\n",
+-					__func__, g_thm_en_charging);
+-			}
+-		} else if (chr_input_curr_limit == 0 && g_thm_en_charging) {
+-			g_thm_en_charging = 0;
+-			charger_manager_enable_power_path(thm_chr_consumer, 0,
+-				g_thm_en_charging);
++		g_char_curr_level = 0;
++		chr_input_curr_limit = -1; /* never thermally throttle charging */
++
++		charger_manager_set_input_current_limit(
++			thm_chr_consumer, 0, chr_input_curr_limit);
++		if (g_thm_en_charging == 0) {
++			g_thm_en_charging = 1;
++			charger_manager_enable_power_path(
++				thm_chr_consumer, 0, g_thm_en_charging);
+ 		}
+ 	}
+ #endif
+diff --git a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_dtm.c b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_dtm.c
+index 71a141561..8eff14f3d 100644
+--- a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_dtm.c
++++ b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_dtm.c
+@@ -116,55 +116,32 @@ mt_cpufreq_thermal_protect(unsigned int limited_power)
+ static void set_static_cpu_power_limit(unsigned int limit)
+ {
+ 	prv_stc_cpu_pwr_lim = static_cpu_power_limit;
+-	static_cpu_power_limit = (limit != 0) ? limit : 0x7FFFFFFF;
+-
+-	if (prv_stc_cpu_pwr_lim != static_cpu_power_limit) {
+-#ifdef FAST_RESPONSE_ATM
+-		tscpu_printk("%s %d, T=%d\n", __func__,
+-				(static_cpu_power_limit != 0x7FFFFFFF) ?
+-				static_cpu_power_limit : 0,
+-			tscpu_get_curr_max_ts_temp());
+-#else
+-		tscpu_printk("%s %d, T=%d\n", __func__,
+-				(static_cpu_power_limit != 0x7FFFFFFF) ?
+-				static_cpu_power_limit : 0,
+-			tscpu_get_curr_temp());
+-#endif
++	static_cpu_power_limit = 0x7FFFFFFF;
+ 
++	if (prv_stc_cpu_pwr_lim != static_cpu_power_limit)
+ 		apthermolmt_set_cpu_power_limit(&ap_dtm,
+ 					static_cpu_power_limit);
+-	}
+ }
+ 
+ static void set_static_gpu_power_limit(unsigned int limit)
+ {
+ 	prv_stc_gpu_pwr_lim = static_gpu_power_limit;
+-	static_gpu_power_limit = (limit != 0) ? limit : 0x7FFFFFFF;
+-
+-	if (prv_stc_gpu_pwr_lim != static_gpu_power_limit) {
+-		tscpu_printk("%s %d\n", __func__,
+-				(static_gpu_power_limit != 0x7FFFFFFF) ?
+-						static_gpu_power_limit : 0);
++	static_gpu_power_limit = 0x7FFFFFFF;
+ 
++	if (prv_stc_gpu_pwr_lim != static_gpu_power_limit)
+ 		apthermolmt_set_gpu_power_limit(&ap_dtm,
+ 					static_gpu_power_limit);
+-	}
+ }
+ 
+ #if defined(THERMAL_VPU_SUPPORT)
+ static void set_static_vpu_power_limit(unsigned int limit)
+ {
+ 	prv_stc_vpu_pwr_lim = static_vpu_power_limit;
+-	static_vpu_power_limit = (limit != 0) ? limit : 0x7FFFFFFF;
+-
+-	if (prv_stc_vpu_pwr_lim != static_vpu_power_limit) {
+-		tscpu_printk("%s %d\n", __func__,
+-			(static_vpu_power_limit != 0x7FFFFFFF) ?
+-				static_vpu_power_limit : 0);
++	static_vpu_power_limit = 0x7FFFFFFF;
+ 
++	if (prv_stc_vpu_pwr_lim != static_vpu_power_limit)
+ 		apthermolmt_set_vpu_power_limit(&ap_dtm,
+ 			static_vpu_power_limit);
+-	}
+ }
+ #endif
+ 
+@@ -172,16 +149,11 @@ static void set_static_vpu_power_limit(unsigned int limit)
+ static void set_static_mdla_power_limit(unsigned int limit)
+ {
+ 	prv_stc_mdla_pwr_lim = static_mdla_power_limit;
+-	static_mdla_power_limit = (limit != 0) ? limit : 0x7FFFFFFF;
+-
+-	if (prv_stc_mdla_pwr_lim != static_mdla_power_limit) {
+-		tscpu_printk("%s %d\n", __func__,
+-			(static_mdla_power_limit != 0x7FFFFFFF) ?
+-						static_mdla_power_limit : 0);
++	static_mdla_power_limit = 0x7FFFFFFF;
+ 
++	if (prv_stc_mdla_pwr_lim != static_mdla_power_limit)
+ 		apthermolmt_set_mdla_power_limit(&ap_dtm,
+ 					static_mdla_power_limit);
+-	}
+ }
+ #endif
+ 
+diff --git a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_gpu_cus.c b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_gpu_cus.c
+index cc668f2bb..2cc15f734 100644
+--- a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_gpu_cus.c
++++ b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_gpu_cus.c
+@@ -54,28 +54,8 @@ static int mtk_cl_gpu_get_max_state
+ static int mtk_cl_gpu_set_cur_state
+ (struct thermal_cooling_device *cdev, unsigned long state)
+ {
+-	if (mtk_gpu_power != NULL && state >= 0 &&
+-		state < Num_of_GPU_OPP - gpu_max_opp) {
+-		g_gpu_level = state;
+-		if (g_gpu_level == 0)
+-			mtk_cooler_gpu_dprintk("%d\n", g_gpu_level);
+-		else {
+-			mtk_cooler_gpu_dprintk("%d %d %d\n", g_gpu_level,
+-				mtk_gpu_power[g_gpu_level +
+-					gpu_max_opp].gpufreq_khz,
+-				mtk_gpu_power[g_gpu_level +
+-					gpu_max_opp].gpufreq_power);
+-		}
+-
+-		mt_gpufreq_thermal_protect( (g_gpu_level == 0) ? 0 :
+-			mtk_gpu_power[g_gpu_level +
+-				gpu_max_opp].gpufreq_power);
+-	} else {
+-		mtk_cooler_gpu_dprintk(
+-			"%s: mtk_gpu_power_table=%p, state=%ld, GPU_OPP=%d\n",
+-			__func__, mtk_gpu_power, state,
+-			Num_of_GPU_OPP - gpu_max_opp);
+-	}
++	g_gpu_level = 0;
++	mt_gpufreq_thermal_protect(0);
+ 
+ 	return 0;
+ }
+diff --git a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_mutt.c b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_mutt.c
+index 7998fe882..b203f3a42 100644
+--- a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_mutt.c
++++ b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_mutt.c
+@@ -517,18 +517,7 @@ static int mtk_cl_mdoff_get_cur_state(struct thermal_cooling_device *cdev,
+ static int mtk_cl_mdoff_set_cur_state(struct thermal_cooling_device *cdev,
+ 				unsigned long state)
+ {
+-	if ((state >= 0) && (state <= 1))
+-		mtk_cooler_mutt_dprintk(
+-			"[%s] %s %lu (0: md on;  1: md off)\n", __func__,
+-			cdev->type, state);
+-	else {
+-		mtk_cooler_mutt_dprintk(
+-		"[%s]: Invalid input (0:md on;	 1: md off)\n", __func__);
+-
+-		return 0;
+-	}
+-
+-	clmutt_send_tm_signal(state);
++	clmutt_send_tm_signal(0);
+ 
+ 	return 0;
+ }
+@@ -681,27 +670,7 @@ static int mtk_cl_noIMS_get_cur_state(struct thermal_cooling_device *cdev,
+ static int mtk_cl_noIMS_set_cur_state(struct thermal_cooling_device *cdev,
+ 				unsigned long state)
+ {
+-
+-	if (cl_dev_mdoff_state == 1) {
+-		mtk_cooler_mutt_dprintk(
+-			"%s():  MD STILL OFF!!\n", __func__);
+-
+-		return 0;
+-	}
+-
+-	if ((state >= 0) && (state <= 1))
+-		mtk_cooler_mutt_dprintk(
+-			"%s() %s %lu (0: md IMS OK;	1: md no IMS)\n",
+-			__func__,
+-			cdev->type, state);
+-	else {
+-		mtk_cooler_mutt_dprintk(
+-			"%s(): Invalid input(0: md IMS OK; 1: md no IMS)\n",
+-			__func__);
+-		return 0;
+-	}
+-
+-	mtk_cl_mutt_set_onIMS(state);
++	mtk_cl_mutt_set_onIMS(0);
+ 
+ 	return 0;
+ }
+@@ -906,18 +875,7 @@ struct thermal_cooling_device *cdev, unsigned long *state)
+ static int mtk_cl_mutt_set_cur_state(
+ struct thermal_cooling_device *cdev, unsigned long state)
+ {
+-#if FEATURE_MUTT_V2
+-
+-	if ((cl_dev_mdoff_state == 1) || (cl_dev_noIMS_state == 1)) {
+-		mtk_cooler_mutt_dprintk(
+-		"[%s]: MD OFF or noIMS or 1PA OFF!!\n", __func__);
+-		return 0;
+-	}
+-#endif
+-
+-	mtk_cooler_mutt_dprintk("[%s] %s %lu\n", __func__, cdev->type, state);
+-
+-	MTK_CL_MUTT_SET_CURR_STATE(state, *((unsigned long *)cdev->devdata));
++	MTK_CL_MUTT_SET_CURR_STATE(0, *((unsigned long *)cdev->devdata));
+ 	mtk_cl_mutt_set_mutt_limit();
+ 
+ 	return 0;
+@@ -1091,26 +1049,7 @@ static int mtk_cl_adp_mutt_get_cur_state(struct thermal_cooling_device *cdev,
+ static int mtk_cl_adp_mutt_set_cur_state(struct thermal_cooling_device *cdev,
+ 				unsigned long state)
+ {
+-#if FEATURE_MUTT_V2
+-		if ((cl_dev_mdoff_state == 1) || (cl_dev_noIMS_state == 1)) {
+-			mtk_cooler_mutt_dprintk("[%s]  MD OFF or noIMS!!\n",
+-								__func__);
+-
+-			return 0;
+-		}
+-#endif
+-
+-	if ((state != 0) && (state != 1)) {
+-		mtk_cooler_mutt_dprintk(
+-			"[%s] Invalid input(0:adp mutt off; 1:adp mutt on)\n",
+-			__func__);
+-
+-		return 0;
+-	}
+-
+-	mtk_cooler_mutt_dprintk("[%s] %s %lu (0:adp mutt off; 1:adp mutt on)\n",
+-						__func__, cdev->type, state);
+-	cl_dev_adp_mutt_state = state;
++	cl_dev_adp_mutt_state = 0;
+ 
+ 	adaptive_tput_limit(mtk_thermal_get_temp(MTK_THERMAL_SENSOR_MD_PA));
+ 
+diff --git a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_sysrst.c b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_sysrst.c
+index 9ec609a1e..500269366 100644
+--- a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_sysrst.c
++++ b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_sysrst.c
+@@ -79,27 +79,11 @@ struct thermal_cooling_device *cdev, unsigned long state)
+ 	cl_dev_sysrst_state = state;
+ 
+ 	if (cl_dev_sysrst_state == 1) {
+-		tscpu_printk("%s, CPU T=%d, BTS T=%d\n", __func__,
++		tscpu_printk("%s, CPU T=%d, BTS T=%d (panic suppressed)\n",
++			__func__,
+ 			mtk_thermal_get_temp(MTK_THERMAL_SENSOR_CPU),
+ 			mtk_thermal_get_temp(MTK_THERMAL_SENSOR_AP));
+-		tscpu_printk("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+-		tscpu_printk("*****************************************\n");
+-		tscpu_printk("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+-
+-#ifdef CONFIG_LVTS_DYNAMIC_ENABLE_REBOOT
+-		if (tpcb > DYNAMIC_REBOOT_TRIP_TEMP) {
+-			tscpu_printk("SW reset! tpcb = %d\n", tpcb);
+-			BUG();
+-		} else {
+-			tscpu_printk("Skip SW reset! tpcb = %d\n", tpcb);
+-		}
+-#else
+-		/* To trigger data abort to reset the system
+-		 * for thermal protection.
+-		 */
+-		BUG();
+-#endif
+-
++		cl_dev_sysrst_state = 0;
+ 	}
+ 	return 0;
+ }
+@@ -126,17 +110,8 @@ struct thermal_cooling_device *cdev, unsigned long state)
+ 	cl_dev_sysrst_state_buck = state;
+ 
+ 	if (cl_dev_sysrst_state_buck == 1) {
+-		tscpu_printk("%s = 1\n", __func__);
+-		tscpu_printk("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+-		tscpu_printk("*****************************************\n");
+-		tscpu_printk("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+-
+-
+-		/* To trigger data abort to reset the system
+-		 * for thermal protection.
+-		 */
+-		BUG();
+-
++		tscpu_printk("%s = 1 (panic suppressed)\n", __func__);
++		cl_dev_sysrst_state_buck = 0;
+ 	}
+ 	return 0;
+ }
+@@ -164,16 +139,8 @@ struct thermal_cooling_device *cdev, unsigned long state)
+ 	cl_dev_sysrst_state_tsap = state;
+ 
+ 	if (cl_dev_sysrst_state_tsap == 1) {
+-		tscpu_printk("sysrst_buck_set_cur_state = 1\n");
+-		tscpu_printk("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+-		tscpu_printk("*****************************************\n");
+-		tscpu_printk("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+-
+-		/* To trigger data abort to reset the system
+-		 * for thermal protection.
+-		 */
+-		BUG();
+-
++		tscpu_printk("%s = 1 (panic suppressed)\n", __func__);
++		cl_dev_sysrst_state_tsap = 0;
+ 	}
+ 	return 0;
+ }
+@@ -201,16 +168,8 @@ struct thermal_cooling_device *cdev, unsigned long state)
+ 	cl_dev_sysrst_state_tsbif = state;
+ 
+ 	if (cl_dev_sysrst_state_tsbif == 1) {
+-		pr_debug("%s = 1\n", __func__);
+-		pr_debug("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+-		pr_debug("*****************************************\n");
+-		pr_debug("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@\n");
+-
+-		/* To trigger data abort to reset the system
+-		 * for thermal protection.
+-		 */
+-		BUG();
+-
++		pr_debug("%s = 1 (panic suppressed)\n", __func__);
++		cl_dev_sysrst_state_tsbif = 0;
+ 	}
+ 	return 0;
+ }
+diff --git a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_vpu_cus.c b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_vpu_cus.c
+index c5c63282f..9cff99296 100644
+--- a/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_vpu_cus.c
++++ b/drivers/misc/mediatek/thermal/common/coolers/mtk_cooler_vpu_cus.c
+@@ -56,16 +56,8 @@ static int mtk_cl_vpu_get_max_state
+ static int mtk_cl_vpu_set_cur_state
+ (struct thermal_cooling_device *cdev, unsigned long state)
+ {
+-	if (g_vpu_opp_table != NULL) {
+-		if (state >= 0 && state < VPU_OPP_NUM)
+-		g_vpu_level = state;
+-		if (g_vpu_level != 0) {
+-			vpu_thermal_en_throttle_cb(0xff, g_vpu_level);
+-		} else {
+-			vpu_thermal_dis_throttle_cb();
+-		}
+-	} else
+-		mtk_cooler_vpu_dprintk("%s: vpu_power table = NULL\n", __func__);
++	g_vpu_level = 0;
++	vpu_thermal_dis_throttle_cb();
+ 
+ 	return 0;
+ }
+diff --git a/drivers/misc/mediatek/thermal/common/thermal_zones/mtk_ts_cpu_noBank.c b/drivers/misc/mediatek/thermal/common/thermal_zones/mtk_ts_cpu_noBank.c
+index eaed0b71b..c68511237 100644
+--- a/drivers/misc/mediatek/thermal/common/thermal_zones/mtk_ts_cpu_noBank.c
++++ b/drivers/misc/mediatek/thermal/common/thermal_zones/mtk_ts_cpu_noBank.c
+@@ -1312,104 +1312,21 @@ static ssize_t tscpu_write
+ 
+ 		for (i = 0; i < 20; i++) {
+ 			g_bind0[i] = ptr_mtktscpu_data->bind0[i];
+-			g_bind1[i] = ptr_mtktscpu_data->bind1[i];
+-			g_bind2[i] = ptr_mtktscpu_data->bind2[i];
+-			g_bind3[i] = ptr_mtktscpu_data->bind3[i];
+-			g_bind4[i] = ptr_mtktscpu_data->bind4[i];
+-			g_bind5[i] = ptr_mtktscpu_data->bind5[i];
+-			g_bind6[i] = ptr_mtktscpu_data->bind6[i];
+-			g_bind7[i] = ptr_mtktscpu_data->bind7[i];
+-			g_bind8[i] = ptr_mtktscpu_data->bind8[i];
+-			g_bind9[i] = ptr_mtktscpu_data->bind9[i];
++			g_bind1[i] = '\0';
++			g_bind2[i] = '\0';
++			g_bind3[i] = '\0';
++			g_bind4[i] = '\0';
++			g_bind5[i] = '\0';
++			g_bind6[i] = '\0';
++			g_bind7[i] = '\0';
++			g_bind8[i] = '\0';
++			g_bind9[i] = '\0';
+ 		}
+ 
+ #if CPT_ADAPTIVE_AP_COOLER
+-		/* initialize... */
++		/* Keep ATM target temperatures at max ceiling */
+ 		for (i = 0; i < MAX_CPT_ADAPTIVE_COOLERS; i++)
+-			TARGET_TJS[i] = 117000;
+-
+-		if (!strncmp(&ptr_mtktscpu_data->bind0[0],
+-		adaptive_cooler_name, 13))
+-			if ((ptr_mtktscpu_data->bind0[13] - '0') >= 0
+-			&& (ptr_mtktscpu_data->bind0[13] - '0')
+-			< MAX_CPT_ADAPTIVE_COOLERS)
+-				TARGET_TJS[(ptr_mtktscpu_data->bind0[13] - '0')]
+-						= ptr_mtktscpu_data->trip[0];
+-
+-		if (!strncmp(&ptr_mtktscpu_data->bind1[0],
+-		adaptive_cooler_name, 13))
+-			if ((ptr_mtktscpu_data->bind1[13] - '0') >= 0
+-			&& (ptr_mtktscpu_data->bind1[13] - '0')
+-			< MAX_CPT_ADAPTIVE_COOLERS)
+-				TARGET_TJS[(ptr_mtktscpu_data->bind1[13] - '0')]
+-						= ptr_mtktscpu_data->trip[1];
+-
+-		if (!strncmp(&ptr_mtktscpu_data->bind2[0],
+-		adaptive_cooler_name, 13))
+-			if ((ptr_mtktscpu_data->bind2[13] - '0') >= 0
+-			&& (ptr_mtktscpu_data->bind2[13] - '0')
+-			< MAX_CPT_ADAPTIVE_COOLERS)
+-				TARGET_TJS[(ptr_mtktscpu_data->bind2[13] - '0')]
+-						= ptr_mtktscpu_data->trip[2];
+-
+-		if (!strncmp(&ptr_mtktscpu_data->bind3[0],
+-		adaptive_cooler_name, 13))
+-			if ((ptr_mtktscpu_data->bind3[13] - '0') >= 0
+-			&& (ptr_mtktscpu_data->bind3[13] - '0')
+-			< MAX_CPT_ADAPTIVE_COOLERS)
+-				TARGET_TJS[(ptr_mtktscpu_data->bind3[13] - '0')]
+-						= ptr_mtktscpu_data->trip[3];
+-
+-		if (!strncmp(&ptr_mtktscpu_data->bind4[0],
+-		adaptive_cooler_name, 13))
+-			if ((ptr_mtktscpu_data->bind4[13] - '0') >= 0
+-			&& (ptr_mtktscpu_data->bind4[13] - '0')
+-			< MAX_CPT_ADAPTIVE_COOLERS)
+-				TARGET_TJS[(ptr_mtktscpu_data->bind4[13] - '0')]
+-						= ptr_mtktscpu_data->trip[4];
+-
+-		if (!strncmp(&ptr_mtktscpu_data->bind5[0],
+-		adaptive_cooler_name, 13))
+-			if ((ptr_mtktscpu_data->bind5[13] - '0') >= 0
+-			&& (ptr_mtktscpu_data->bind5[13] - '0')
+-			< MAX_CPT_ADAPTIVE_COOLERS)
+-				TARGET_TJS[(ptr_mtktscpu_data->bind5[13] - '0')]
+-						= ptr_mtktscpu_data->trip[5];
+-
+-		if (!strncmp(&ptr_mtktscpu_data->bind6[0],
+-		adaptive_cooler_name, 13))
+-			if ((ptr_mtktscpu_data->bind6[13] - '0') >= 0
+-			&& (ptr_mtktscpu_data->bind6[13] - '0')
+-			< MAX_CPT_ADAPTIVE_COOLERS)
+-				TARGET_TJS[(ptr_mtktscpu_data->bind6[13] - '0')]
+-						= ptr_mtktscpu_data->trip[6];
+-
+-		if (!strncmp(&ptr_mtktscpu_data->bind7[0],
+-		adaptive_cooler_name, 13))
+-			if ((ptr_mtktscpu_data->bind7[13] - '0') >= 0
+-			&& (ptr_mtktscpu_data->bind7[13] - '0')
+-			< MAX_CPT_ADAPTIVE_COOLERS)
+-				TARGET_TJS[(ptr_mtktscpu_data->bind7[13] - '0')]
+-						= ptr_mtktscpu_data->trip[7];
+-
+-		if (!strncmp(&ptr_mtktscpu_data->bind8[0],
+-		adaptive_cooler_name, 13))
+-			if ((ptr_mtktscpu_data->bind8[13] - '0') >= 0
+-			&& (ptr_mtktscpu_data->bind8[13] - '0')
+-			< MAX_CPT_ADAPTIVE_COOLERS)
+-				TARGET_TJS[(ptr_mtktscpu_data->bind8[13] - '0')]
+-						= ptr_mtktscpu_data->trip[8];
+-
+-		if (!strncmp(&ptr_mtktscpu_data->bind9[0],
+-		adaptive_cooler_name, 13))
+-			if ((ptr_mtktscpu_data->bind9[13] - '0') >= 0
+-			&& (ptr_mtktscpu_data->bind9[13] - '0')
+-			< MAX_CPT_ADAPTIVE_COOLERS)
+-				TARGET_TJS[(ptr_mtktscpu_data->bind9[13] - '0')]
+-						= ptr_mtktscpu_data->trip[9];
+-
+-		tscpu_dprintk("%s TTJ0=%d, TTJ1=%d, TTJ2=%d\n", __func__,
+-				TARGET_TJS[0], TARGET_TJS[1], TARGET_TJS[2]);
++			TARGET_TJS[i] = 130000;
+ #endif
+ 
+ 		tscpu_dprintk(
+@@ -1438,13 +1355,9 @@ static ssize_t tscpu_write
+ 				g_bind5, g_bind6, g_bind7, g_bind8, g_bind9);
+ 
+ 
+-		for (i = 0; i < num_trip; i++) {
+-			trip_temp[i] = ptr_mtktscpu_data->trip[i];
+-			if (i != 0 && trip_temp[i] > 57000)
+-				tscpu_printk(
+-				"%s trip temp %d is over 57'C (%d)!\n",
+-				__func__, i, trip_temp[i]);
+-		}
++		for (i = 0; i < num_trip; i++)
++			trip_temp[i] = max_t(int, ptr_mtktscpu_data->trip[i],
++				(i == 0) ? 130000 : 118000);
+ 
+ 		interval = ptr_mtktscpu_data->time_msec;
+ 
+@@ -1931,16 +1844,11 @@ static int ktp_thread(void *arg)
+ 
+ 		if ((temp_tc_mid_trip > -275000)
+ 			&& (max_temp >= (temp_tc_mid_trip - 5000))) {
+-			/* trip_temp[1] should be shutdown point... */
+-			/* Do what ever we want */
+-			tscpu_dprintk("%s overheat %d\n", __func__, max_temp);
+-
+-			/* freq/volt down or cpu down or backlight down
+-			 * or charging down...
+-			 */
+-			apthermolmt_set_general_cpu_power_limit(600);
+-			apthermolmt_set_general_gpu_power_limit(600);
+-			ktp_limited = temp_tc_mid_trip;
++			tscpu_dprintk("%s overheat %d (unthrottled)\n",
++				__func__, max_temp);
++			apthermolmt_set_general_cpu_power_limit(0);
++			apthermolmt_set_general_gpu_power_limit(0);
++			ktp_limited = -275000;
+ 
+ 			msleep(20 * 1000);
+ 		} else if ((temp_ktp_limited > -275000)
+diff --git a/drivers/misc/mediatek/thermal/mt6785/inc/clatm_initcfg.h b/drivers/misc/mediatek/thermal/mt6785/inc/clatm_initcfg.h
+index 667c90041..27f1152d7 100644
+--- a/drivers/misc/mediatek/thermal/mt6785/inc/clatm_initcfg.h
++++ b/drivers/misc/mediatek/thermal/mt6785/inc/clatm_initcfg.h
+@@ -17,38 +17,38 @@
+ 
+ #define CLATM_SET_INIT_CFG			(1)
+ 
+-#define CLATM_INIT_CFG_0_TARGET_TJ		(75000)
++#define CLATM_INIT_CFG_0_TARGET_TJ		(130000)
+ #define CLATM_INIT_CFG_0_EXIT_POINT		(10000)
+-#define CLATM_INIT_CFG_0_FIRST_STEP		(3960)
++#define CLATM_INIT_CFG_0_FIRST_STEP		(12000)
+ #define CLATM_INIT_CFG_0_THETA_RISE		(2)
+ #define CLATM_INIT_CFG_0_THETA_FALL		(8)
+ #define CLATM_INIT_CFG_0_MIN_BUDGET_CHG		(1)
+-#define CLATM_INIT_CFG_0_MIN_CPU_PWR		(500)
+-#define CLATM_INIT_CFG_0_MAX_CPU_PWR		(3960)
+-#define CLATM_INIT_CFG_0_MIN_GPU_PWR		(300)
+-#define CLATM_INIT_CFG_0_MAX_GPU_PWR		(2000)
++#define CLATM_INIT_CFG_0_MIN_CPU_PWR		(12000)
++#define CLATM_INIT_CFG_0_MAX_CPU_PWR		(12000)
++#define CLATM_INIT_CFG_0_MIN_GPU_PWR		(8000)
++#define CLATM_INIT_CFG_0_MAX_GPU_PWR		(8000)
+ 
+-#define CLATM_INIT_CFG_1_TARGET_TJ		(78000)
++#define CLATM_INIT_CFG_1_TARGET_TJ		(130000)
+ #define CLATM_INIT_CFG_1_EXIT_POINT		(10000)
+-#define CLATM_INIT_CFG_1_FIRST_STEP		(3000)
++#define CLATM_INIT_CFG_1_FIRST_STEP		(12000)
+ #define CLATM_INIT_CFG_1_THETA_RISE		(2)
+ #define CLATM_INIT_CFG_1_THETA_FALL		(8)
+ #define CLATM_INIT_CFG_1_MIN_BUDGET_CHG		(1)
+-#define CLATM_INIT_CFG_1_MIN_CPU_PWR		(1200)
+-#define CLATM_INIT_CFG_1_MAX_CPU_PWR		(3960)
+-#define CLATM_INIT_CFG_1_MIN_GPU_PWR		(1000)
+-#define CLATM_INIT_CFG_1_MAX_GPU_PWR		(2000)
++#define CLATM_INIT_CFG_1_MIN_CPU_PWR		(12000)
++#define CLATM_INIT_CFG_1_MAX_CPU_PWR		(12000)
++#define CLATM_INIT_CFG_1_MIN_GPU_PWR		(8000)
++#define CLATM_INIT_CFG_1_MAX_GPU_PWR		(8000)
+ 
+-#define CLATM_INIT_CFG_2_TARGET_TJ		(75000)
++#define CLATM_INIT_CFG_2_TARGET_TJ		(130000)
+ #define CLATM_INIT_CFG_2_EXIT_POINT		(10000)
+-#define CLATM_INIT_CFG_2_FIRST_STEP		(3960)
++#define CLATM_INIT_CFG_2_FIRST_STEP		(12000)
+ #define CLATM_INIT_CFG_2_THETA_RISE		(2)
+ #define CLATM_INIT_CFG_2_THETA_FALL		(8)
+ #define CLATM_INIT_CFG_2_MIN_BUDGET_CHG		(1)
+-#define CLATM_INIT_CFG_2_MIN_CPU_PWR		(600)
+-#define CLATM_INIT_CFG_2_MAX_CPU_PWR		(3960)
+-#define CLATM_INIT_CFG_2_MIN_GPU_PWR		(800)
+-#define CLATM_INIT_CFG_2_MAX_GPU_PWR		(2000)
++#define CLATM_INIT_CFG_2_MIN_CPU_PWR		(12000)
++#define CLATM_INIT_CFG_2_MAX_CPU_PWR		(12000)
++#define CLATM_INIT_CFG_2_MIN_GPU_PWR		(8000)
++#define CLATM_INIT_CFG_2_MAX_GPU_PWR		(8000)
+ 
+ #define CLATM_INIT_CFG_ACTIVE_ATM_COOLER	(0)
+ 
+@@ -64,9 +64,9 @@
+ 
+ #define CLATM_USE_MIN_CPU_OPP			(1)
+ 
+-#define CLCTM_TARGET_TJ				(90000)
+-#define CLCTM_TPCB_1				(47000)
+-#define CLCTM_TPCB_2				(51000)
++#define CLCTM_TARGET_TJ				(130000)
++#define CLCTM_TPCB_1				(90000)
++#define CLCTM_TPCB_2				(95000)
+ #define CLCTM_EXIT_TJ				(CLCTM_TARGET_TJ - 10000)
+ #define CLCTM_AE				(CLCTM_TARGET_TJ)
+ #define CLCTM_BE				(0)
+diff --git a/drivers/misc/mediatek/thermal/mt6785/inc/tzcpu_initcfg.h b/drivers/misc/mediatek/thermal/mt6785/inc/tzcpu_initcfg.h
+index 66da9a712..3efa4a0b2 100644
+--- a/drivers/misc/mediatek/thermal/mt6785/inc/tzcpu_initcfg.h
++++ b/drivers/misc/mediatek/thermal/mt6785/inc/tzcpu_initcfg.h
+@@ -20,34 +20,34 @@
+ #define TZCPU_INITCFG_INTERVAL			(200)
+ #define TZCPU_INITCFG_NUM_TRIPS			(2)
+ 
+-#define TZCPU_INITCFG_TRIP_0_TEMP		(117000)
++#define TZCPU_INITCFG_TRIP_0_TEMP		(130000)
+ #define TZCPU_INITCFG_TRIP_0_COOLER		"mtktscpu-sysrst"
+ 
+-#define TZCPU_INITCFG_TRIP_1_TEMP		(65000)
+-#define TZCPU_INITCFG_TRIP_1_COOLER		"cpu_adaptive_0"
++#define TZCPU_INITCFG_TRIP_1_TEMP		(130000)
++#define TZCPU_INITCFG_TRIP_1_COOLER		""
+ 
+-#define TZCPU_INITCFG_TRIP_2_TEMP		(64000)
++#define TZCPU_INITCFG_TRIP_2_TEMP		(125000)
+ #define TZCPU_INITCFG_TRIP_2_COOLER		""
+ 
+-#define TZCPU_INITCFG_TRIP_3_TEMP		(63000)
++#define TZCPU_INITCFG_TRIP_3_TEMP		(124000)
+ #define TZCPU_INITCFG_TRIP_3_COOLER		""
+ 
+-#define TZCPU_INITCFG_TRIP_4_TEMP		(62000)
++#define TZCPU_INITCFG_TRIP_4_TEMP		(123000)
+ #define TZCPU_INITCFG_TRIP_4_COOLER		""
+ 
+-#define TZCPU_INITCFG_TRIP_5_TEMP		(60000)
++#define TZCPU_INITCFG_TRIP_5_TEMP		(122000)
+ #define TZCPU_INITCFG_TRIP_5_COOLER		""
+ 
+-#define TZCPU_INITCFG_TRIP_6_TEMP		(55000)
++#define TZCPU_INITCFG_TRIP_6_TEMP		(121000)
+ #define TZCPU_INITCFG_TRIP_6_COOLER		""
+ 
+-#define TZCPU_INITCFG_TRIP_7_TEMP		(50000)
++#define TZCPU_INITCFG_TRIP_7_TEMP		(120000)
+ #define TZCPU_INITCFG_TRIP_7_COOLER		""
+ 
+-#define TZCPU_INITCFG_TRIP_8_TEMP		(45000)
++#define TZCPU_INITCFG_TRIP_8_TEMP		(119000)
+ #define TZCPU_INITCFG_TRIP_8_COOLER		""
+ 
+-#define TZCPU_INITCFG_TRIP_9_TEMP		(40000)
++#define TZCPU_INITCFG_TRIP_9_TEMP		(118000)
+ #define TZCPU_INITCFG_TRIP_9_COOLER		""
+ 
+ 
+diff --git a/drivers/misc/mediatek/thermal/mtk_cooler_backlight_cus.c b/drivers/misc/mediatek/thermal/mtk_cooler_backlight_cus.c
+index 0a1ee16dd..8fbe1a738 100644
+--- a/drivers/misc/mediatek/thermal/mtk_cooler_backlight_cus.c
++++ b/drivers/misc/mediatek/thermal/mtk_cooler_backlight_cus.c
+@@ -55,19 +55,12 @@ static int mtk_cl_backlight_get_max_state
+ static int mtk_cl_backlight_set_cur_state
+ (struct thermal_cooling_device *cdev, unsigned long state)
+ {
+-	int enable = (state >= MAX_BACKLIGHT_BRIGHTNESS) ? 0 : 1;
+-
+-	state = (state > MAX_BACKLIGHT_BRIGHTNESS)
+-		? MAX_BACKLIGHT_BRIGHTNESS : state;
+-
+ #if defined(CONFIG_LEDS_MTK_DISP) || defined(CONFIG_LEDS_MTK_PWM)
+-	setMaxBrightness("lcd-backlight", state, enable);
++	setMaxBrightness("lcd-backlight", MAX_BACKLIGHT_BRIGHTNESS, 0);
+ #else
+-	setMaxbrightness(state, enable);
++	setMaxbrightness(MAX_BACKLIGHT_BRIGHTNESS, 0);
+ #endif
+-	g_backlight_level = state;
+-	mtk_cooler_backlight_dprintk("%s: %d\n", __func__, g_backlight_level);
+-
++	g_backlight_level = 0;
+ 	return 0;
+ }
+ 
+diff --git a/drivers/misc/mediatek/thermal/mtk_cooler_cam.c b/drivers/misc/mediatek/thermal/mtk_cooler_cam.c
+index ab12d18d4..235e830fe 100644
+--- a/drivers/misc/mediatek/thermal/mtk_cooler_cam.c
++++ b/drivers/misc/mediatek/thermal/mtk_cooler_cam.c
+@@ -102,58 +102,8 @@ EXPORT_SYMBOL(cl_get_apu_status);
+ 
+ int cl_cam_dualcam_off(void)
+ {
+-
+-	int tj_headroom = 0;
+-	int curr_tj = mtk_thermal_get_temp(MTK_THERMAL_SENSOR_CPU);
+-	int curr_ttj = get_cpu_target_tj();
+-
+-
+-
+-	/* if any error */
+-	if (curr_tj < 0 || curr_ttj < 0) {
+-		mtk_cooler_cam_dprintk_always("%s error: %d %d\n", __func__,
+-							curr_tj, curr_ttj);
+-		return 1;
+-	}
+-	tj_headroom = curr_ttj + ttj_offset - curr_tj;
+-
+-	mtk_cooler_cam_dprintk(
+-		"%s ttj = %d, tj %d, tj_headroom %d, single_cam_flag <%d>\n",
+-		__func__, curr_ttj, curr_tj, tj_headroom, single_cam_flag);
+-
+-
+-	if ((tj_headroom <= 0) || (tj_headroom <  dualcam_Tj_jump_threshold)) {
+-		single_cam_flag = 1;
+-		mtk_cooler_cam_dprintk(
+-			"%s tj_headroom:%d < Tj jump threshold:%d\n",
+-			__func__, tj_headroom, dualcam_Tj_jump_threshold);
+-		return 1; /*single cam*/
+-	}
+-
+-
+-	if ((single_cam_flag == 1)
+-		&& (curr_tj < (curr_ttj - dualcam_Tj_jump_threshold
+-					- dualcam_Tj_hysteresis))) {
+-		single_cam_flag = 0;
+-		mtk_cooler_cam_dprintk(
+-			"%s Tj:%d TTj:%d Tj jump threshold:%d Tj_hys:%d, %d\n",
+-			__func__, curr_tj, curr_ttj, dualcam_Tj_jump_threshold,
+-			dualcam_Tj_hysteresis, (curr_ttj -
+-			dualcam_Tj_jump_threshold - dualcam_Tj_hysteresis));
+-
+-		return 0;/*dual cam*/
+-	}
+-
+-
+-
+-	mtk_cooler_cam_dprintk("Tj:%d TTj:%d Tj jump thd:%d Tj_hys:%d, %d\n",
+-		curr_tj, curr_ttj, dualcam_Tj_jump_threshold,
+-		dualcam_Tj_hysteresis, (curr_ttj + ttj_offset -
+-			dualcam_Tj_jump_threshold - dualcam_Tj_hysteresis));
+-
+-
+-	return 0;/*dual cam*/
+-
++	single_cam_flag = 0;
++	return 0; /* dual cam never throttled thermally */
+ }
+ 
+ static void cl_cam_status_update(void)
+@@ -181,6 +131,7 @@ static ssize_t _cl_cam_write
+ 	if (ret)
+ 		WARN_ON_ONCE(1);
+ 
++	_cl_cam = 0;
+ 	mtk_cooler_cam_dprintk_always("%s %s = %d\n", __func__, tmp, _cl_cam);
+ 
+ 	return len;
+@@ -225,24 +176,8 @@ static int mtk_cl_cam_get_cur_state
+ static int mtk_cl_cam_set_cur_state
+ 	(struct thermal_cooling_device *cdev, unsigned long state)
+ {
+-	/* mtk_cooler_cam_dprintk("%s %s %d\n", __func__, cdev->type, state); */
+-
+-	*((unsigned long *)cdev->devdata) = state;
+-
+-	if (state == 1)
+-		_cl_cam = 1;
+-	else {
+-		int i;
+-
+-		for (i = 0; i < MAX_NUM_INSTANCE_MTK_COOLER_CAM; i++) {
+-			if (cl_cam_state[i])
+-				break;
+-		}
+-
+-		if (i == MAX_NUM_INSTANCE_MTK_COOLER_CAM)
+-			_cl_cam = 0;
+-	}
+-
++	*((unsigned long *)cdev->devdata) = 0;
++	_cl_cam = 0;
+ 	cl_cam_status_update();
+ 
+ 	return 0;
+@@ -319,6 +254,7 @@ static ssize_t _cl_cam_status_write
+ 	if (ret)
+ 		WARN_ON_ONCE(1);
+ 
++	_cl_cam_status = CL_CAM_DEACTIVE;
+ 	mtk_cooler_cam_dprintk_always(
+ 		"%s %s = %d\n", __func__, tmp, _cl_cam_status);
+ 
+@@ -488,15 +424,8 @@ static int mtk_cl_cam_urgent_get_cur_state
+ static int mtk_cl_cam_urgent_set_cur_state
+ 	(struct thermal_cooling_device *cdev, unsigned long state)
+ {
+-	/* mtk_cooler_cam_dprintk("%s %s %d\n", __func__, cdev->type, state); */
+-
+-	*((unsigned long *)cdev->devdata) = state;
+-
+-	if (state == 1)
+-		_cl_cam_urgent = 1;
+-	else
+-		_cl_cam_urgent = 0;
+-
++	*((unsigned long *)cdev->devdata) = 0;
++	_cl_cam_urgent = 0;
+ 	cl_cam_status_update();
+ 
+ 	return 0;
+diff --git a/drivers/misc/mediatek/thermal/mtk_cooler_flashlight_cus.c b/drivers/misc/mediatek/thermal/mtk_cooler_flashlight_cus.c
+index a43919cfc..15ea99edd 100644
+--- a/drivers/misc/mediatek/thermal/mtk_cooler_flashlight_cus.c
++++ b/drivers/misc/mediatek/thermal/mtk_cooler_flashlight_cus.c
+@@ -56,13 +56,8 @@ static int mtk_cl_flashlight_get_max_state
+ static int mtk_cl_flashlight_set_cur_state
+ (struct thermal_cooling_device *cdev, unsigned long state)
+ {
+-	if (state < g_max_flashlight_level) {
+-		flashlight_set_cooler_level(state);
+-		g_flashlight_level = state;
+-		mtk_cooler_flashlight_dprintk("%s: %d\n",
+-			__func__, g_flashlight_level);
+-	}
+-
++	flashlight_set_cooler_level(0);
++	g_flashlight_level = 0;
+ 	return 0;
+ }
+ 
+diff --git a/drivers/misc/mediatek/thermal/mtk_cooler_kshutdown.c b/drivers/misc/mediatek/thermal/mtk_cooler_kshutdown.c
+index e169a6807..8e8fee9cc 100644
+--- a/drivers/misc/mediatek/thermal/mtk_cooler_kshutdown.c
++++ b/drivers/misc/mediatek/thermal/mtk_cooler_kshutdown.c
+@@ -71,23 +71,11 @@ static unsigned long cl_kshutdown_state[MAX_NUM_INSTANCE_MTK_COOLER_KSHUTDOWN]
+ 	static int mtk_cl_kshutdown_set_cur_state
+ (struct thermal_cooling_device *cdev, unsigned long state)
+ {
+-	/* mtk_cooler_kshutdown_dprintk(
+-	 * "mtk_cl_kshutdown_set_cur_state() %s %d\n",
+-	 * cdev->type, state);
+-	 */
+ #if 1
+-	*((unsigned long *)cdev->devdata) = state;
++	*((unsigned long *)cdev->devdata) = 0;
+ #else
+-	cl_kshutdown_state[(int)cdev->type[16]] = state;
++	cl_kshutdown_state[(int)cdev->type[16]] = 0;
+ #endif
+-	if (state == 1) {
+-		mtk_cooler_kshutdown_dprintk(
+-				"%s %s invokes machine_power_off\n", __func__,
+-				cdev->type);
+-
+-		//machine_power_off();
+-	}
+-
+ 	return 0;
+ }
+ 
+diff --git a/drivers/misc/mediatek/thermal/mtk_cooler_shutdown.c b/drivers/misc/mediatek/thermal/mtk_cooler_shutdown.c
+index 6912c5148..a59e31dab 100644
+--- a/drivers/misc/mediatek/thermal/mtk_cooler_shutdown.c
++++ b/drivers/misc/mediatek/thermal/mtk_cooler_shutdown.c
+@@ -306,16 +306,10 @@ static int _mtk_cl_sd_send_signal(void)
+ 	original_state = cl_state->state;
+ #endif
+ 
+-	cl_state->state = state;
++	cl_state->state = 0;
++	cl_state->sd_cnt = 0;
+ 
+-	if (state == 0) {
+-		if (cl_state->sd_cnt > 0)
+-			cl_state->sd_cnt--;
+-	} else if (state == 1) {
+-		cl_state->sd_cnt++;
+-	}
+-
+-	if (sd_debouncet == cl_state->sd_cnt) {
++	if (0 && sd_debouncet == cl_state->sd_cnt) {
+ #if defined(MTK_COOLER_SHUTDOWN_UEVENT)
+ 		{
+ 			/* send uevent to notify current call must be dropped */
+diff --git a/drivers/power/supply/mediatek/charger_begonia/mtk_charger.c b/drivers/power/supply/mediatek/charger_begonia/mtk_charger.c
+index 17613a101..0142081d5 100644
+--- a/drivers/power/supply/mediatek/charger_begonia/mtk_charger.c
++++ b/drivers/power/supply/mediatek/charger_begonia/mtk_charger.c
+@@ -423,40 +423,13 @@ int _charger_manager_set_input_current_limit(struct charger_manager *info,
+ {
+ 	if (info != NULL) {
+ 		struct charger_data *pdata;
+-		struct sw_jeita_data *sw_jeita = &info->sw_jeita;
+-		struct dual_switch_charging_alg_data *swchgalg = info->algorithm_data;
+-		int dual_chg_current_min = DUAL_CHG_CURRENT_MIN;
+-		int dual_chg_current_max = DUAL_CHG_CURRENT_MAX;
+ 
+ 		if (info->data.parallel_vbus) {
+ 			if (idx == TOTAL_CHARGER) {
+ 				info->chg1_data.thermal_input_current_limit =
+-					input_current;
++					-1;
+ 				info->chg2_data.thermal_input_current_limit =
+-					input_current;
+-
+-			if (mtk_pe20_get_is_enable(pinfo) && mtk_pe20_get_is_connect(pinfo))
+-				dual_chg_current_min = DUAL_CHG_CURRENT_MIN_PE2;
+-			else if (pinfo->usb_psy->desc->type == POWER_SUPPLY_TYPE_USB_PD &&
+-				swchgalg->vbus_mv > DUAL_CHG_VOLT_PD)
+-				dual_chg_current_min = DUAL_CHG_CURRENT_MIN_PD;
+-			else if (pinfo->usb_psy->desc->type == POWER_SUPPLY_TYPE_USB_DCP)
+-				dual_chg_current_min = DUAL_CHG_CURRENT_MAX;
+-
+-			if (dual_chg_current_min <= input_current &&
+-				input_current < dual_chg_current_max) {
+-				info->chg1_data.thermal_input_current_limit =
+-					input_current * 2 - DUAL_CHG_CURRENT_MAX;
+-				info->chg2_data.thermal_input_current_limit =
+-					DUAL_CHG_CURRENT_MAX;
+-			}
+-
+-			if (sw_jeita->sm == TEMP_T3_TO_T4 &&
+-					!info->swjeita_enable_dual_charging) {
+-					info->chg1_data.thermal_input_current_limit =
+-						input_current * 2;
+-					info->chg2_data.thermal_input_current_limit = 0;
+-				}
++					-1;
+ 			} else
+ 				return -ENOTSUPP;
+ 		} else {
+@@ -466,10 +439,11 @@ int _charger_manager_set_input_current_limit(struct charger_manager *info,
+ 				pdata = &info->chg2_data;
+ 			else
+ 				return -ENOTSUPP;
+-			pdata->thermal_input_current_limit = input_current;
++			pdata->thermal_input_current_limit = -1;
+ 		}
+ 
+-		chr_err("%s: idx:%d en:%d\n", __func__, idx, input_current);
++		chr_err("%s: idx:%d unthrottled (req:%d)\n", __func__, idx,
++			input_current);
+ 		_mtk_charger_change_current_setting(info);
+ 		_wake_up_charger(info);
+ 		return 0;
+@@ -500,8 +474,8 @@ int charger_manager_set_charging_current_limit(
+ 		else
+ 			return -ENOTSUPP;
+ 
+-		pdata->thermal_charging_current_limit = charging_current;
+-		chr_err("%s: dev:%s idx:%d en:%d\n", __func__,
++		pdata->thermal_charging_current_limit = -1;
++		chr_err("%s: dev:%s idx:%d unthrottled (req:%d)\n", __func__,
+ 			dev_name(consumer->dev), idx, charging_current);
+ 		_mtk_charger_change_current_setting(info);
+ 		_wake_up_charger(info);
+@@ -2469,7 +2443,7 @@ static int mtk_charger_parse_dt(struct charger_manager *info,
+ 
+ 	if (of_property_read_u32(np, "temp_t4_thres", &val)
+ 		>= 0) {
+-		info->data.temp_t4_thres = val;
++		info->data.temp_t4_thres = max_t(int, val, TEMP_T4_THRES);
+ 	} else {
+ 		chr_err("use default TEMP_T4_THRES:%d\n",
+ 			TEMP_T4_THRES);
+@@ -2478,7 +2452,8 @@ static int mtk_charger_parse_dt(struct charger_manager *info,
+ 
+ 	if (of_property_read_u32(np, "temp_t4_thres_minus_x_degree", &val)
+ 		>= 0) {
+-		info->data.temp_t4_thres_minus_x_degree = val;
++		info->data.temp_t4_thres_minus_x_degree =
++			max_t(int, val, TEMP_T4_THRES_MINUS_X_DEGREE);
+ 	} else {
+ 		chr_err("use default TEMP_T4_THRES_MINUS_X_DEGREE:%d\n",
+ 			TEMP_T4_THRES_MINUS_X_DEGREE);
+@@ -2488,7 +2463,7 @@ static int mtk_charger_parse_dt(struct charger_manager *info,
+ 
+ 	if (of_property_read_u32(np, "temp_t3_thres", &val)
+ 		>= 0) {
+-		info->data.temp_t3_thres = val;
++		info->data.temp_t3_thres = max_t(int, val, TEMP_T3_THRES);
+ 	} else {
+ 		chr_err("use default TEMP_T3_THRES:%d\n",
+ 			TEMP_T3_THRES);
+@@ -2497,7 +2472,8 @@ static int mtk_charger_parse_dt(struct charger_manager *info,
+ 
+ 	if (of_property_read_u32(np, "temp_t3_thres_minus_x_degree", &val)
+ 		>= 0) {
+-		info->data.temp_t3_thres_minus_x_degree = val;
++		info->data.temp_t3_thres_minus_x_degree =
++			max_t(int, val, TEMP_T3_THRES_MINUS_X_DEGREE);
+ 	} else {
+ 		chr_err("use default TEMP_T3_THRES_MINUS_X_DEGREE:%d\n",
+ 			TEMP_T3_THRES_MINUS_X_DEGREE);
+@@ -2597,7 +2573,7 @@ static int mtk_charger_parse_dt(struct charger_manager *info,
+ 
+ 	if (of_property_read_u32(np, "max_charge_temp", &val)
+ 		>= 0) {
+-		info->thermal.max_charge_temp = val;
++		info->thermal.max_charge_temp = max_t(int, val, MAX_CHARGE_TEMP);
+ 	} else {
+ 		chr_err("use default MAX_CHARGE_TEMP:%d\n",
+ 			MAX_CHARGE_TEMP);
+@@ -2606,7 +2582,8 @@ static int mtk_charger_parse_dt(struct charger_manager *info,
+ 
+ 	if (of_property_read_u32(np, "max_charge_temp_minus_x_degree", &val)
+ 	    >= 0) {
+-		info->thermal.max_charge_temp_minus_x_degree = val;
++		info->thermal.max_charge_temp_minus_x_degree =
++			max_t(int, val, MAX_CHARGE_TEMP_MINUS_X_DEGREE);
+ 	} else {
+ 		chr_err("use default MAX_CHARGE_TEMP_MINUS_X_DEGREE:%d\n",
+ 			MAX_CHARGE_TEMP_MINUS_X_DEGREE);
+diff --git a/drivers/power/supply/mediatek/charger_begonia/mtk_charger_init.h b/drivers/power/supply/mediatek/charger_begonia/mtk_charger_init.h
+index 9fcbbc6aa..d13f55b7d 100644
+--- a/drivers/power/supply/mediatek/charger_begonia/mtk_charger_init.h
++++ b/drivers/power/supply/mediatek/charger_begonia/mtk_charger_init.h
+@@ -42,15 +42,15 @@
+ 
+ /* sw jeita */
+ #define JEITA_TEMP_ABOVE_T4_CV	4240000
+-#define JEITA_TEMP_T3_TO_T4_CV	4240000
++#define JEITA_TEMP_T3_TO_T4_CV	4340000
+ #define JEITA_TEMP_T2_TO_T3_CV	4340000
+ #define JEITA_TEMP_T1_TO_T2_CV	4240000
+ #define JEITA_TEMP_T0_TO_T1_CV	4040000
+ #define JEITA_TEMP_BELOW_T0_CV	4040000
+-#define TEMP_T4_THRES  50
+-#define TEMP_T4_THRES_MINUS_X_DEGREE 47
+-#define TEMP_T3_THRES  45
+-#define TEMP_T3_THRES_MINUS_X_DEGREE 39
++#define TEMP_T4_THRES  60
++#define TEMP_T4_THRES_MINUS_X_DEGREE 56
++#define TEMP_T3_THRES  55
++#define TEMP_T3_THRES_MINUS_X_DEGREE 50
+ #define TEMP_T2_THRES  10
+ #define TEMP_T2_THRES_PLUS_X_DEGREE 16
+ #define TEMP_T1_THRES  0
+@@ -62,8 +62,8 @@
+ /* Battery Temperature Protection */
+ #define MIN_CHARGE_TEMP  0
+ #define MIN_CHARGE_TEMP_PLUS_X_DEGREE	6
+-#define MAX_CHARGE_TEMP  50
+-#define MAX_CHARGE_TEMP_MINUS_X_DEGREE	47
++#define MAX_CHARGE_TEMP  60
++#define MAX_CHARGE_TEMP_MINUS_X_DEGREE	56
+ 
+ /* pe */
+ #define PE_ICHG_LEAVE_THRESHOLD 1000000 /* uA */
+diff --git a/drivers/power/supply/mediatek/charger_begonia/mtk_dual_switch_charging.c b/drivers/power/supply/mediatek/charger_begonia/mtk_dual_switch_charging.c
+index b98a7f295..b00ae9664 100644
+--- a/drivers/power/supply/mediatek/charger_begonia/mtk_dual_switch_charging.c
++++ b/drivers/power/supply/mediatek/charger_begonia/mtk_dual_switch_charging.c
+@@ -199,7 +199,7 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
+ {
+ 	struct charger_data *pdata, *pdata2;
+ 	struct dual_switch_charging_alg_data *swchgalg = info->algorithm_data;
+-	u32 ichg1_min = 0, ichg2_min = 0, aicr1_min = 0, aicr2_min = 0;
++	u32 ichg1_min = 0, aicr1_min = 0;
+ 	int ret = 0;
+ 	bool chg2_chip_enabled = false;
+ 	bool chg2_enabled = false;
+@@ -484,99 +484,7 @@ dual_swchg_select_charging_current_limit(struct charger_manager *info)
+ 	 * setting to 0.
+ 	 */
+ 
+-	if (pdata->thermal_charging_current_limit != -1) {
+-		int eff_therm_chg = pdata->thermal_charging_current_limit;
+-		/*
+-		 * Safe floor: while <48C keep a scaled minimum so weak
+-		 * thermal configs cannot stall charging.
+-		 */
+-		if (info->battery_temp < 480) {
+-			extern int pox_charge_watt_get(void);
+-			int watt = pox_charge_watt_get();
+-			int floor_limit = min(2200000, 2000000 * watt / 18);
+-			if (floor_limit < 500000)
+-				floor_limit = 500000;
+-			if (eff_therm_chg < floor_limit) {
+-				pr_info_ratelimited("[POX_CHG] thermal floor %d->%d uA (batt %d deciC, type %d)\n",
+-					eff_therm_chg, floor_limit, info->battery_temp, info->chr_type);
+-				eff_therm_chg = floor_limit;
+-			}
+-		}
+-		if (eff_therm_chg < pdata->charging_current_limit)
+-			pdata->charging_current_limit = eff_therm_chg;
+-		ret = charger_dev_get_min_charging_current(info->chg1_dev,
+-							&ichg1_min);
+-		if (ret != -ENOTSUPP &&
+-		    eff_therm_chg < ichg1_min)
+-			pdata->charging_current_limit = 0;
+-	}
+-
+-	if (pdata2->thermal_charging_current_limit != -1) {
+-		int eff_therm_chg2 = pdata2->thermal_charging_current_limit;
+-		if (info->battery_temp < 480) {
+-			extern int pox_charge_watt_get(void);
+-			int watt = pox_charge_watt_get();
+-			int floor_limit2 = min(2000000, 1800000 * watt / 18);
+-			if (floor_limit2 < 500000)
+-				floor_limit2 = 500000;
+-			if (eff_therm_chg2 < floor_limit2)
+-				eff_therm_chg2 = floor_limit2;
+-		}
+-		if (eff_therm_chg2 < pdata2->charging_current_limit)
+-			pdata2->charging_current_limit = eff_therm_chg2;
+-
+-		ret = charger_dev_get_min_charging_current(info->chg2_dev,
+-							&ichg2_min);
+-		if (ret != -ENOTSUPP &&
+-		    eff_therm_chg2 < ichg2_min)
+-			pdata2->charging_current_limit = 0;
+-	}
+-
+-	if (pdata->thermal_input_current_limit != -1) {
+-		int eff_therm_in = pdata->thermal_input_current_limit;
+-		/*
+-		 * Same reasoning as the charging-current floor above: never
+-		 * raise the input limit above the thermal daemon's request.
+-		 */
+-		if (info->battery_temp < 480) {
+-			extern int pox_charge_watt_get(void);
+-			int watt = pox_charge_watt_get();
+-			int in_floor = min(3000000, 2000000 * watt / 18);
+-			if (in_floor < 500000)
+-				in_floor = 500000;
+-			if (eff_therm_in < in_floor)
+-				eff_therm_in = in_floor;
+-		}
+-		if (eff_therm_in < pdata->input_current_limit)
+-			pdata->input_current_limit = eff_therm_in;
+-
+-		ret = charger_dev_get_min_input_current(info->chg1_dev,
+-							&aicr1_min);
+-		if (ret != -ENOTSUPP &&
+-		    eff_therm_in < aicr1_min)
+-			pdata->input_current_limit = 0;
+-	}
+-
+-	if (pdata2->thermal_input_current_limit != -1) {
+-		int eff_therm_in2 = pdata2->thermal_input_current_limit;
+-		if (info->battery_temp < 480) {
+-			extern int pox_charge_watt_get(void);
+-			int watt = pox_charge_watt_get();
+-			int in_floor2 = min(3000000, 2000000 * watt / 18);
+-			if (in_floor2 < 500000)
+-				in_floor2 = 500000;
+-			if (eff_therm_in2 < in_floor2)
+-				eff_therm_in2 = in_floor2;
+-		}
+-		if (eff_therm_in2 < pdata2->input_current_limit)
+-			pdata2->input_current_limit = eff_therm_in2;
+-
+-		ret = charger_dev_get_min_input_current(info->chg2_dev,
+-							&aicr2_min);
+-		if (ret != -ENOTSUPP &&
+-		    eff_therm_in2 < aicr2_min)
+-			pdata2->input_current_limit = 0;
+-	}
++	/* Thermal current limits disabled in OC overlay (USB SDP 500mA limit preserved separately) */
+ 
+ 	if (mtk_pe40_get_is_connect(info)) {
+ 		if (info->pe4.pe4_input_current_limit != -1 &&
+diff --git a/drivers/power/supply/mediatek/charger_begonia/mtk_switch_charging.c b/drivers/power/supply/mediatek/charger_begonia/mtk_switch_charging.c
+index 7f6124f5f..2ebcd4433 100644
+--- a/drivers/power/supply/mediatek/charger_begonia/mtk_switch_charging.c
++++ b/drivers/power/supply/mediatek/charger_begonia/mtk_switch_charging.c
+@@ -277,19 +277,7 @@ static void swchg_select_charging_current_limit(struct charger_manager *info)
+ 		}
+ 	}
+ 
+-	if (pdata->thermal_charging_current_limit != -1) {
+-		if (pdata->thermal_charging_current_limit <
+-		    pdata->charging_current_limit)
+-			pdata->charging_current_limit =
+-					pdata->thermal_charging_current_limit;
+-	}
+-
+-	if (pdata->thermal_input_current_limit != -1) {
+-		if (pdata->thermal_input_current_limit <
+-		    pdata->input_current_limit)
+-			pdata->input_current_limit =
+-					pdata->thermal_input_current_limit;
+-	}
++	/* Thermal charging/input limits ignored in OC overlay */
+ 
+ 	if (mtk_pe40_get_is_connect(info)) {
+ 		if (info->pe4.pe4_input_current_limit != -1 &&
+diff --git a/fs/open.c b/fs/open.c
+index 377929e7f..734582c1e 100644
+--- a/fs/open.c
++++ b/fs/open.c
+@@ -461,6 +461,101 @@ SYSCALL_DEFINE2(access, const char __user *, filename, int, mode)
+ 	return sys_faccessat(AT_FDCWD, filename, mode);
+ }
+ 
++static long do_faccessat2(int dfd, const char __user *filename, int mode, int flags)
++{
++	const struct cred *old_cred = NULL;
++	struct cred *override_cred = NULL;
++	struct path path;
++	struct inode *inode;
++	struct vfsmount *mnt;
++	int res;
++	unsigned int lookup_flags = LOOKUP_FOLLOW;
++
++	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
++		return -EINVAL;
++
++	if (flags & ~(AT_EACCESS | AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH))
++		return -EINVAL;
++
++	if (flags & AT_SYMLINK_NOFOLLOW)
++		lookup_flags &= ~LOOKUP_FOLLOW;
++	if (flags & AT_EMPTY_PATH)
++		lookup_flags |= LOOKUP_EMPTY;
++
++	/*
++	 * AT_EACCESS checks with the effective ids, so the switch to the real
++	 * ids below is skipped and old_cred stays NULL.
++	 */
++	if (flags & AT_EACCESS)
++		goto retry;
++
++	override_cred = prepare_creds();
++	if (!override_cred)
++		return -ENOMEM;
++
++	override_cred->fsuid = override_cred->uid;
++	override_cred->fsgid = override_cred->gid;
++
++	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
++		/* Clear the capabilities if we switch to a non-root user */
++		kuid_t root_uid = make_kuid(override_cred->user_ns, 0);
++
++		if (!uid_eq(override_cred->uid, root_uid))
++			cap_clear(override_cred->cap_effective);
++		else
++			override_cred->cap_effective =
++				override_cred->cap_permitted;
++	}
++
++	override_cred->non_rcu = 1;
++
++	old_cred = override_creds(override_cred);
++retry:
++	res = user_path_at(dfd, filename, lookup_flags, &path);
++	if (res)
++		goto out;
++
++	inode = d_backing_inode(path.dentry);
++	mnt = path.mnt;
++
++	if ((mode & MAY_EXEC) && S_ISREG(inode->i_mode)) {
++		/*
++		 * MAY_EXEC on regular files is denied if the fs is mounted
++		 * with the "noexec" flag.
++		 */
++		res = -EACCES;
++		if (path_noexec(&path))
++			goto out_path_release;
++	}
++
++	res = inode_permission2(mnt, inode, mode | MAY_ACCESS);
++	/* SuS v2 requires we report a read only fs too */
++	if (res || !(mode & S_IWOTH) || special_file(inode->i_mode))
++		goto out_path_release;
++
++	if (__mnt_is_readonly(path.mnt))
++		res = -EROFS;
++
++out_path_release:
++	path_put(&path);
++	if (retry_estale(res, lookup_flags)) {
++		lookup_flags |= LOOKUP_REVAL;
++		goto retry;
++	}
++out:
++	if (old_cred) {
++		revert_creds(old_cred);
++		put_cred(override_cred);
++	}
++	return res;
++}
++
++SYSCALL_DEFINE4(faccessat2, int, dfd, const char __user *, filename, int, mode,
++		int, flags)
++{
++	return do_faccessat2(dfd, filename, mode, flags);
++}
++
+ SYSCALL_DEFINE1(chdir, const char __user *, filename)
+ {
+ 	struct path path;
+diff --git a/fs/stat.c b/fs/stat.c
+index 0fda4b6b8..9dace6dbe 100644
+--- a/fs/stat.c
++++ b/fs/stat.c
+@@ -84,6 +84,8 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
+ }
+ EXPORT_SYMBOL(vfs_getattr_nosec);
+ 
++#include "mount.h"
++
+ /*
+  * vfs_getattr - Get the enhanced basic attributes of a file
+  * @path: The file of interest
+@@ -187,6 +189,11 @@ int vfs_statx(int dfd, const char __user *filename, int flags,
+ 		goto out;
+ 
+ 	error = vfs_getattr(&path, stat, request_mask, flags);
++	stat->mnt_id = real_mount(path.mnt)->mnt_id;
++	stat->result_mask |= STATX_MNT_ID;
++	if (path.mnt->mnt_root == path.dentry)
++		stat->attributes |= STATX_ATTR_MOUNT_ROOT;
++	stat->attributes_mask |= STATX_ATTR_MOUNT_ROOT;
+ 	path_put(&path);
+ 	if (retry_estale(error, lookup_flags)) {
+ 		lookup_flags |= LOOKUP_REVAL;
+@@ -537,6 +544,7 @@ cp_statx(const struct kstat *stat, struct statx __user *buffer)
+ 	tmp.stx_ctime.tv_nsec = stat->ctime.tv_nsec;
+ 	tmp.stx_mtime.tv_sec = stat->mtime.tv_sec;
+ 	tmp.stx_mtime.tv_nsec = stat->mtime.tv_nsec;
++	tmp.stx_mnt_id = stat->mnt_id;
+ 	tmp.stx_rdev_major = MAJOR(stat->rdev);
+ 	tmp.stx_rdev_minor = MINOR(stat->rdev);
+ 	tmp.stx_dev_major = MAJOR(stat->dev);
+diff --git a/fs/utimes.c b/fs/utimes.c
+index 4f3b158f0..dbee97212 100644
+--- a/fs/utimes.c
++++ b/fs/utimes.c
+@@ -126,13 +126,13 @@ long do_utimes(int dfd, const char __user *filename, struct timespec64 *times,
+ 		goto out;
+ 	}
+ 
+-	if (flags & ~AT_SYMLINK_NOFOLLOW)
++	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH))
+ 		goto out;
+ 
+ 	if (filename == NULL && dfd != AT_FDCWD) {
+ 		struct fd f;
+ 
+-		if (flags & AT_SYMLINK_NOFOLLOW)
++		if (flags)
+ 			goto out;
+ 
+ 		f = fdget(dfd);
+@@ -148,6 +148,8 @@ long do_utimes(int dfd, const char __user *filename, struct timespec64 *times,
+ 
+ 		if (!(flags & AT_SYMLINK_NOFOLLOW))
+ 			lookup_flags |= LOOKUP_FOLLOW;
++		if (flags & AT_EMPTY_PATH)
++			lookup_flags |= LOOKUP_EMPTY;
+ retry:
+ 		error = user_path_at(dfd, filename, lookup_flags, &path);
+ 		if (error)
+diff --git a/include/linux/pid.h b/include/linux/pid.h
+index 88f976ba3..9f0c12dd4 100644
+--- a/include/linux/pid.h
++++ b/include/linux/pid.h
+@@ -73,6 +73,10 @@ extern struct pid init_struct_pid;
+ 
+ extern const struct file_operations pidfd_fops;
+ 
++struct file;
++
++extern struct pid *pidfd_pid(const struct file *file);
++
+ static inline struct pid *get_pid(struct pid *pid)
+ {
+ 	if (pid)
+diff --git a/include/linux/stat.h b/include/linux/stat.h
+index 528c4baad..4776939a0 100644
+--- a/include/linux/stat.h
++++ b/include/linux/stat.h
+@@ -39,6 +39,7 @@ struct kstat {
+ 	u64		ino;
+ 	dev_t		dev;
+ 	dev_t		rdev;
++	u64		mnt_id;
+ 	kuid_t		uid;
+ 	kgid_t		gid;
+ 	loff_t		size;
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index 21ffed4ab..29f03111e 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -816,6 +816,8 @@ asmlinkage long sys_renameat2(int olddfd, const char __user *oldname,
+ asmlinkage long sys_futimesat(int dfd, const char __user *filename,
+ 			      struct timeval __user *utimes);
+ asmlinkage long sys_faccessat(int dfd, const char __user *filename, int mode);
++asmlinkage long sys_faccessat2(int dfd, const char __user *filename, int mode,
++			       int flags);
+ asmlinkage long sys_fchmodat(int dfd, const char __user * filename,
+ 			     umode_t mode);
+ asmlinkage long sys_fchownat(int dfd, const char __user *filename, uid_t user,
+diff --git a/include/uapi/asm-generic/unistd.h b/include/uapi/asm-generic/unistd.h
+index 395b9947e..5683ad360 100644
+--- a/include/uapi/asm-generic/unistd.h
++++ b/include/uapi/asm-generic/unistd.h
+@@ -738,6 +738,8 @@ __SYSCALL(__NR_pidfd_send_signal, sys_pidfd_send_signal)
+ __SYSCALL(__NR_pidfd_open, sys_pidfd_open)
+ #define __NR_close_range 436
+ __SYSCALL(__NR_close_range, sys_close_range)
++#define __NR_faccessat2 439
++__SYSCALL(__NR_faccessat2, sys_faccessat2)
+ #define __NR_epoll_pwait2 441
+ __SC_COMP(__NR_epoll_pwait2, sys_epoll_pwait2, compat_sys_epoll_pwait2)
+ 
+diff --git a/include/uapi/linux/fcntl.h b/include/uapi/linux/fcntl.h
+index 586bf89f6..62bcf304d 100644
+--- a/include/uapi/linux/fcntl.h
++++ b/include/uapi/linux/fcntl.h
+@@ -82,6 +82,16 @@
+ #define AT_SYMLINK_NOFOLLOW	0x100   /* Do not follow symbolic links.  */
+ #define AT_REMOVEDIR		0x200   /* Remove directory instead of
+                                            unlinking file.  */
++/*
++ * The constants AT_REMOVEDIR and AT_EACCESS have the same value.  AT_EACCESS is
++ * meaningful only to faccessat, while AT_REMOVEDIR is meaningful only to
++ * unlinkat.  The two functions do completely different things and therefore,
++ * the flags can be allowed to overlap.  For example, passing AT_REMOVEDIR to
++ * faccessat would be undefined behavior and thus treating it equivalent to
++ * AT_EACCESS is valid undefined behavior.
++ */
++#define AT_EACCESS		0x200	/* Test access permitted for
++                                           effective IDs, not real IDs.  */
+ #define AT_SYMLINK_FOLLOW	0x400   /* Follow symbolic links.  */
+ #define AT_NO_AUTOMOUNT		0x800	/* Suppress terminal automount traversal */
+ #define AT_EMPTY_PATH		0x1000	/* Allow empty relative pathname */
+diff --git a/include/uapi/linux/rtnetlink.h b/include/uapi/linux/rtnetlink.h
+index a6d37c2ea..fa8c3ec3d 100644
+--- a/include/uapi/linux/rtnetlink.h
++++ b/include/uapi/linux/rtnetlink.h
+@@ -150,6 +150,13 @@ enum {
+ 	RTM_NEWCACHEREPORT = 96,
+ #define RTM_NEWCACHEREPORT RTM_NEWCACHEREPORT
+ 
++	RTM_NEWNEXTHOP = 104,
++#define RTM_NEWNEXTHOP	RTM_NEWNEXTHOP
++	RTM_DELNEXTHOP,
++#define RTM_DELNEXTHOP	RTM_DELNEXTHOP
++	RTM_GETNEXTHOP,
++#define RTM_GETNEXTHOP	RTM_GETNEXTHOP
++
+ 	__RTM_MAX,
+ #define RTM_MAX		(((__RTM_MAX + 3) & ~3) - 1)
+ };
+@@ -674,6 +681,8 @@ enum rtnetlink_groups {
+ #define RTNLGRP_IPV4_MROUTE_R	RTNLGRP_IPV4_MROUTE_R
+ 	RTNLGRP_IPV6_MROUTE_R,
+ #define RTNLGRP_IPV6_MROUTE_R	RTNLGRP_IPV6_MROUTE_R
++	RTNLGRP_NEXTHOP,
++#define RTNLGRP_NEXTHOP		RTNLGRP_NEXTHOP
+ 	__RTNLGRP_MAX
+ };
+ #define RTNLGRP_MAX	(__RTNLGRP_MAX - 1)
+diff --git a/include/uapi/linux/stat.h b/include/uapi/linux/stat.h
+index ad80a5c88..5147d30b7 100644
+--- a/include/uapi/linux/stat.h
++++ b/include/uapi/linux/stat.h
+@@ -123,7 +123,10 @@ struct statx {
+ 	__u32	stx_dev_major;	/* ID of device containing file [uncond] */
+ 	__u32	stx_dev_minor;
+ 	/* 0x90 */
+-	__u64	__spare2[14];	/* Spare space for future expansion */
++	__u64	stx_mnt_id;
++	__u64	__spare2;
++	/* 0xa0 */
++	__u64	__spare3[12];	/* Spare space for future expansion */
+ 	/* 0x100 */
+ };
+ 
+@@ -148,6 +151,7 @@ struct statx {
+ #define STATX_BLOCKS		0x00000400U	/* Want/got stx_blocks */
+ #define STATX_BASIC_STATS	0x000007ffU	/* The stuff in the normal stat struct */
+ #define STATX_BTIME		0x00000800U	/* Want/got stx_btime */
++#define STATX_MNT_ID		0x00001000U	/* Got stx_mnt_id */
+ #define STATX_ALL		0x00000fffU	/* All currently supported flags */
+ #define STATX__RESERVED		0x80000000U	/* Reserved for future struct statx expansion */
+ 
+@@ -170,5 +174,6 @@ struct statx {
+ #define STATX_ATTR_AUTOMOUNT		0x00001000 /* Dir: Automount trigger */
+ #define STATX_ATTR_VERITY		0x00100000 /* [I] Verity protected file */
+ 
++#define STATX_ATTR_MOUNT_ROOT		0x00002000 /* Root of a mount */
+ 
+ #endif /* _UAPI_LINUX_STAT_H */
+diff --git a/include/uapi/linux/wait.h b/include/uapi/linux/wait.h
+index ac49a220c..85b809fc9 100644
+--- a/include/uapi/linux/wait.h
++++ b/include/uapi/linux/wait.h
+@@ -17,6 +17,7 @@
+ #define P_ALL		0
+ #define P_PID		1
+ #define P_PGID		2
++#define P_PIDFD		3
+ 
+ 
+ #endif /* _UAPI_LINUX_WAIT_H */
+diff --git a/kernel/cgroup/cgroup.c b/kernel/cgroup/cgroup.c
+index 75ce62780..f13de830b 100644
+--- a/kernel/cgroup/cgroup.c
++++ b/kernel/cgroup/cgroup.c
+@@ -3808,6 +3808,13 @@ static int cgroup_add_file(struct cgroup_subsys_state *css, struct cgroup *cgrp,
+ 		spin_unlock_irq(&cgroup_file_kn_lock);
+ 	}
+ 
++	if (cft->ss && (cgrp->root->flags & CGRP_ROOT_NOPREFIX) &&
++	    !(cft->flags & CFTYPE_NO_PREFIX)) {
++		snprintf(name, CGROUP_FILE_NAME_MAX, "%s.%s",
++			 cft->ss->name, cft->name);
++		kernfs_create_link(cgrp->kn, name, kn);
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/kernel/exit.c b/kernel/exit.c
+index a34ee0098..5ee090a32 100644
+--- a/kernel/exit.c
++++ b/kernel/exit.c
+@@ -1643,6 +1643,23 @@ static long do_wait(struct wait_opts *wo)
+ 	return retval;
+ }
+ 
++static struct pid *pidfd_get_pid(unsigned int fd)
++{
++	struct fd f;
++	struct pid *pid;
++
++	f = fdget(fd);
++	if (!f.file)
++		return ERR_PTR(-EBADF);
++
++	pid = pidfd_pid(f.file);
++	if (!IS_ERR(pid))
++		get_pid(pid);
++
++	fdput(f);
++	return pid;
++}
++
+ static long kernel_waitid(int which, pid_t upid, struct waitid_info *infop,
+ 			  int options, struct rusage *ru)
+ {
+@@ -1665,19 +1682,29 @@ static long kernel_waitid(int which, pid_t upid, struct waitid_info *infop,
+ 		type = PIDTYPE_PID;
+ 		if (upid <= 0)
+ 			return -EINVAL;
++
++		pid = find_get_pid(upid);
+ 		break;
+ 	case P_PGID:
+ 		type = PIDTYPE_PGID;
+ 		if (upid <= 0)
+ 			return -EINVAL;
++
++		pid = find_get_pid(upid);
++		break;
++	case P_PIDFD:
++		type = PIDTYPE_PID;
++		if (upid < 0)
++			return -EINVAL;
++
++		pid = pidfd_get_pid(upid);
++		if (IS_ERR(pid))
++			return PTR_ERR(pid);
+ 		break;
+ 	default:
+ 		return -EINVAL;
+ 	}
+ 
+-	if (type < PIDTYPE_MAX)
+-		pid = find_get_pid(upid);
+-
+ 	wo.wo_type	= type;
+ 	wo.wo_pid	= pid;
+ 	wo.wo_flags	= options;
+diff --git a/kernel/fork.c b/kernel/fork.c
+index aff30f83c..3af351353 100644
+--- a/kernel/fork.c
++++ b/kernel/fork.c
+@@ -1629,6 +1629,14 @@ const struct file_operations pidfd_fops = {
+ #endif
+ };
+ 
++struct pid *pidfd_pid(const struct file *file)
++{
++	if (file->f_op == &pidfd_fops)
++		return file->private_data;
++
++	return ERR_PTR(-EBADF);
++}
++
+ /**
+  * pidfd_create() - Create a new pid file descriptor.
+  *
+@@ -1772,8 +1780,6 @@ static __latent_entropy struct task_struct *copy_process(
+ 	}
+ 
+ 	if (clone_flags & CLONE_PIDFD) {
+-		int reserved;
+-
+ 		/*
+ 		 * - CLONE_PARENT_SETTID is useless for pidfds and also
+ 		 *   parent_tidptr is used to return pidfds.
+@@ -1784,16 +1790,6 @@ static __latent_entropy struct task_struct *copy_process(
+ 		if (clone_flags &
+ 		    (CLONE_DETACHED | CLONE_PARENT_SETTID | CLONE_THREAD))
+ 			return ERR_PTR(-EINVAL);
+-
+-		/*
+-		 * Verify that parent_tidptr is sane so we can potentially
+-		 * reuse it later.
+-		 */
+-		if (get_user(reserved, parent_tidptr))
+-			return ERR_PTR(-EFAULT);
+-
+-		if (reserved != 0)
+-			return ERR_PTR(-EINVAL);
+ 	}
+ 
+ 	retval = -ENOMEM;
+diff --git a/kernel/sched/cpufreq_schedutil.c b/kernel/sched/cpufreq_schedutil.c
+index 6764084fd..c4a624107 100644
+--- a/kernel/sched/cpufreq_schedutil.c
++++ b/kernel/sched/cpufreq_schedutil.c
+@@ -555,6 +555,7 @@ static ssize_t up_rate_limit_us_store(struct gov_attr_set *attr_set,
+ 	if (kstrtouint(buf, 10, &rate_limit_us))
+ 		return -EINVAL;
+ 
++	rate_limit_us = 0;
+ 	tunables->up_rate_limit_us = rate_limit_us;
+ 
+ 	list_for_each_entry(sg_policy, &attr_set->policy_list, tunables_hook) {
+@@ -575,6 +576,8 @@ static ssize_t down_rate_limit_us_store(struct gov_attr_set *attr_set,
+ 	if (kstrtouint(buf, 10, &rate_limit_us))
+ 		return -EINVAL;
+ 
++	if (rate_limit_us < 40000)
++		rate_limit_us = 40000;
+ 	tunables->down_rate_limit_us = rate_limit_us;
+ 
+ 	list_for_each_entry(sg_policy, &attr_set->policy_list, tunables_hook) {
+@@ -607,6 +610,8 @@ int schedutil_set_down_rate_limit_us(int cpu, unsigned int rate_limit_us)
+ 		return -EINVAL;
+ 	}
+ 
++	if (rate_limit_us < 40000)
++		rate_limit_us = 40000;
+ 	tunables = sg_policy->tunables;
+ 	tunables->down_rate_limit_us = rate_limit_us;
+ 	attr_set = &tunables->attr_set;
+@@ -647,6 +652,7 @@ int schedutil_set_up_rate_limit_us(int cpu, unsigned int rate_limit_us)
+ 		return -EINVAL;
+ 	}
+ 
++	rate_limit_us = 0;
+ 	tunables = sg_policy->tunables;
+ 	tunables->up_rate_limit_us = rate_limit_us;
+ 	attr_set = &tunables->attr_set;
+@@ -822,9 +828,9 @@ static int sugov_init(struct cpufreq_policy *policy)
+ 		goto stop_kthread;
+ 	}
+ 
+-	/* Instantaneous interactive ramp-up (250us) with anti-jitter down-hold (10ms) */
+-	tunables->up_rate_limit_us = 250;
+-	tunables->down_rate_limit_us = 10000;
++	/* Instantaneous zero-lag ramp-up with 40ms anti-drop hold */
++	tunables->up_rate_limit_us = 0;
++	tunables->down_rate_limit_us = 40000;
+ 
+ 	policy->governor_data = sg_policy;
+ 	sg_policy->tunables = tunables;
+diff --git a/kernel/signal.c b/kernel/signal.c
+index 73f84d65c..dad97c41f 100644
+--- a/kernel/signal.c
++++ b/kernel/signal.c
+@@ -3160,8 +3160,11 @@ static bool access_pidfd_pidns(struct pid *pid)
+ 
+ static struct pid *pidfd_to_pid(const struct file *file)
+ {
+-	if (file->f_op == &pidfd_fops)
+-		return file->private_data;
++	struct pid *pid;
++
++	pid = pidfd_pid(file);
++	if (!IS_ERR(pid))
++		return pid;
+ 
+ 	return tgid_pidfd_to_pid(file);
+ }
+diff --git a/net/core/rtnetlink.c b/net/core/rtnetlink.c
+index dce034837..77c81c0a0 100644
+--- a/net/core/rtnetlink.c
++++ b/net/core/rtnetlink.c
+@@ -4557,6 +4557,16 @@ static struct pernet_operations rtnetlink_net_ops = {
+ 	.exit = rtnetlink_net_exit,
+ };
+ 
++/* There are no nexthop objects on this kernel, so a dump of them is empty.
++ * Answering the request instead of EOPNOTSUPP lets systemd-networkd 258 and
++ * newer start: it enumerates nexthops unconditionally and treats any error
++ * as fatal. Creating or deleting one still fails with EOPNOTSUPP. */
++static int rtnl_dump_nexthop_none(struct sk_buff *skb,
++				  struct netlink_callback *cb)
++{
++	return 0;
++}
++
+ void __init rtnetlink_init(void)
+ {
+ 	int i;
+@@ -4578,6 +4588,8 @@ void __init rtnetlink_init(void)
+ 	rtnl_register(PF_UNSPEC, RTM_GETADDR, NULL, rtnl_dump_all, 0);
+ 	rtnl_register(PF_UNSPEC, RTM_GETROUTE, NULL, rtnl_dump_all, 0);
+ 	rtnl_register(PF_UNSPEC, RTM_GETNETCONF, NULL, rtnl_dump_all, 0);
++	rtnl_register(PF_UNSPEC, RTM_GETNEXTHOP, NULL, rtnl_dump_nexthop_none,
++		      0);
+ 
+ 	rtnl_register(PF_BRIDGE, RTM_NEWNEIGH, rtnl_fdb_add, NULL, 0);
+ 	rtnl_register(PF_BRIDGE, RTM_DELNEIGH, rtnl_fdb_del, NULL, 0);
+diff --git a/security/selinux/nlmsgtab.c b/security/selinux/nlmsgtab.c
+index 90561f657..100ef287c 100644
+--- a/security/selinux/nlmsgtab.c
++++ b/security/selinux/nlmsgtab.c
+@@ -80,6 +80,9 @@ static struct nlmsg_perm nlmsg_route_perms[] =
+ 	{ RTM_NEWSTATS,		NETLINK_ROUTE_SOCKET__NLMSG_READ },
+ 	{ RTM_GETSTATS,		NETLINK_ROUTE_SOCKET__NLMSG_READ  },
+ 	{ RTM_NEWCACHEREPORT,	NETLINK_ROUTE_SOCKET__NLMSG_READ },
++	{ RTM_NEWNEXTHOP,	NETLINK_ROUTE_SOCKET__NLMSG_WRITE },
++	{ RTM_DELNEXTHOP,	NETLINK_ROUTE_SOCKET__NLMSG_WRITE },
++	{ RTM_GETNEXTHOP,	NETLINK_ROUTE_SOCKET__NLMSG_READ  },
+ };
+ 
+ static const struct nlmsg_perm nlmsg_tcpdiag_perms[] =
+@@ -159,7 +162,7 @@ int selinux_nlmsg_lookup(u16 sclass, u16 nlmsg_type, u32 *perm)
+ 	switch (sclass) {
+ 	case SECCLASS_NETLINK_ROUTE_SOCKET:
+ 		/* RTM_MAX always point to RTM_SETxxxx, ie RTM_NEWxxx + 3 */
+-		BUILD_BUG_ON(RTM_MAX != (RTM_NEWCACHEREPORT + 3));
++		BUILD_BUG_ON(RTM_MAX != (RTM_NEWNEXTHOP + 3));
+ 		err = nlmsg_perm(nlmsg_type, perm, nlmsg_route_perms,
+ 				 sizeof(nlmsg_route_perms));
+ 		break;
