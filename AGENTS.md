@@ -23,12 +23,13 @@ per-variant branches, no merge conflicts when upstream updates land.
 | `miui` | (any root) | MIUI/HyperOS | `miui.patch` |
 | `c2` | (any root) | Codec2 | `c2.patch` |
 | `overclock` | (any root) | none | `overclock.patch` |
+| `droidspaces` | (any root) | none | `droidspaces.patch` |
 
 Combine with commas: `VARIANT=ksu,c2`, `VARIANT=apatch,miui`. `miui` and `c2`
 compose — `VARIANT=ksu,miui,c2` applies both overlays (always in the fixed order
-`miui` then `c2`, reverted in reverse by `unvariant`). `overclock` composes with
-everything and is applied before the media overlays:
-`VARIANT=folkpatch,overclock`, `VARIANT=ksu,overclock,miui,c2`.
+`miui` then `c2`, reverted in reverse by `unvariant`). `overclock` and `droidspaces` compose with
+everything and are applied before the media overlays:
+`VARIANT=folkpatch,droidspaces`, `VARIANT=ksu,overclock,droidspaces,miui,c2`.
 
 Build locally:
 ```bash
@@ -147,6 +148,14 @@ No separate `sultan` variant exists because all editions now run Sultan debloat.
   procfs overrides; `ppm_v3` (`ut`, `sys_boost`) blocks core/max-freq caps;
   `gaming_mode.c` forces `EXTREME` profile (`kprofiles_mode_set`,
   `pox_kprofile_custom_set`, brownout derates removed)
+
+**Rules:**
+- Never apply this patch on top of `miui`/`c2` when regenerating; it must apply
+  to clean `onyx` and stack cleanly with the root and media patches.
+
+### 2.7 `patches/droidspaces.patch` (container support, composes with everything)
+
+**Kernel side:**
 - Droidspaces (4.14 backports + config): `arch/arm64/configs/droidspaces.config`
   merged by `merge_config_fragments()`; kernel backports for `waitid(P_PIDFD)`,
   `CLONE_PIDFD` `parent_tidptr`, `STATX_MNT_ID`, `STATX_ATTR_MOUNT_ROOT`,
@@ -155,11 +164,9 @@ No separate `sultan` variant exists because all editions now run Sultan debloat.
   `RTNLGRP_NEXTHOP` + SELinux `nlmsgtab` rows
 
 **Rules:**
-- Never apply this patch on top of `miui`/`c2` when regenerating; it must apply
-  to clean `onyx` and stack cleanly with the root and media patches.
 - Keep `sys_faccessat` unmodified and place `#include "mount.h"` in `fs/stat.c`
   between `vfs_getattr_nosec` and `vfs_statx` so `ksu.patch` SUSFS hunks apply
-  before `overclock.patch` without context conflicts.
+  before `droidspaces.patch` without context conflicts.
 - The five options the upstream Droidspaces list spells for newer kernels
   (`NETFILTER_XT_TARGET_MASQUERADE`, `NF_CONNTRACK_NETLINK`,
   `IP_NF_TARGET_ULOG`, `FW_LOADER_COMPRESS`, `ANDROID_PARANOID_NETWORK`) do not

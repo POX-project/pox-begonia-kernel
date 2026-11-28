@@ -35,12 +35,13 @@ the manager package.
 | --- | --- | --- |
 | `miui` | `miui.patch` | WLAN/network hardening + `miui.config` fragment (MIUI/HyperOS) |
 | `c2` | `c2.patch` | MTK VDEC/VENC + VCU Codec2 media stack (full VCU + V4L2 port) |
-| `overclock` | `overclock.patch` | CPU/GPU/CCI overclock, every thermal/power/charging limit removed, Droidspaces container support |
+| `overclock` | `overclock.patch` | CPU/GPU/CCI overclock, every thermal/power/charging limit removed |
+| `droidspaces` | `droidspaces.patch` | Droidspaces container support: 4.14 syscall backports + `droidspaces.config` |
 
-`overclock` is a performance set, not a root: it composes with every root and
-with the media overlays (`VARIANT=folkpatch,overclock`, `VARIANT=ksu,overclock,c2`).
-It is applied before the media overlays so the two never fight over a file.
-It also ships `arch/arm64/configs/droidspaces.config`, which `build.sh` merges
+`overclock` and `droidspaces` are modular sets, not roots: they compose with every root and
+with the media overlays (`VARIANT=folkpatch,droidspaces`, `VARIANT=ksu,overclock,droidspaces,c2`).
+They are applied before the media overlays so they never fight over a file.
+`droidspaces.patch` ships `arch/arm64/configs/droidspaces.config`, which `build.sh` merges
 into whichever defconfig the root selected.
 
 ### `overclock` in detail
@@ -60,11 +61,19 @@ into whichever defconfig the root selected.
 | GED | GPU DVFS thermal ceiling removed, gaming boost forced, procfs downclock/fixed-volt overrides blocked |
 | CPUFreq / `gaming_mode.c` | `scaling_max_freq` locked to `cpuinfo.max_freq`, `powersave`/`conservative`/`userspace` governors blocked, EXTREME profile locked, brownout derates removed |
 | Charging | charger thermal floors and input-current throttling removed (USB SDP 500 mA cap kept) |
-| Droidspaces | `droidspaces.config` fragment plus 4.14 backports (`waitid(P_PIDFD)`, `CLONE_PIDFD` `parent_tidptr`, `STATX_MNT_ID`, `STATX_ATTR_MOUNT_ROOT`, `utimensat(AT_EMPTY_PATH)`, `faccessat2`, `RTM_GETNEXTHOP` / `RTNLGRP_NEXTHOP` + SELinux rows) |
 
 The thermal risk is deliberate: the OPPs are valid silicon for MT6785, but the
 phone needs external cooling. Do not flash this build on a device that relies
 on its own thermal throttling.
+
+### `droidspaces` in detail
+
+| Area | Change |
+| --- | --- |
+| Syscalls | `waitid(P_PIDFD)`, `CLONE_PIDFD` `parent_tidptr`, `STATX_MNT_ID`, `STATX_ATTR_MOUNT_ROOT`, `utimensat(AT_EMPTY_PATH)`, `faccessat2` (syscall 439), `pidfd_send_signal` |
+| Routing / Netlink | `RTM_GETNEXTHOP` / `RTNLGRP_NEXTHOP` + SELinux `nlmsgtab` rows |
+| Cgroup | Non-GKI cgroup file prefix handling |
+| Config Fragment | `arch/arm64/configs/droidspaces.config` merged into active defconfig |
 
 
 `c2` is the only set that carries the MT6785 VCU + V4L2 vcodec port. Without
@@ -112,7 +121,8 @@ configured.
 | `ksu.patch` | `.gitmodules` + `KernelSU` gitlink (BakaSU), `bakasu_defconfig`, `fs/nomount/*`, `fs/susfs.c`, `ksu-patches/ksu/*` | root drivers, applied before overlays |
 | `miui.patch` | WLAN drivers, `miui.config` | overlay |
 | `c2.patch` | MTK VCODEC/VCU, V4L2 uapi | overlay |
-| `overclock.patch` | CPU/GPU/CCI OPP + DVFS, thermal/PBM/PPM/charger/GED/FPSGO, runtime cap locks, Droidspaces 4.14 backports + `droidspaces.config` | performance set, composes with roots and overlays |
+| `overclock.patch` | CPU/GPU/CCI OPP + DVFS, thermal/PBM/PPM/charger/GED/FPSGO, runtime cap locks | performance set, composes with roots and overlays |
+| `droidspaces.patch` | Droidspaces 4.14 syscall backports, routing/netlink, cgroups + `droidspaces.config` | container support set, composes with roots and overlays |
 
 ## Updating a patch
 

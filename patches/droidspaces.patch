@@ -1,0 +1,721 @@
+diff --git a/arch/arm/tools/syscall.tbl b/arch/arm/tools/syscall.tbl
+index 56ad0d91c..78e907aad 100644
+--- a/arch/arm/tools/syscall.tbl
++++ b/arch/arm/tools/syscall.tbl
+@@ -415,4 +415,5 @@
+ 424	common	pidfd_send_signal	sys_pidfd_send_signal
+ 434	common	pidfd_open		sys_pidfd_open
+ 436	common	close_range		sys_close_range
++439	common	faccessat2		sys_faccessat2
+ 441	common	epoll_pwait2		sys_epoll_pwait2
+diff --git a/arch/arm64/configs/droidspaces.config b/arch/arm64/configs/droidspaces.config
+new file mode 100644
+index 000000000..01760a7fc
+--- /dev/null
++++ b/arch/arm64/configs/droidspaces.config
+@@ -0,0 +1,163 @@
++# Kernel configurations for full DroidSpaces container support (Linux 4.14 Non-GKI)
++# Includes all MUST, RECOMMENDED, and OPTIONAL features (Docker, systemd, NAT/NAT66, macvlan, UFW/Fail2Ban)
++
++# IPC mechanisms
++CONFIG_SYSCTL=y
++CONFIG_SYSVIPC=y
++CONFIG_POSIX_MQUEUE=y
++
++# Core namespaces & sandboxing
++CONFIG_NAMESPACES=y
++CONFIG_PID_NS=y
++CONFIG_UTS_NS=y
++CONFIG_IPC_NS=y
++CONFIG_USER_NS=y
++CONFIG_NET_NS=y
++
++# Seccomp support
++CONFIG_SECCOMP=y
++CONFIG_SECCOMP_FILTER=y
++
++# Control groups & resource limits (--memory, --cpus, --pids-limit, CPU accounting)
++CONFIG_CGROUPS=y
++CONFIG_CGROUP_DEVICE=y
++CONFIG_CGROUP_SCHED=y
++CONFIG_FAIR_GROUP_SCHED=y
++CONFIG_CFS_BANDWIDTH=y
++CONFIG_CGROUP_FREEZER=y
++CONFIG_CGROUP_PIDS=y
++CONFIG_CGROUP_CPUACCT=y
++CONFIG_CGROUP_PERF=y
++CONFIG_CGROUP_NET_PRIO=y
++CONFIG_CGROUP_NET_CLASSID=y
++CONFIG_NET_CLS_CGROUP=y
++CONFIG_CPUSETS=y
++CONFIG_PROC_PID_CPUSET=y
++CONFIG_MEMCG=y
++CONFIG_MEMCG_SWAP=y
++CONFIG_MEMCG_SWAP_ENABLED=y
++CONFIG_BLK_CGROUP=y
++CONFIG_BLK_DEV_THROTTLING=y
++
++# Devices, filesystems & container storage
++CONFIG_DEVTMPFS=y
++CONFIG_DEVTMPFS_MOUNT=y
++CONFIG_SHMEM=y
++CONFIG_TMPFS=y
++CONFIG_TMPFS_POSIX_ACL=y
++CONFIG_TMPFS_XATTR=y
++CONFIG_OVERLAY_FS=y
++CONFIG_OVERLAY_FS_REDIRECT_DIR=y
++CONFIG_OVERLAY_FS_INDEX=y
++CONFIG_FUSE_FS=y
++CONFIG_BLK_DEV_LOOP=y
++CONFIG_EXT4_FS=y
++CONFIG_EXT4_FS_POSIX_ACL=y
++CONFIG_EXT4_FS_SECURITY=y
++CONFIG_UNIX98_PTYS=y
++
++# Firmware loading support
++CONFIG_FW_LOADER=y
++CONFIG_FW_LOADER_USER_HELPER=y
++
++# Container networking: NAT / NAT66 / Macvlan / Bridge / VPN (TUN)
++CONFIG_VETH=y
++CONFIG_TUN=y
++CONFIG_BRIDGE=y
++CONFIG_BRIDGE_NETFILTER=y
++CONFIG_BRIDGE_NF_EBTABLES=y
++CONFIG_MACVLAN=y
++CONFIG_IP_ADVANCED_ROUTER=y
++CONFIG_IP_MULTIPLE_TABLES=y
++CONFIG_IPV6=y
++CONFIG_IPV6_MULTIPLE_TABLES=y
++
++# Netfilter / iptables / nftables core & NAT/NAT66
++CONFIG_NETFILTER=y
++CONFIG_NETFILTER_ADVANCED=y
++CONFIG_NETFILTER_NETLINK=y
++CONFIG_NETFILTER_NETLINK_ACCT=y
++CONFIG_NETFILTER_NETLINK_QUEUE=y
++CONFIG_NETFILTER_NETLINK_LOG=y
++CONFIG_NF_CONNTRACK=y
++CONFIG_NF_CONNTRACK_IPV4=y
++CONFIG_NF_CONNTRACK_IPV6=y
++CONFIG_NF_CT_NETLINK=y
++CONFIG_NF_NAT=y
++CONFIG_NF_NAT_IPV4=y
++CONFIG_NF_NAT_IPV6=y
++CONFIG_NF_NAT_NEEDED=y
++CONFIG_NF_NAT_REDIRECT=y
++CONFIG_NETFILTER_XTABLES=y
++CONFIG_NETFILTER_XT_NAT=y
++CONFIG_NETFILTER_XT_TARGET_NETMAP=y
++CONFIG_NETFILTER_XT_TARGET_REDIRECT=y
++CONFIG_NETFILTER_XT_TARGET_TCPMSS=y
++CONFIG_NETFILTER_XT_TARGET_LOG=y
++CONFIG_NETFILTER_XT_TARGET_NFLOG=y
++CONFIG_NETFILTER_XT_TARGET_MARK=y
++CONFIG_NETFILTER_XT_MATCH_ADDRTYPE=y
++CONFIG_NETFILTER_XT_MATCH_COMMENT=y
++CONFIG_NETFILTER_XT_MATCH_CONNTRACK=y
++CONFIG_NETFILTER_XT_MATCH_STATE=y
++CONFIG_NETFILTER_XT_MATCH_STATISTIC=y
++CONFIG_NETFILTER_XT_MATCH_MULTIPORT=y
++CONFIG_NETFILTER_XT_MATCH_HL=y
++CONFIG_NETFILTER_XT_MATCH_RECENT=y
++CONFIG_NETFILTER_XT_MATCH_LIMIT=y
++CONFIG_NETFILTER_XT_MATCH_HASHLIMIT=y
++CONFIG_NETFILTER_XT_MATCH_OWNER=y
++CONFIG_NETFILTER_XT_MATCH_PKTTYPE=y
++CONFIG_NETFILTER_XT_MATCH_MARK=y
++
++# iptables IPv4 & IPv6
++CONFIG_IP_NF_IPTABLES=y
++CONFIG_IP_NF_FILTER=y
++CONFIG_IP_NF_MANGLE=y
++CONFIG_IP_NF_RAW=y
++CONFIG_IP_NF_NAT=y
++CONFIG_IP_NF_TARGET_MASQUERADE=y
++CONFIG_IP_NF_TARGET_REJECT=y
++CONFIG_IP6_NF_IPTABLES=y
++CONFIG_IP6_NF_FILTER=y
++CONFIG_IP6_NF_MANGLE=y
++CONFIG_IP6_NF_RAW=y
++CONFIG_IP6_NF_NAT=y
++CONFIG_IP6_NF_TARGET_MASQUERADE=y
++CONFIG_IP6_NF_TARGET_REJECT=y
++
++# nftables
++CONFIG_NF_TABLES=y
++CONFIG_NF_TABLES_INET=y
++CONFIG_NF_TABLES_IPV4=y
++CONFIG_NF_TABLES_IPV6=y
++CONFIG_NF_TABLES_NETDEV=y
++CONFIG_NFT_CT=y
++CONFIG_NFT_NAT=y
++CONFIG_NFT_MASQ=y
++CONFIG_NFT_MASQ_IPV4=y
++CONFIG_NFT_MASQ_IPV6=y
++CONFIG_NFT_CHAIN_NAT_IPV4=y
++CONFIG_NFT_CHAIN_NAT_IPV6=y
++CONFIG_NFT_COUNTER=y
++CONFIG_NFT_LOG=y
++CONFIG_NFT_LIMIT=y
++CONFIG_NFT_REJECT=y
++CONFIG_NFT_REJECT_IPV4=y
++CONFIG_NFT_REJECT_IPV6=y
++
++# IPSet (Fail2Ban)
++CONFIG_IP_SET=y
++CONFIG_IP_SET_HASH_IP=y
++CONFIG_IP_SET_HASH_NET=y
++CONFIG_NETFILTER_XT_SET=y
++
++# Linux 4.14 name mapping for the options the upstream list spells for newer
++# kernels. The 4.14 tree has no symbol for the names on the left, so the
++# equivalents below are what actually get built:
++#   NETFILTER_XT_TARGET_MASQUERADE -> IP_NF_TARGET_MASQUERADE + NETFILTER_XT_NAT
++#   NF_CONNTRACK_NETLINK           -> NF_CT_NETLINK
++#   IP_NF_TARGET_ULOG              -> NETFILTER_XT_TARGET_NFLOG (ipt_ULOG removed)
++#   FW_LOADER_COMPRESS             -> not available before 4.15
++#   ANDROID_PARANOID_NETWORK       -> symbol absent, so no per-UID netfilter
++#                                     restriction: containers get internet.
+diff --git a/arch/arm64/include/asm/unistd32.h b/arch/arm64/include/asm/unistd32.h
+index b07d96ea7..8b4c29e20 100644
+--- a/arch/arm64/include/asm/unistd32.h
++++ b/arch/arm64/include/asm/unistd32.h
+@@ -823,6 +823,8 @@ __SYSCALL(__NR_pidfd_send_signal, sys_pidfd_send_signal)
+ __SYSCALL(__NR_pidfd_open, sys_pidfd_open)
+ #define __NR_close_range 436
+ __SYSCALL(__NR_close_range, sys_close_range)
++#define __NR_faccessat2 439
++__SYSCALL(__NR_faccessat2, sys_faccessat2)
+ #define __NR_epoll_pwait2 441
+ __SYSCALL(__NR_epoll_pwait2, compat_sys_epoll_pwait2)
+ 
+diff --git a/arch/x86/entry/syscalls/syscall_32.tbl b/arch/x86/entry/syscalls/syscall_32.tbl
+index 950cc82f6..68bc53bc8 100644
+--- a/arch/x86/entry/syscalls/syscall_32.tbl
++++ b/arch/x86/entry/syscalls/syscall_32.tbl
+@@ -394,4 +394,5 @@
+ 424	i386	pidfd_send_signal	sys_pidfd_send_signal
+ 434	i386	pidfd_open		sys_pidfd_open
+ 436	i386	close_range		sys_close_range
++439	i386	faccessat2		sys_faccessat2
+ 441	i386	epoll_pwait2		sys_epoll_pwait2		__ia32_sys_epoll_pwait2
+diff --git a/arch/x86/entry/syscalls/syscall_64.tbl b/arch/x86/entry/syscalls/syscall_64.tbl
+index 3afb15056..6c702f253 100644
+--- a/arch/x86/entry/syscalls/syscall_64.tbl
++++ b/arch/x86/entry/syscalls/syscall_64.tbl
+@@ -342,6 +342,7 @@
+ 424	common	pidfd_send_signal	sys_pidfd_send_signal
+ 434	common	pidfd_open		sys_pidfd_open
+ 436	common	close_range		sys_close_range
++439	common	faccessat2		sys_faccessat2
+ 441	common	epoll_pwait2		sys_epoll_pwait2
+ 
+ #
+diff --git a/fs/open.c b/fs/open.c
+index 377929e7f..734582c1e 100644
+--- a/fs/open.c
++++ b/fs/open.c
+@@ -461,6 +461,101 @@ SYSCALL_DEFINE2(access, const char __user *, filename, int, mode)
+ 	return sys_faccessat(AT_FDCWD, filename, mode);
+ }
+ 
++static long do_faccessat2(int dfd, const char __user *filename, int mode, int flags)
++{
++	const struct cred *old_cred = NULL;
++	struct cred *override_cred = NULL;
++	struct path path;
++	struct inode *inode;
++	struct vfsmount *mnt;
++	int res;
++	unsigned int lookup_flags = LOOKUP_FOLLOW;
++
++	if (mode & ~S_IRWXO)	/* where's F_OK, X_OK, W_OK, R_OK? */
++		return -EINVAL;
++
++	if (flags & ~(AT_EACCESS | AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH))
++		return -EINVAL;
++
++	if (flags & AT_SYMLINK_NOFOLLOW)
++		lookup_flags &= ~LOOKUP_FOLLOW;
++	if (flags & AT_EMPTY_PATH)
++		lookup_flags |= LOOKUP_EMPTY;
++
++	/*
++	 * AT_EACCESS checks with the effective ids, so the switch to the real
++	 * ids below is skipped and old_cred stays NULL.
++	 */
++	if (flags & AT_EACCESS)
++		goto retry;
++
++	override_cred = prepare_creds();
++	if (!override_cred)
++		return -ENOMEM;
++
++	override_cred->fsuid = override_cred->uid;
++	override_cred->fsgid = override_cred->gid;
++
++	if (!issecure(SECURE_NO_SETUID_FIXUP)) {
++		/* Clear the capabilities if we switch to a non-root user */
++		kuid_t root_uid = make_kuid(override_cred->user_ns, 0);
++
++		if (!uid_eq(override_cred->uid, root_uid))
++			cap_clear(override_cred->cap_effective);
++		else
++			override_cred->cap_effective =
++				override_cred->cap_permitted;
++	}
++
++	override_cred->non_rcu = 1;
++
++	old_cred = override_creds(override_cred);
++retry:
++	res = user_path_at(dfd, filename, lookup_flags, &path);
++	if (res)
++		goto out;
++
++	inode = d_backing_inode(path.dentry);
++	mnt = path.mnt;
++
++	if ((mode & MAY_EXEC) && S_ISREG(inode->i_mode)) {
++		/*
++		 * MAY_EXEC on regular files is denied if the fs is mounted
++		 * with the "noexec" flag.
++		 */
++		res = -EACCES;
++		if (path_noexec(&path))
++			goto out_path_release;
++	}
++
++	res = inode_permission2(mnt, inode, mode | MAY_ACCESS);
++	/* SuS v2 requires we report a read only fs too */
++	if (res || !(mode & S_IWOTH) || special_file(inode->i_mode))
++		goto out_path_release;
++
++	if (__mnt_is_readonly(path.mnt))
++		res = -EROFS;
++
++out_path_release:
++	path_put(&path);
++	if (retry_estale(res, lookup_flags)) {
++		lookup_flags |= LOOKUP_REVAL;
++		goto retry;
++	}
++out:
++	if (old_cred) {
++		revert_creds(old_cred);
++		put_cred(override_cred);
++	}
++	return res;
++}
++
++SYSCALL_DEFINE4(faccessat2, int, dfd, const char __user *, filename, int, mode,
++		int, flags)
++{
++	return do_faccessat2(dfd, filename, mode, flags);
++}
++
+ SYSCALL_DEFINE1(chdir, const char __user *, filename)
+ {
+ 	struct path path;
+diff --git a/fs/stat.c b/fs/stat.c
+index 0fda4b6b8..9dace6dbe 100644
+--- a/fs/stat.c
++++ b/fs/stat.c
+@@ -84,6 +84,8 @@ int vfs_getattr_nosec(const struct path *path, struct kstat *stat,
+ }
+ EXPORT_SYMBOL(vfs_getattr_nosec);
+ 
++#include "mount.h"
++
+ /*
+  * vfs_getattr - Get the enhanced basic attributes of a file
+  * @path: The file of interest
+@@ -187,6 +189,11 @@ int vfs_statx(int dfd, const char __user *filename, int flags,
+ 		goto out;
+ 
+ 	error = vfs_getattr(&path, stat, request_mask, flags);
++	stat->mnt_id = real_mount(path.mnt)->mnt_id;
++	stat->result_mask |= STATX_MNT_ID;
++	if (path.mnt->mnt_root == path.dentry)
++		stat->attributes |= STATX_ATTR_MOUNT_ROOT;
++	stat->attributes_mask |= STATX_ATTR_MOUNT_ROOT;
+ 	path_put(&path);
+ 	if (retry_estale(error, lookup_flags)) {
+ 		lookup_flags |= LOOKUP_REVAL;
+@@ -537,6 +544,7 @@ cp_statx(const struct kstat *stat, struct statx __user *buffer)
+ 	tmp.stx_ctime.tv_nsec = stat->ctime.tv_nsec;
+ 	tmp.stx_mtime.tv_sec = stat->mtime.tv_sec;
+ 	tmp.stx_mtime.tv_nsec = stat->mtime.tv_nsec;
++	tmp.stx_mnt_id = stat->mnt_id;
+ 	tmp.stx_rdev_major = MAJOR(stat->rdev);
+ 	tmp.stx_rdev_minor = MINOR(stat->rdev);
+ 	tmp.stx_dev_major = MAJOR(stat->dev);
+diff --git a/fs/utimes.c b/fs/utimes.c
+index 4f3b158f0..dbee97212 100644
+--- a/fs/utimes.c
++++ b/fs/utimes.c
+@@ -126,13 +126,13 @@ long do_utimes(int dfd, const char __user *filename, struct timespec64 *times,
+ 		goto out;
+ 	}
+ 
+-	if (flags & ~AT_SYMLINK_NOFOLLOW)
++	if (flags & ~(AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH))
+ 		goto out;
+ 
+ 	if (filename == NULL && dfd != AT_FDCWD) {
+ 		struct fd f;
+ 
+-		if (flags & AT_SYMLINK_NOFOLLOW)
++		if (flags)
+ 			goto out;
+ 
+ 		f = fdget(dfd);
+@@ -148,6 +148,8 @@ long do_utimes(int dfd, const char __user *filename, struct timespec64 *times,
+ 
+ 		if (!(flags & AT_SYMLINK_NOFOLLOW))
+ 			lookup_flags |= LOOKUP_FOLLOW;
++		if (flags & AT_EMPTY_PATH)
++			lookup_flags |= LOOKUP_EMPTY;
+ retry:
+ 		error = user_path_at(dfd, filename, lookup_flags, &path);
+ 		if (error)
+diff --git a/include/linux/pid.h b/include/linux/pid.h
+index 88f976ba3..9f0c12dd4 100644
+--- a/include/linux/pid.h
++++ b/include/linux/pid.h
+@@ -73,6 +73,10 @@ extern struct pid init_struct_pid;
+ 
+ extern const struct file_operations pidfd_fops;
+ 
++struct file;
++
++extern struct pid *pidfd_pid(const struct file *file);
++
+ static inline struct pid *get_pid(struct pid *pid)
+ {
+ 	if (pid)
+diff --git a/include/linux/stat.h b/include/linux/stat.h
+index 528c4baad..4776939a0 100644
+--- a/include/linux/stat.h
++++ b/include/linux/stat.h
+@@ -39,6 +39,7 @@ struct kstat {
+ 	u64		ino;
+ 	dev_t		dev;
+ 	dev_t		rdev;
++	u64		mnt_id;
+ 	kuid_t		uid;
+ 	kgid_t		gid;
+ 	loff_t		size;
+diff --git a/include/linux/syscalls.h b/include/linux/syscalls.h
+index 21ffed4ab..29f03111e 100644
+--- a/include/linux/syscalls.h
++++ b/include/linux/syscalls.h
+@@ -816,6 +816,8 @@ asmlinkage long sys_renameat2(int olddfd, const char __user *oldname,
+ asmlinkage long sys_futimesat(int dfd, const char __user *filename,
+ 			      struct timeval __user *utimes);
+ asmlinkage long sys_faccessat(int dfd, const char __user *filename, int mode);
++asmlinkage long sys_faccessat2(int dfd, const char __user *filename, int mode,
++			       int flags);
+ asmlinkage long sys_fchmodat(int dfd, const char __user * filename,
+ 			     umode_t mode);
+ asmlinkage long sys_fchownat(int dfd, const char __user *filename, uid_t user,
+diff --git a/include/uapi/asm-generic/unistd.h b/include/uapi/asm-generic/unistd.h
+index 395b9947e..5683ad360 100644
+--- a/include/uapi/asm-generic/unistd.h
++++ b/include/uapi/asm-generic/unistd.h
+@@ -738,6 +738,8 @@ __SYSCALL(__NR_pidfd_send_signal, sys_pidfd_send_signal)
+ __SYSCALL(__NR_pidfd_open, sys_pidfd_open)
+ #define __NR_close_range 436
+ __SYSCALL(__NR_close_range, sys_close_range)
++#define __NR_faccessat2 439
++__SYSCALL(__NR_faccessat2, sys_faccessat2)
+ #define __NR_epoll_pwait2 441
+ __SC_COMP(__NR_epoll_pwait2, sys_epoll_pwait2, compat_sys_epoll_pwait2)
+ 
+diff --git a/include/uapi/linux/fcntl.h b/include/uapi/linux/fcntl.h
+index 586bf89f6..62bcf304d 100644
+--- a/include/uapi/linux/fcntl.h
++++ b/include/uapi/linux/fcntl.h
+@@ -82,6 +82,16 @@
+ #define AT_SYMLINK_NOFOLLOW	0x100   /* Do not follow symbolic links.  */
+ #define AT_REMOVEDIR		0x200   /* Remove directory instead of
+                                            unlinking file.  */
++/*
++ * The constants AT_REMOVEDIR and AT_EACCESS have the same value.  AT_EACCESS is
++ * meaningful only to faccessat, while AT_REMOVEDIR is meaningful only to
++ * unlinkat.  The two functions do completely different things and therefore,
++ * the flags can be allowed to overlap.  For example, passing AT_REMOVEDIR to
++ * faccessat would be undefined behavior and thus treating it equivalent to
++ * AT_EACCESS is valid undefined behavior.
++ */
++#define AT_EACCESS		0x200	/* Test access permitted for
++                                           effective IDs, not real IDs.  */
+ #define AT_SYMLINK_FOLLOW	0x400   /* Follow symbolic links.  */
+ #define AT_NO_AUTOMOUNT		0x800	/* Suppress terminal automount traversal */
+ #define AT_EMPTY_PATH		0x1000	/* Allow empty relative pathname */
+diff --git a/include/uapi/linux/rtnetlink.h b/include/uapi/linux/rtnetlink.h
+index a6d37c2ea..fa8c3ec3d 100644
+--- a/include/uapi/linux/rtnetlink.h
++++ b/include/uapi/linux/rtnetlink.h
+@@ -150,6 +150,13 @@ enum {
+ 	RTM_NEWCACHEREPORT = 96,
+ #define RTM_NEWCACHEREPORT RTM_NEWCACHEREPORT
+ 
++	RTM_NEWNEXTHOP = 104,
++#define RTM_NEWNEXTHOP	RTM_NEWNEXTHOP
++	RTM_DELNEXTHOP,
++#define RTM_DELNEXTHOP	RTM_DELNEXTHOP
++	RTM_GETNEXTHOP,
++#define RTM_GETNEXTHOP	RTM_GETNEXTHOP
++
+ 	__RTM_MAX,
+ #define RTM_MAX		(((__RTM_MAX + 3) & ~3) - 1)
+ };
+@@ -674,6 +681,8 @@ enum rtnetlink_groups {
+ #define RTNLGRP_IPV4_MROUTE_R	RTNLGRP_IPV4_MROUTE_R
+ 	RTNLGRP_IPV6_MROUTE_R,
+ #define RTNLGRP_IPV6_MROUTE_R	RTNLGRP_IPV6_MROUTE_R
++	RTNLGRP_NEXTHOP,
++#define RTNLGRP_NEXTHOP		RTNLGRP_NEXTHOP
+ 	__RTNLGRP_MAX
+ };
+ #define RTNLGRP_MAX	(__RTNLGRP_MAX - 1)
+diff --git a/include/uapi/linux/stat.h b/include/uapi/linux/stat.h
+index ad80a5c88..5147d30b7 100644
+--- a/include/uapi/linux/stat.h
++++ b/include/uapi/linux/stat.h
+@@ -123,7 +123,10 @@ struct statx {
+ 	__u32	stx_dev_major;	/* ID of device containing file [uncond] */
+ 	__u32	stx_dev_minor;
+ 	/* 0x90 */
+-	__u64	__spare2[14];	/* Spare space for future expansion */
++	__u64	stx_mnt_id;
++	__u64	__spare2;
++	/* 0xa0 */
++	__u64	__spare3[12];	/* Spare space for future expansion */
+ 	/* 0x100 */
+ };
+ 
+@@ -148,6 +151,7 @@ struct statx {
+ #define STATX_BLOCKS		0x00000400U	/* Want/got stx_blocks */
+ #define STATX_BASIC_STATS	0x000007ffU	/* The stuff in the normal stat struct */
+ #define STATX_BTIME		0x00000800U	/* Want/got stx_btime */
++#define STATX_MNT_ID		0x00001000U	/* Got stx_mnt_id */
+ #define STATX_ALL		0x00000fffU	/* All currently supported flags */
+ #define STATX__RESERVED		0x80000000U	/* Reserved for future struct statx expansion */
+ 
+@@ -170,5 +174,6 @@ struct statx {
+ #define STATX_ATTR_AUTOMOUNT		0x00001000 /* Dir: Automount trigger */
+ #define STATX_ATTR_VERITY		0x00100000 /* [I] Verity protected file */
+ 
++#define STATX_ATTR_MOUNT_ROOT		0x00002000 /* Root of a mount */
+ 
+ #endif /* _UAPI_LINUX_STAT_H */
+diff --git a/include/uapi/linux/wait.h b/include/uapi/linux/wait.h
+index ac49a220c..85b809fc9 100644
+--- a/include/uapi/linux/wait.h
++++ b/include/uapi/linux/wait.h
+@@ -17,6 +17,7 @@
+ #define P_ALL		0
+ #define P_PID		1
+ #define P_PGID		2
++#define P_PIDFD		3
+ 
+ 
+ #endif /* _UAPI_LINUX_WAIT_H */
+diff --git a/kernel/cgroup/cgroup.c b/kernel/cgroup/cgroup.c
+index 75ce62780..f13de830b 100644
+--- a/kernel/cgroup/cgroup.c
++++ b/kernel/cgroup/cgroup.c
+@@ -3808,6 +3808,13 @@ static int cgroup_add_file(struct cgroup_subsys_state *css, struct cgroup *cgrp,
+ 		spin_unlock_irq(&cgroup_file_kn_lock);
+ 	}
+ 
++	if (cft->ss && (cgrp->root->flags & CGRP_ROOT_NOPREFIX) &&
++	    !(cft->flags & CFTYPE_NO_PREFIX)) {
++		snprintf(name, CGROUP_FILE_NAME_MAX, "%s.%s",
++			 cft->ss->name, cft->name);
++		kernfs_create_link(cgrp->kn, name, kn);
++	}
++
+ 	return 0;
+ }
+ 
+diff --git a/kernel/exit.c b/kernel/exit.c
+index a34ee0098..5ee090a32 100644
+--- a/kernel/exit.c
++++ b/kernel/exit.c
+@@ -1643,6 +1643,23 @@ static long do_wait(struct wait_opts *wo)
+ 	return retval;
+ }
+ 
++static struct pid *pidfd_get_pid(unsigned int fd)
++{
++	struct fd f;
++	struct pid *pid;
++
++	f = fdget(fd);
++	if (!f.file)
++		return ERR_PTR(-EBADF);
++
++	pid = pidfd_pid(f.file);
++	if (!IS_ERR(pid))
++		get_pid(pid);
++
++	fdput(f);
++	return pid;
++}
++
+ static long kernel_waitid(int which, pid_t upid, struct waitid_info *infop,
+ 			  int options, struct rusage *ru)
+ {
+@@ -1665,19 +1682,29 @@ static long kernel_waitid(int which, pid_t upid, struct waitid_info *infop,
+ 		type = PIDTYPE_PID;
+ 		if (upid <= 0)
+ 			return -EINVAL;
++
++		pid = find_get_pid(upid);
+ 		break;
+ 	case P_PGID:
+ 		type = PIDTYPE_PGID;
+ 		if (upid <= 0)
+ 			return -EINVAL;
++
++		pid = find_get_pid(upid);
++		break;
++	case P_PIDFD:
++		type = PIDTYPE_PID;
++		if (upid < 0)
++			return -EINVAL;
++
++		pid = pidfd_get_pid(upid);
++		if (IS_ERR(pid))
++			return PTR_ERR(pid);
+ 		break;
+ 	default:
+ 		return -EINVAL;
+ 	}
+ 
+-	if (type < PIDTYPE_MAX)
+-		pid = find_get_pid(upid);
+-
+ 	wo.wo_type	= type;
+ 	wo.wo_pid	= pid;
+ 	wo.wo_flags	= options;
+diff --git a/kernel/fork.c b/kernel/fork.c
+index aff30f83c..3af351353 100644
+--- a/kernel/fork.c
++++ b/kernel/fork.c
+@@ -1629,6 +1629,14 @@ const struct file_operations pidfd_fops = {
+ #endif
+ };
+ 
++struct pid *pidfd_pid(const struct file *file)
++{
++	if (file->f_op == &pidfd_fops)
++		return file->private_data;
++
++	return ERR_PTR(-EBADF);
++}
++
+ /**
+  * pidfd_create() - Create a new pid file descriptor.
+  *
+@@ -1772,8 +1780,6 @@ static __latent_entropy struct task_struct *copy_process(
+ 	}
+ 
+ 	if (clone_flags & CLONE_PIDFD) {
+-		int reserved;
+-
+ 		/*
+ 		 * - CLONE_PARENT_SETTID is useless for pidfds and also
+ 		 *   parent_tidptr is used to return pidfds.
+@@ -1784,16 +1790,6 @@ static __latent_entropy struct task_struct *copy_process(
+ 		if (clone_flags &
+ 		    (CLONE_DETACHED | CLONE_PARENT_SETTID | CLONE_THREAD))
+ 			return ERR_PTR(-EINVAL);
+-
+-		/*
+-		 * Verify that parent_tidptr is sane so we can potentially
+-		 * reuse it later.
+-		 */
+-		if (get_user(reserved, parent_tidptr))
+-			return ERR_PTR(-EFAULT);
+-
+-		if (reserved != 0)
+-			return ERR_PTR(-EINVAL);
+ 	}
+ 
+ 	retval = -ENOMEM;
+diff --git a/kernel/signal.c b/kernel/signal.c
+index 73f84d65c..dad97c41f 100644
+--- a/kernel/signal.c
++++ b/kernel/signal.c
+@@ -3160,8 +3160,11 @@ static bool access_pidfd_pidns(struct pid *pid)
+ 
+ static struct pid *pidfd_to_pid(const struct file *file)
+ {
+-	if (file->f_op == &pidfd_fops)
+-		return file->private_data;
++	struct pid *pid;
++
++	pid = pidfd_pid(file);
++	if (!IS_ERR(pid))
++		return pid;
+ 
+ 	return tgid_pidfd_to_pid(file);
+ }
+diff --git a/net/core/rtnetlink.c b/net/core/rtnetlink.c
+index dce034837..77c81c0a0 100644
+--- a/net/core/rtnetlink.c
++++ b/net/core/rtnetlink.c
+@@ -4557,6 +4557,16 @@ static struct pernet_operations rtnetlink_net_ops = {
+ 	.exit = rtnetlink_net_exit,
+ };
+ 
++/* There are no nexthop objects on this kernel, so a dump of them is empty.
++ * Answering the request instead of EOPNOTSUPP lets systemd-networkd 258 and
++ * newer start: it enumerates nexthops unconditionally and treats any error
++ * as fatal. Creating or deleting one still fails with EOPNOTSUPP. */
++static int rtnl_dump_nexthop_none(struct sk_buff *skb,
++				  struct netlink_callback *cb)
++{
++	return 0;
++}
++
+ void __init rtnetlink_init(void)
+ {
+ 	int i;
+@@ -4578,6 +4588,8 @@ void __init rtnetlink_init(void)
+ 	rtnl_register(PF_UNSPEC, RTM_GETADDR, NULL, rtnl_dump_all, 0);
+ 	rtnl_register(PF_UNSPEC, RTM_GETROUTE, NULL, rtnl_dump_all, 0);
+ 	rtnl_register(PF_UNSPEC, RTM_GETNETCONF, NULL, rtnl_dump_all, 0);
++	rtnl_register(PF_UNSPEC, RTM_GETNEXTHOP, NULL, rtnl_dump_nexthop_none,
++		      0);
+ 
+ 	rtnl_register(PF_BRIDGE, RTM_NEWNEIGH, rtnl_fdb_add, NULL, 0);
+ 	rtnl_register(PF_BRIDGE, RTM_DELNEIGH, rtnl_fdb_del, NULL, 0);
+diff --git a/security/selinux/nlmsgtab.c b/security/selinux/nlmsgtab.c
+index 90561f657..100ef287c 100644
+--- a/security/selinux/nlmsgtab.c
++++ b/security/selinux/nlmsgtab.c
+@@ -80,6 +80,9 @@ static struct nlmsg_perm nlmsg_route_perms[] =
+ 	{ RTM_NEWSTATS,		NETLINK_ROUTE_SOCKET__NLMSG_READ },
+ 	{ RTM_GETSTATS,		NETLINK_ROUTE_SOCKET__NLMSG_READ  },
+ 	{ RTM_NEWCACHEREPORT,	NETLINK_ROUTE_SOCKET__NLMSG_READ },
++	{ RTM_NEWNEXTHOP,	NETLINK_ROUTE_SOCKET__NLMSG_WRITE },
++	{ RTM_DELNEXTHOP,	NETLINK_ROUTE_SOCKET__NLMSG_WRITE },
++	{ RTM_GETNEXTHOP,	NETLINK_ROUTE_SOCKET__NLMSG_READ  },
+ };
+ 
+ static const struct nlmsg_perm nlmsg_tcpdiag_perms[] =
+@@ -159,7 +162,7 @@ int selinux_nlmsg_lookup(u16 sclass, u16 nlmsg_type, u32 *perm)
+ 	switch (sclass) {
+ 	case SECCLASS_NETLINK_ROUTE_SOCKET:
+ 		/* RTM_MAX always point to RTM_SETxxxx, ie RTM_NEWxxx + 3 */
+-		BUILD_BUG_ON(RTM_MAX != (RTM_NEWCACHEREPORT + 3));
++		BUILD_BUG_ON(RTM_MAX != (RTM_NEWNEXTHOP + 3));
+ 		err = nlmsg_perm(nlmsg_type, perm, nlmsg_route_perms,
+ 				 sizeof(nlmsg_route_perms));
+ 		break;

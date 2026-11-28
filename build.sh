@@ -14,10 +14,10 @@ OUT_DIR="${OUT_DIR:-$BUILD_DIR/out}"
 KERDEVDEP="${KERDEVDEP:-$ROOT_DIR/kerdevdep}"
 PATCH_DIR="${PATCH_DIR:-$ROOT_DIR/patches}"
 
-# Media overlays are independent patch sets and may be requested together
-# (`VARIANT=ksu,miui,c2`). They are applied in this fixed order and reverted in
+# Media overlays and feature sets are independent patch sets and may be requested together
+# (`VARIANT=ksu,miui,c2,droidspaces`). They are applied in this fixed order and reverted in
 # the reverse order, independent of the order the user listed them in.
-OVERLAY_ORDER="miui c2"
+OVERLAY_ORDER="overclock droidspaces miui c2"
 ACTION="${1:-all}"
 
 # Kernel Branding & Versioning (Fully customizable via environment or build script)
@@ -69,13 +69,14 @@ err()  { printf '\033[1;31m[-] %s\033[0m\n' "$*"; }
 # toolchain bootstrap so `./build.sh patches` can inspect the tree safely.
 if [[ "$ACTION" == "variants" || "$ACTION" == "list-variants" ||
       "$ACTION" == "patches" || "$ACTION" == "list-patches" ]]; then
-    log "Variant selection: VARIANT=<root>[,<overlay>] (e.g. VARIANT=ksu,c2)"
+    log "Variant selection: VARIANT=<root>[,<feature>][,<overlay>] (e.g. VARIANT=ksu,c2,droidspaces)"
     log "Root flavors: vanilla (none), apatch, folkpatch, ksu"
+    log "Features:     overclock, droidspaces"
     log "Overlays:     miui, c2 (combinable: VARIANT=ksu,miui,c2)"
     echo
     for patch in "$PATCH_DIR"/*.patch; do
         [[ -f "$patch" ]] || continue
-        printf '  %-8s %8s bytes  %s\n' \
+        printf '  %-12s %8s bytes  %s\n' \
             "$(basename "$patch" .patch)" \
             "$(stat -c%s "$patch" 2>/dev/null || wc -c < "$patch")" \
             "$(grep -c '^diff --git' "$patch") file(s)"
@@ -126,9 +127,10 @@ variant_patch_name() {
         *apatch*)                      printf 'apatch' ;;
         *miui*|*hyperos*)              printf 'miui' ;;
         *c2*|*codec2*)                 printf 'c2' ;;
-        # Performance patch set: CPU/GPU/CCI overclock, thermal and power
-        # limits removed, plus the Droidspaces container config fragment.
-        *overclock*|*droidspaces*)     printf 'overclock' ;;
+        # Performance patch set: CPU/GPU/CCI overclock, thermal and power limits removed.
+        *overclock*|oc)                printf 'overclock' ;;
+        # Droidspaces container support: 4.14 syscall backports + config fragment.
+        *droidspaces*|ds)              printf 'droidspaces' ;;
         *) printf '%s' "$1" ;;
     esac
 }
@@ -164,7 +166,7 @@ apply_variant_patches() {
             [[ "$seen" == *" $name "* ]] && continue
             seen="$seen$name "
             case "$name" in
-                miui|c2) ;;   # overlays are appended in canonical order below
+                overclock|droidspaces|miui|c2) ;;   # ordered sets are appended in canonical order below
                 *)       roots+=("$name") ;;
             esac
         done
@@ -285,7 +287,7 @@ unapply_variant_patches() {
         if git apply --reverse --check "$f" >/dev/null 2>&1; then
             name="$(basename "$f" .patch)"
             case "$name" in
-                miui|c2) ;;   # collected in OVERLAY_ORDER below
+                overclock|droidspaces|miui|c2) ;;   # collected in OVERLAY_ORDER below
                 *)       roots+=("$f") ;;
             esac
         fi
@@ -376,16 +378,15 @@ resolve_variant() {
         *kaeru*)                      root="Kaeru";    root_desc="Kaeru Bootloader";            defconfig="begonia_user_defconfig" ;;
     esac
 
-    # Orthogonal media overlays.
-    if [[ "$branch" == *miui* || "$branch" == *hyperos* ]]; then
-        extra_desc="${extra_desc:+$extra_desc + }MIUI/HyperOS"
-    fi
-    if [[ "$branch" == *c2* || "$branch" == *codec2* ]]; then
-        extra_desc="${extra_desc:+$extra_desc + }Codec2 Media"
-    fi
-    if [[ "$branch" == *overclock* || "$branch" == *droidspaces* ]]; then
-        extra_desc="${extra_desc:+$extra_desc + }Overclock + Droidspaces"
-    fi
+    # Orthogonal media overlays and feature sets.
+    for token in $branch; do
+        case "$token" in
+            *miui*|*hyperos*) extra_desc="${extra_desc:+$extra_desc + }MIUI/HyperOS" ;;
+            *c2*|*codec2*)    extra_desc="${extra_desc:+$extra_desc + }Codec2 Media" ;;
+            *overclock*|oc)   extra_desc="${extra_desc:+$extra_desc + }Overclock" ;;
+            *droidspaces*|ds) extra_desc="${extra_desc:+$extra_desc + }Droidspaces" ;;
+        esac
+    done
 
     DEFAULT_DEFCONFIG="$defconfig"
 
@@ -404,9 +405,14 @@ resolve_variant() {
     fi
 
     local edition="Onyx"
-    [[ "$branch" == *c2* || "$branch" == *codec2* ]] && edition="${edition}-C2"
-    [[ "$branch" == *miui* || "$branch" == *hyperos* ]] && edition="${edition}-MIUI"
-    [[ "$branch" == *overclock* || "$branch" == *droidspaces* ]] && edition="${edition}-OC"
+    for token in $branch; do
+        case "$token" in
+            *c2*|*codec2*)    [[ "$edition" == *-C2 ]]   || edition="${edition}-C2" ;;
+            *miui*|*hyperos*) [[ "$edition" == *-MIUI ]] || edition="${edition}-MIUI" ;;
+            *overclock*|oc)   [[ "$edition" == *-OC ]]   || edition="${edition}-OC" ;;
+            *droidspaces*|ds) [[ "$edition" == *-DS ]]   || edition="${edition}-DS" ;;
+        esac
+    done
 
     BRANCH_DESC="Zero Frame-Drop Gaming"
     [[ -n "$extra_desc" ]] && BRANCH_DESC="$BRANCH_DESC & $extra_desc"
@@ -462,9 +468,10 @@ kernel_variant_tag() {
     esac
     for token in $VARIANT; do
         case "$token" in
-            *miui*|*hyperos*) [[ "$tag" == *-MIUI ]] || tag="$tag-MIUI" ;;
-            *c2*|*codec2*)    [[ "$tag" == *-C2 ]]   || tag="$tag-C2" ;;
-            *overclock*|*droidspaces*) [[ "$tag" == *-OC ]] || tag="$tag-OC" ;;
+            *miui*|*hyperos*)  [[ "$tag" == *-MIUI ]] || tag="$tag-MIUI" ;;
+            *c2*|*codec2*)     [[ "$tag" == *-C2 ]]   || tag="$tag-C2" ;;
+            *overclock*|oc)    [[ "$tag" == *-OC ]]   || tag="$tag-OC" ;;
+            *droidspaces*|ds)  [[ "$tag" == *-DS ]]   || tag="$tag-DS" ;;
         esac
     done
     printf '%s' "$tag"
@@ -1633,6 +1640,10 @@ case "$ACTION" in
         build_kernel
         package_zip
         install_device
+        ;;
+    apply|patch)
+        log "Variant patches applied successfully ($APPLIED_PATCHES)."
+        exit 0
         ;;
     all|"")
         build_kernel

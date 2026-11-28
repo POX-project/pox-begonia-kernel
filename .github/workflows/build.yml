@@ -25,7 +25,12 @@ on:
         default: false
         type: boolean
       overclock:
-        description: 'Add overclock + thermal-unlimited + Droidspaces patch set'
+        description: 'Add overclock + thermal-unlimited patch set'
+        required: false
+        default: false
+        type: boolean
+      droidspaces:
+        description: 'Add Droidspaces container support patch set'
         required: false
         default: false
         type: boolean
@@ -49,7 +54,7 @@ permissions:
   contents: write
 
 concurrency:
-  group: build-${{ github.ref }}-${{ github.event.inputs.root || github.event.inputs.target || 'dispatch' }}-${{ github.event.inputs.miui || '0' }}-${{ github.event.inputs.c2 || '0' }}-${{ github.event.inputs.overclock || '0' }}
+  group: build-${{ github.ref }}-${{ github.event.inputs.root || github.event.inputs.target || 'dispatch' }}-${{ github.event.inputs.miui || '0' }}-${{ github.event.inputs.c2 || '0' }}-${{ github.event.inputs.overclock || '0' }}-${{ github.event.inputs.droidspaces || '0' }}
   cancel-in-progress: true
 
 jobs:
@@ -66,6 +71,7 @@ jobs:
           INPUT_MIUI: ${{ inputs.miui }}
           INPUT_C2: ${{ inputs.c2 }}
           INPUT_OVERCLOCK: ${{ inputs.overclock }}
+          INPUT_DROIDSPACES: ${{ inputs.droidspaces }}
           INPUT_TARGET: ${{ inputs.target }}
         run: |
           python3 -c '
@@ -76,10 +82,12 @@ jobs:
           raw_miui = os.environ.get("INPUT_MIUI", "false").strip().lower()
           raw_c2 = os.environ.get("INPUT_C2", "false").strip().lower()
           raw_oc = os.environ.get("INPUT_OVERCLOCK", "false").strip().lower()
+          raw_ds = os.environ.get("INPUT_DROIDSPACES", "false").strip().lower()
 
           miui = raw_miui in ("true", "1", "yes")
           c2 = raw_c2 in ("true", "1", "yes")
           oc = raw_oc in ("true", "1", "yes")
+          ds = raw_ds in ("true", "1", "yes")
 
           all_roots = ["vanilla", "apatch", "folkpatch", "ksu"]
 
@@ -87,8 +95,10 @@ jobs:
               tokens = [t.strip() for t in re.split(r"[,\s]+", target) if t.strip()]
               rem = []
               for tok in tokens:
-                  if tok in ("overclock", "oc", "droidspaces"):
+                  if tok in ("overclock", "oc"):
                       oc = True
+                  elif tok in ("droidspaces", "ds"):
+                      ds = True
                   elif tok in ("miui", "hyperos"):
                       miui = True
                   elif tok in ("c2", "codec2"):
@@ -106,23 +116,26 @@ jobs:
 
           if root == "all":
               items = []
+              suffix = ("-oc" if oc else "") + ("-ds" if ds else "")
               for r in all_roots:
-                  items.append({"root": r, "miui": False, "c2": False, "oc": oc, "id": r + ("-oc" if oc else "")})
-                  items.append({"root": r, "miui": True,  "c2": False, "oc": oc, "id": f"{r}-miui" + ("-oc" if oc else "")})
-                  items.append({"root": r, "miui": False, "c2": True,  "oc": oc, "id": f"{r}-c2" + ("-oc" if oc else "")})
-                  items.append({"root": r, "miui": True,  "c2": True,  "oc": oc, "id": f"{r}-c2-miui" + ("-oc" if oc else "")})
+                  items.append({"root": r, "miui": False, "c2": False, "oc": oc, "ds": ds, "id": r + suffix})
+                  items.append({"root": r, "miui": True,  "c2": False, "oc": oc, "ds": ds, "id": f"{r}-miui" + suffix})
+                  items.append({"root": r, "miui": False, "c2": True,  "oc": oc, "ds": ds, "id": f"{r}-c2" + suffix})
+                  items.append({"root": r, "miui": True,  "c2": True,  "oc": oc, "ds": ds, "id": f"{r}-c2-miui" + suffix})
           else:
               if root not in all_roots:
                   root = "vanilla"
               parts = [root]
               if oc:
                   parts.append("oc")
+              if ds:
+                  parts.append("ds")
               if c2:
                   parts.append("c2")
               if miui:
                   parts.append("miui")
               job_id = "-".join(parts)
-              items = [{"root": root, "miui": miui, "c2": c2, "oc": oc, "id": job_id}]
+              items = [{"root": root, "miui": miui, "c2": c2, "oc": oc, "ds": ds, "id": job_id}]
 
           out = json.dumps(items)
           print(f"matrix={out}")
@@ -160,9 +173,11 @@ jobs:
           MIUI="${{ matrix.miui }}"
           C2="${{ matrix.c2 }}"
           OC="${{ matrix.oc }}"
+          DS="${{ matrix.ds }}"
 
           VARIANT="$ROOT"
           [[ "$OC" == "true" ]] && VARIANT="$VARIANT,overclock"
+          [[ "$DS" == "true" ]] && VARIANT="$VARIANT,droidspaces"
           [[ "$MIUI" == "true" ]] && VARIANT="$VARIANT,miui"
           [[ "$C2" == "true" ]] && VARIANT="$VARIANT,c2"
           LABEL="$VARIANT"
